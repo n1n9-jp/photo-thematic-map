@@ -15,8 +15,22 @@
  * シェーダーは MeshLambertMaterial を onBeforeCompile で拡張し、頂点を四元数で回して平行移動する。
  * 頂点属性 frameMask=1 の部分だけインスタンスのフレーム色（sRGB で受け取りシェーダーで線形に変換）を掛け、
  * 全体に陰影係数（shade）を掛ける。
+ *
+ * 降ってくる動き（`addGroup(data, { fall })`）:
+ * - まとまりごとに「表示台数 T」と、それを追いかける「落下の先頭 A」（小数）を持つ。順位 i の自転車の落下の進み具合は
+ *   p = (A − i) / W（W は落下にかける台数の幅）。p ≤ 0 はまだ現れず、0 < p < 1 は空中、p ≥ 1 は着地済み。
+ *   A は毎フレーム T + W へ向かって時間で進む（表示台数が止まっても空中に残らない）。T を減らすと A も T + W まで下げる。
+ * - 位置と向きは物理演算を使わず頂点シェーダーで決める。落下中は最終の位置の上空から加速しながら落ち、
+ *   ハッシュで決めた軸のまわりに回る。回転は着地の直前に 0 になり（最終の向きにそろう）、着地の後に小さく弾む。
+ *
+ * 山の表面（`setPileSurface` と `addGroup(data, { pile })`）:
+ * - 成長の段階ごとの厚さの DataArrayTexture を受け取り、「先頭」と「遅れ」の2つの進み具合の厚さをシェーダーで補間する。
+ * - 'bury': 現在の表面から `hideDepth` より深い自転車を描かない。深さに応じて暗くする。
+ * - 'lattice'（表層だけの山）: 自転車は最終の位置から鉛直に spacing 刻みで下げた位置のうち、
+ *   現在の表面の下で最も高い段に置く。表面が spacing だけ上がるたびに一段上へ「降り直す」。
  */
 import {
+  DataArrayTexture,
   DataTexture,
   DoubleSide,
   DynamicDrawUsage,
@@ -32,9 +46,11 @@ import {
   MeshLambertMaterial,
   NearestFilter,
   RedFormat,
+  RGBAFormat,
   StaticDrawUsage,
   UnsignedByteType,
   Vector3,
+  Vector4,
   type BufferGeometry,
   type PerspectiveCamera,
 } from 'three';
@@ -61,6 +77,54 @@ export interface BicycleInstances {
    * 山の内部に埋もれて外から見えない自転車を、遠景用に固定したり描画から外したりするのに使う。
    */
   lodFloor?: Uint8Array;
+  /**
+   * 山の表面との関係（`addGroup` の `pile` を指定するときに使う）。
+   * - height: 最終の位置での自転車の中心の、地表からの高さ(m)。長さ N。
+   * - spacing: 'lattice' の降り直しの間隔（鉛直, m）。長さ N。
+   * - maxLevel: 'lattice' で下げてよい段数の上限（それより下は地表に潜るので描かない）。長さ N。
+   * - hideAfter: 'bury' で、まとまりの表示台数がこの値を超えたら描かない（後から積もった自転車に埋もれる）。長さ N。
+   *   セル単位でも判定し、全台が埋もれたセルは頂点処理ごと省く。
+   */
+  pile?: { height: Float32Array; spacing?: Float32Array; maxLevel?: Float32Array; hideAfter?: Float32Array };
+}
+
+/** 降ってくる動きの指定（まとまりごと）。 */
+export interface BicycleFallOptions {
+  /** 落下を始める高さ（最終の位置からの高さ, m）。 */
+  height: number;
+  /** 落下にかける台数の幅（落下の先頭からこの台数ぶん手前までが空中にある）。 */
+  window: number;
+  /** 表示台数が止まっているとき、残りの落下を終えるまでの時間(s)。既定 0.8。 */
+  settleSeconds?: number;
+}
+
+/** 山の表面との関係の指定（まとまりごと。`setPileSurface` が必要）。 */
+export interface BicyclePileOptions {
+  /** 'bury' は深く埋もれた自転車を隠す、'lattice' は表層の降り直し。 */
+  mode: 'bury' | 'lattice';
+  /** 'bury': 現在の表面からこの深さ(m)より深い自転車を描かない。既定 1.6。 */
+  hideDepth?: number;
+  /** この深さ(m)で明るさが `deepShade` まで下がる。既定 1.2。 */
+  shadeDepth?: number;
+  /** 'lattice': 降り直しの落下にかける幅（spacing に対する割合）。既定 1。 */
+  latticeWindow?: number;
+}
+
+/**
+ * 山の表面の厚さ（成長の段階ごと）。テクスチャの層 k が段階 k の厚さ(m)。
+ * rect は層の範囲（ワールド座標の北西の角 x0, z0 と、東西・南北の長さ）。
+ * テクセルの中心がセルの中心に一致する（u = (x − x0) / sizeX）。
+ */
+export interface PileSurfaceSource {
+  texture: DataArrayTexture;
+  rect: { x0: number; z0: number; sizeX: number; sizeZ: number };
+}
+
+/** 段階 k0 と k1 の厚さを mix で補間する指定（進み具合ごと）。 */
+export interface PileSurfaceStage {
+  k0: number;
+  k1: number;
+  mix: number;
 }
 
 export interface BicycleFieldOptions {
@@ -104,6 +168,8 @@ export interface BicycleFieldStats {
   drawCalls: number;
   /** 登録したまとまりの数。 */
   groups: number;
+  /** 落下中（順位が落下の先頭の幅の中にあり、表示台数未満）の台数の目安。降り直しは含まない。 */
+  falling: number;
 }
 
 /** 自転車の全長(m)。距離計算に使う。 */
@@ -193,6 +259,14 @@ const FAR_SPLIT_GAP = 2048;
 const STRIDE = 10;
 /** 1台あたりの GPU 上のバイト数（float 10個 + 色4バイト）。 */
 const BYTES_PER_INSTANCE = STRIDE * 4 + 4;
+/** 山の表面との関係（高さ, 間隔, 段数の上限）の float の数。使うまとまりがある区画・層だけに持たせる。 */
+const EXTRA = 3;
+const EXTRA_BYTES = EXTRA * 4;
+/** まとまりごとのパラメータのテクセル数（RGBA float）。 */
+const GROUP_TEXELS = 2;
+const DEFAULT_SETTLE_SECONDS = 0.8;
+/** 落下の先頭が目標を追いかける時定数(s)。 */
+const FALL_CHASE_TAU = 0.45;
 const MASK_WIDTH = 2048;
 const REVEAL_WIDTH = 1024;
 
@@ -201,9 +275,15 @@ attribute vec3 iPos;
 attribute vec4 iQuat;
 attribute vec4 iColor;
 attribute vec3 iMeta;
+attribute vec3 iExtra;
 attribute float frameMask;
 uniform highp sampler2D uCellMask;
 uniform highp sampler2D uReveal;
+uniform highp sampler2DArray uSurf;
+uniform vec3 uSurfHead;
+uniform vec3 uSurfLag;
+uniform vec4 uSurfRect;
+uniform float uDeepShade;
 uniform int uMaskWidth;
 uniform int uRevealWidth;
 vec3 bikeRotate(vec4 q, vec3 v) {
@@ -211,20 +291,101 @@ vec3 bikeRotate(vec4 q, vec3 v) {
 }
 vec3 bikeSrgbToLinear(vec3 c) {
   return mix(c / 12.92, pow((c + 0.055) / 1.055, vec3(2.4)), step(vec3(0.04045), c));
+}
+float bikeHash(float n) {
+  return fract(sin(n) * 43758.5453123);
+}
+float bikeThick(vec2 uv, vec3 st) {
+  float a = texture(uSurf, vec3(uv, st.x)).r;
+  float b = texture(uSurf, vec3(uv, st.y)).r;
+  return max(0.0, mix(a, b, st.z));
+}
+vec4 bikeGroupTexel(int i) {
+  return texelFetch(uReveal, ivec2(i % uRevealWidth, i / uRevealWidth), 0);
+}`;
+
+/**
+ * 自転車ごとの状態（表示・落下の進み具合・降り直しの段・陰影）。color_vertex（main の最初の方）で求め、
+ * 法線・位置・投影の各段で使う。
+ * まとまりのテクセル0: (表示台数 T, 落下の先頭 A, 落下の幅 W, 落下を始める高さ)
+ * テクセル1: (山の表面の扱い 0=なし 1=bury 2=lattice, 隠す深さ, 暗くなる深さ, 降り直しの幅)
+ */
+const VERTEX_STATE = `int bikeG = int(iMeta.y + 0.5);
+vec4 bikeP0 = bikeGroupTexel(bikeG * ${GROUP_TEXELS});
+vec4 bikeP1 = bikeGroupTexel(bikeG * ${GROUP_TEXELS} + 1);
+float bikeRank = iMeta.x;
+bool bikeHidden = bikeRank >= bikeP0.x;
+float bikeFall = 1.0;
+float bikeShift = 0.0;
+float bikeShade = 1.0;
+if (bikeP0.z > 0.0) {
+  float bikeP = (bikeP0.y - bikeRank) / bikeP0.z;
+  if (bikeP <= 0.0) bikeHidden = true;
+  bikeFall = clamp(bikeP, 0.0, 1.0);
+}
+int bikeMode = int(bikeP1.x + 0.5);
+if (bikeMode > 0 && !bikeHidden) {
+  vec3 bikeW = (modelMatrix * vec4(iPos, 1.0)).xyz;
+  vec2 bikeUv = (bikeW.xz - uSurfRect.xy) * uSurfRect.zw;
+  float bikeTh = bikeThick(bikeUv, uSurfHead);
+  float bikeDepth = 0.0;
+  if (bikeMode == 1) {
+    bikeDepth = bikeTh - iExtra.x;
+    if (bikeDepth > bikeP1.y || (iExtra.y > 0.0 && bikeP0.x > iExtra.y)) bikeHidden = true;
+  } else {
+    float bikeD = max(iExtra.y, 1e-3);
+    float bikeM1 = max(0.0, ceil((iExtra.x - bikeTh) / bikeD - 1e-4));
+    float bikeTl = bikeThick(bikeUv, uSurfLag);
+    float bikeML = max(bikeM1, ceil((iExtra.x - bikeTl) / bikeD - 1e-4));
+    float bikeLevel = bikeM1;
+    if (bikeM1 > iExtra.z + 0.5) bikeHidden = true;
+    if (bikeML > bikeM1 + 0.5) {
+      float bikeQ = 1.0 - (iExtra.x - bikeM1 * bikeD - bikeTl) / (max(bikeP1.w, 1e-3) * bikeD);
+      if (bikeQ > 0.0) {
+        bikeFall = min(bikeFall, bikeQ);
+      } else {
+        bikeLevel = bikeML;
+        if (bikeML > iExtra.z + 0.5) bikeHidden = true;
+      }
+    }
+    bikeShift = -bikeLevel * bikeD;
+    bikeDepth = bikeTh - (iExtra.x - bikeLevel * bikeD);
+  }
+  bikeShade = mix(1.0, uDeepShade, clamp(bikeDepth / max(bikeP1.z, 1e-3), 0.0, 1.0));
+}
+vec4 bikeSpin = vec4(0.0, 0.0, 0.0, 1.0);
+vec3 bikeOffset = vec3(0.0, bikeShift, 0.0);
+if (bikeFall < 1.0 && !bikeHidden) {
+  float bikeS = clamp(bikeFall / 0.8, 0.0, 1.0);
+  float bikeB = clamp((bikeFall - 0.8) / 0.2, 0.0, 1.0);
+  float bikeH1 = bikeHash(bikeRank * 0.6180339 + iMeta.y * 7.13 + 1.0);
+  float bikeH2 = bikeHash(bikeRank * 1.3710 + 3.7);
+  float bikeH3 = bikeHash(bikeRank * 2.1130 + 9.1);
+  vec3 bikeAxis = normalize(vec3(bikeH1 - 0.5, bikeH2 - 0.5, bikeH3 - 0.5) + vec3(0.0, 0.0, 1e-3));
+  float bikeR = (1.0 - bikeS) * (1.0 - bikeS);
+  float bikeAng = bikeR * (2.0 + 4.0 * bikeH1) * 3.14159265;
+  bikeSpin = vec4(bikeAxis * sin(bikeAng * 0.5), cos(bikeAng * 0.5));
+  float bikeDrop = bikeP0.w;
+  float bikeLift = bikeDrop * (1.0 - bikeS * bikeS) + (0.12 + bikeDrop * 0.004) * sin(3.14159265 * bikeB);
+  vec2 bikeDrift = (vec2(bikeH2, bikeH3) - 0.5) * bikeDrop * 0.3 * bikeR;
+  bikeOffset += vec3(bikeDrift.x, bikeLift, bikeDrift.y);
 }`;
 
 const VERTEX_HIDE = `#include <project_vertex>
 {
   int bikeCell = int(iMeta.z + 0.5);
-  int bikeGroup = int(iMeta.y + 0.5);
   float bikeMask = texelFetch(uCellMask, ivec2(bikeCell % uMaskWidth, bikeCell / uMaskWidth), 0).r;
-  float bikeReveal = texelFetch(uReveal, ivec2(bikeGroup % uRevealWidth, bikeGroup / uRevealWidth), 0).r;
-  if (bikeMask < 0.5 || iMeta.x >= bikeReveal) gl_Position = vec4(0.0, 0.0, 2.0, 1.0);
+  if (bikeMask < 0.5 || bikeHidden) gl_Position = vec4(0.0, 0.0, 2.0, 1.0);
 }`;
 
 interface FieldUniforms {
   uCellMask: { value: DataTexture };
   uReveal: { value: DataTexture };
+  uSurf: { value: DataArrayTexture };
+  uSurfHead: { value: Vector3 };
+  uSurfLag: { value: Vector3 };
+  uSurfRect: { value: Vector4 };
+  uDeepShade: { value: number };
   uMaskWidth: { value: number };
   uRevealWidth: { value: number };
 }
@@ -235,21 +396,32 @@ function createBicycleMaterial(uniforms: FieldUniforms): MeshLambertMaterial {
     Object.assign(shader.uniforms, uniforms);
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', VERTEX_HEADER)
-      .replace('#include <beginnormal_vertex>', '#include <beginnormal_vertex>\nobjectNormal = bikeRotate(iQuat, objectNormal);')
-      .replace('#include <begin_vertex>', '#include <begin_vertex>\ntransformed = bikeRotate(iQuat, transformed) + iPos;')
+      .replace(
+        '#include <beginnormal_vertex>',
+        '#include <beginnormal_vertex>\nobjectNormal = bikeRotate(bikeSpin, bikeRotate(iQuat, objectNormal));',
+      )
+      .replace(
+        '#include <begin_vertex>',
+        `#include <begin_vertex>
+{
+  vec3 bikeC = bikeRotate(iQuat, vec3(0.0, 0.5, 0.0));
+  transformed = bikeRotate(bikeSpin, bikeRotate(iQuat, transformed) - bikeC) + bikeC + iPos + bikeOffset;
+}`,
+      )
       .replace(
         '#include <color_vertex>',
-        `vColor = vec4(1.0);
-vColor.rgb = color * mix(vec3(1.0), bikeSrgbToLinear(iColor.rgb), frameMask) * iColor.a;`,
+        `${VERTEX_STATE}
+vColor = vec4(1.0);
+vColor.rgb = color * mix(vec3(1.0), bikeSrgbToLinear(iColor.rgb), frameMask) * (iColor.a * bikeShade);`,
       )
       .replace('#include <project_vertex>', VERTEX_HIDE);
   };
-  mat.customProgramCacheKey = () => 'bicycle-instanced-v2';
+  mat.customProgramCacheKey = () => 'bicycle-instanced-v3';
   return mat;
 }
 
-function createDataTexture(data: Uint8Array | Float32Array, width: number, height: number): DataTexture {
-  const tex = new DataTexture(data, width, height, RedFormat, data instanceof Float32Array ? FloatType : UnsignedByteType);
+function createDataTexture(data: Uint8Array | Float32Array, width: number, height: number, rgba = false): DataTexture {
+  const tex = new DataTexture(data, width, height, rgba ? RGBAFormat : RedFormat, data instanceof Float32Array ? FloatType : UnsignedByteType);
   tex.minFilter = NearestFilter;
   tex.magFilter = NearestFilter;
   tex.generateMipmaps = false;
@@ -274,6 +446,10 @@ interface GroupEntry {
   reveal: number;
   /** 構築時のテクスチャ上の番号。 */
   slot: number;
+  fall: BicycleFallOptions | null;
+  /** 落下の先頭（小数）。fall がなければ reveal と同じ。 */
+  head: number;
+  pile: BicyclePileOptions | null;
 }
 
 interface FarRange {
@@ -294,6 +470,9 @@ interface Region {
   u8: Uint8Array;
   fbuf: InstancedInterleavedBuffer;
   cbuf: InstancedInterleavedBuffer;
+  /** 山の表面との関係（使うまとまりがある区画だけ）。 */
+  e32: Float32Array | null;
+  ebuf: InstancedInterleavedBuffer | null;
   ranges: FarRange[];
   dirty: boolean;
 }
@@ -306,6 +485,7 @@ interface DynamicLayer {
   quat: InstancedBufferAttribute;
   meta: InstancedBufferAttribute;
   color: InstancedBufferAttribute;
+  extra: InstancedBufferAttribute;
   capacity: number;
   count: number;
 }
@@ -340,6 +520,13 @@ export class BicycleField {
 
   private readonly groups = new Map<number, GroupEntry>();
   private nextGroupId = 0;
+  private reducedMotionValue = false;
+  /** true の間は時間による落下の進行を止める（確認用: 降っている途中の静止画を撮る）。 */
+  pauseFalls = false;
+  private lastUpdateMs = -1;
+  private hasExtras = false;
+  private surfaceSource: PileSurfaceSource | null = null;
+  private readonly dummySurface: DataArrayTexture;
   private structureDirty = true;
   private forceLodValue: BicycleLod | null = null;
   private assignDirty = true;
@@ -353,6 +540,10 @@ export class BicycleField {
   private cellGroup = new Int32Array(0);
   private cellFloor = new Int8Array(0);
   private cellSphere = new Float64Array(0); // x, y, z, r
+  /** 視錐台の判定用の境界球（落下の高さ・降り直しの範囲を含む）。 */
+  private cellCull = new Float64Array(0);
+  /** セルの自転車の hideAfter の最大（表示台数がこれを超えると、セルの全台が埋もれる）。 */
+  private cellHide = new Float64Array(0);
   private cellLod = new Int8Array(0);
   private nextLod = new Int8Array(0);
   private cellDist = new Float64Array(0);
@@ -381,9 +572,22 @@ export class BicycleField {
     this.object.name = 'BicycleField';
     this.bases = [createBicycleGeometry(0), createBicycleGeometry(1), createBicycleGeometry(2)];
     this.triangles = [triangleCount(this.bases[0]), triangleCount(this.bases[1]), triangleCount(this.bases[2])];
+    this.dummySurface = new DataArrayTexture(new Float32Array(1), 1, 1, 1);
+    this.dummySurface.format = RedFormat;
+    this.dummySurface.type = FloatType;
+    this.dummySurface.minFilter = NearestFilter;
+    this.dummySurface.magFilter = NearestFilter;
+    this.dummySurface.generateMipmaps = false;
+    this.dummySurface.needsUpdate = true;
+    this.revealData = new Float32Array(4 * 4);
     this.uniforms = {
       uCellMask: { value: createDataTexture(this.maskData, 4, 1) },
-      uReveal: { value: createDataTexture(this.revealData, 4, 1) },
+      uReveal: { value: createDataTexture(this.revealData, 4, 1, true) },
+      uSurf: { value: this.dummySurface },
+      uSurfHead: { value: new Vector3(0, 0, 0) },
+      uSurfLag: { value: new Vector3(0, 0, 0) },
+      uSurfRect: { value: new Vector4(0, 0, 1, 1) },
+      uDeepShade: { value: 0.45 },
       uMaskWidth: { value: 4 },
       uRevealWidth: { value: 4 },
     };
@@ -402,7 +606,18 @@ export class BicycleField {
       overflow: 0,
       drawCalls: 0,
       groups: 0,
+      falling: 0,
     };
+  }
+
+  /** 動きを減らす設定（prefers-reduced-motion）。true なら落下を省いてその場に現れる。 */
+  get reducedMotion(): boolean {
+    return this.reducedMotionValue;
+  }
+  set reducedMotion(v: boolean) {
+    if (v === this.reducedMotionValue) return;
+    this.reducedMotionValue = v;
+    for (const g of this.groups.values()) if (g.fall) this.markGroupDirty(g);
   }
 
   /** 確認用: 指定すると距離に関係なく全台をこの詳細度で描く（上限も無視）。null で通常動作。 */
@@ -420,13 +635,67 @@ export class BicycleField {
    * まとまり（駅ごと、山ごと）を登録し、その番号を返す。登録した順が出現の順位になる。
    * 表示する台数の初期値は全台。配列は登録後に書き換えないこと（次の構築で読み直す）。
    * 構築は次の `update` でまとめて行うので、最初にすべてのまとまりを登録してから `update` を呼ぶ。
+   *
+   * - fall: 表示に加わる自転車が上空から落ちてくる（最初の表示台数のぶんは着地済み）。
+   *   window=0 なら順位による落下はなく、height は降り直し（pile.mode='lattice'）の落下の高さにだけ使う。
+   * - pile: 山の表面（`setPileSurface`）に合わせて隠す・暗くする・降り直す。`data.pile` が必要。
    */
-  addGroup(data: BicycleInstances, options: { reveal?: number } = {}): number {
+  addGroup(data: BicycleInstances, options: { reveal?: number; fall?: BicycleFallOptions; pile?: BicyclePileOptions } = {}): number {
     const id = this.nextGroupId++;
     const reveal = clampInt(options.reveal ?? data.count, 0, data.count);
-    this.groups.set(id, { id, data, reveal, slot: -1 });
+    const fall = options.fall && (options.fall.window > 0 || options.fall.height > 0) ? { ...options.fall, window: Math.max(0, options.fall.window) } : null;
+    const pile = options.pile ?? null;
+    if (pile && !data.pile) throw new Error('pile を指定するまとまりには data.pile（中心の高さ）が必要です');
+    if (pile?.mode === 'lattice' && !(data.pile?.spacing && data.pile.maxLevel)) {
+      throw new Error("pile.mode='lattice' には data.pile.spacing と data.pile.maxLevel が必要です");
+    }
+    this.groups.set(id, { id, data, reveal, slot: -1, fall, head: reveal + (fall?.window ?? 0), pile });
     this.structureDirty = true;
     return id;
+  }
+
+  /**
+   * 山の表面の厚さ（成長の段階ごとの DataArrayTexture）を渡す。`pile` を指定したまとまりが使う。
+   * テクスチャの所有権は呼び出し側にある（dispose しない）。
+   */
+  setPileSurface(source: PileSurfaceSource | null): void {
+    this.surfaceSource = source;
+    this.uniforms.uSurf.value = source?.texture ?? this.dummySurface;
+    if (source) {
+      const r = source.rect;
+      this.uniforms.uSurfRect.value.set(r.x0, r.z0, 1 / r.sizeX, 1 / r.sizeZ);
+    }
+  }
+
+  /**
+   * 山の表面の現在の形（先頭と遅れの2つ）。先頭は表示する段階、遅れは降り直しの着地の基準（先頭以下の進み具合）。
+   * uniform を書き換えるだけで転送はない。
+   */
+  setPileSurfaceStage(head: PileSurfaceStage, lag: PileSurfaceStage = head): void {
+    this.uniforms.uSurfHead.value.set(head.k0, head.k1, head.mix);
+    this.uniforms.uSurfLag.value.set(lag.k0, lag.k1, lag.mix);
+  }
+
+  /** 表面の深い自転車の明るさ（0〜1, 既定 0.45）。 */
+  set deepShade(v: number) {
+    this.uniforms.uDeepShade.value = v;
+  }
+  get deepShade(): number {
+    return this.uniforms.uDeepShade.value;
+  }
+
+  /** 落下の先頭（小数）。着地済みの台数の目安は `getFallFront(group) - window`。 */
+  getFallHead(group: number): number {
+    const g = this.groups.get(group);
+    return g ? g.head : 0;
+  }
+
+  /** 着地を終えた台数（落下の先頭 − 幅、0〜表示台数）。 */
+  getLandedCount(group: number): number {
+    const g = this.groups.get(group);
+    if (!g) return 0;
+    if (!g.fall || g.fall.window <= 0 || this.reducedMotion) return g.reveal;
+    return Math.min(g.reveal, Math.max(0, g.head - g.fall.window));
   }
 
   /** まとまりを取り除く。 */
@@ -450,19 +719,64 @@ export class BicycleField {
    * まとまりの先頭（登録順）の n 台だけを表示する。group を省略するとすべてのまとまりに同じ n を使う。
    * バッファは作り直さず、まとまりごとの表示台数（4バイト）をテクスチャで送るだけ。
    */
-  setRevealCount(n: number, group?: number): void {
+  setRevealCount(n: number, group?: number, options: { lead?: number } = {}): void {
     const targets = group === undefined ? [...this.groups.values()] : [this.groups.get(group)];
     for (const g of targets) {
       if (!g) continue;
       const reveal = clampInt(n, 0, g.data.count);
-      if (reveal === g.reveal) continue;
+      const w = g.fall?.window ?? 0;
+      let head = g.head;
+      if (!g.fall || w <= 0) head = reveal;
+      else if (options.lead !== undefined) head = reveal + Math.min(w, Math.max(0, options.lead));
+      else if (head > reveal + w) head = reveal + w; // 戻すときは空中に残さない
+      if (reveal === g.reveal && head === g.head) continue;
       g.reveal = reveal;
-      if (g.slot >= 0 && !this.structureDirty) {
-        this.revealData[g.slot] = reveal;
-        this.revealDirtySlots.add(g.slot);
-      }
+      g.head = head;
+      this.markGroupDirty(g);
     }
     this.updateRevealedTotal();
+  }
+
+  private markGroupDirty(g: GroupEntry): void {
+    if (g.slot >= 0 && !this.structureDirty) {
+      this.writeGroupTexels(g);
+      this.revealDirtySlots.add(g.slot);
+    }
+  }
+
+  private writeGroupTexels(g: GroupEntry): void {
+    const o = g.slot * GROUP_TEXELS * 4;
+    const d = this.revealData;
+    const reduced = this.reducedMotion;
+    d[o] = g.reveal;
+    d[o + 1] = reduced || !g.fall ? g.reveal : g.head;
+    d[o + 2] = reduced || !g.fall ? 0 : g.fall.window;
+    d[o + 3] = g.fall?.height ?? 0;
+    const pile = g.pile;
+    d[o + 4] = !pile || !this.surfaceSource ? 0 : pile.mode === 'bury' ? 1 : 2;
+    d[o + 5] = pile?.hideDepth ?? 1.6;
+    d[o + 6] = pile?.shadeDepth ?? 1.2;
+    d[o + 7] = pile?.latticeWindow ?? 1;
+  }
+
+  /** 落下の先頭を時間で進める（update から呼ぶ）。 */
+  private advanceFalls(dt: number): void {
+    for (const g of this.groups.values()) {
+      if (!g.fall || g.fall.window <= 0) continue;
+      const w = g.fall.window;
+      const target = g.reveal + w;
+      let head = g.head;
+      if (this.reducedMotion) head = target;
+      else if (head < target && !this.pauseFalls && dt > 0) {
+        const settle = Math.max(0.05, g.fall.settleSeconds ?? DEFAULT_SETTLE_SECONDS);
+        const step = Math.max((target - head) * (1 - Math.exp(-dt / FALL_CHASE_TAU)), (w * dt) / settle);
+        head = Math.min(target, head + step);
+      }
+      if (head !== g.head) {
+        g.head = head;
+        this.markGroupDirty(g);
+      }
+    }
   }
 
   /** まとまりの表示台数。 */
@@ -473,6 +787,11 @@ export class BicycleField {
   /** カメラに応じて詳細度の割り当てを更新する。描画前に毎フレーム呼ぶ。 */
   update(camera: PerspectiveCamera, viewportHeightPx: number): void {
     if (this.structureDirty) this.build();
+    const now = performance.now();
+    const dt = this.lastUpdateMs < 0 ? 0 : Math.min(0.1, Math.max(0, (now - this.lastUpdateMs) / 1000));
+    this.lastUpdateMs = now;
+    this.advanceFalls(dt);
+    this.refreshGroupModes();
     this.flushReveal();
 
     camera.updateMatrixWorld();
@@ -488,6 +807,7 @@ export class BicycleField {
 
     // 1. 視錐台の判定と距離による詳細度（視錐台外は -1）
     const sphere = this.cellSphere;
+    const cull = this.cellCull;
     const cand = this.candidates;
     cand.length = 0;
     for (const r of this.regions) {
@@ -497,7 +817,11 @@ export class BicycleField {
         const y = sphere[c * 4 + 1]!;
         const z = sphere[c * 4 + 2]!;
         const rad = sphere[c * 4 + 3]!;
-        if (!regionIn || !this.sphereInFrustum(x, y, z, rad)) {
+        if (
+          !regionIn ||
+          this.groupBySlot[this.cellGroup[c]!]!.reveal > this.cellHide[c]! ||
+          !this.sphereInFrustum(cull[c * 4]!, cull[c * 4 + 1]!, cull[c * 4 + 2]!, cull[c * 4 + 3]!)
+        ) {
           this.nextLod[c] = -1;
           continue;
         }
@@ -567,6 +891,13 @@ export class BicycleField {
     s.triangles = perLod[0] * this.triangles[0] + perLod[1] * this.triangles[1] + perLod[2] * this.triangles[2];
     s.drawCalls = drawCalls;
     s.overflow = Math.max(0, this.dynamic[0].count - this.dynamic[0].capacity) + Math.max(0, this.dynamic[1].count - this.dynamic[1].capacity);
+    let falling = 0;
+    if (!this.reducedMotion) {
+      for (const g of this.groups.values()) {
+        if (g.fall) falling += Math.max(0, Math.min(g.reveal, g.head) - Math.max(0, g.head - g.fall.window));
+      }
+    }
+    s.falling = Math.round(falling);
     s.frameUploadBytes = this.pendingUpload;
     s.uploadBytes += this.pendingUpload;
     this.pendingUpload = 0;
@@ -595,6 +926,7 @@ export class BicycleField {
     for (const b of this.bases) b.dispose();
     this.uniforms.uCellMask.value.dispose();
     this.uniforms.uReveal.value.dispose();
+    this.dummySurface.dispose();
     this.material.dispose();
     this.object.removeFromParent();
   }
@@ -614,17 +946,19 @@ export class BicycleField {
     const quat = new InstancedBufferAttribute(new Float32Array(capacity * 4), 4);
     const meta = new InstancedBufferAttribute(new Float32Array(capacity * 3), 3);
     const color = new InstancedBufferAttribute(new Uint8Array(capacity * 4), 4, true);
-    for (const a of [pos, quat, meta, color]) a.setUsage(DynamicDrawUsage);
+    const extra = new InstancedBufferAttribute(new Float32Array(this.hasExtras ? capacity * EXTRA : EXTRA), EXTRA);
+    for (const a of [pos, quat, meta, color, extra]) a.setUsage(DynamicDrawUsage);
     geometry.setAttribute('iPos', pos);
     geometry.setAttribute('iQuat', quat);
     geometry.setAttribute('iMeta', meta);
     geometry.setAttribute('iColor', color);
+    if (this.hasExtras) geometry.setAttribute('iExtra', extra);
     const mesh = new Mesh(geometry, this.material);
     mesh.frustumCulled = false;
     mesh.visible = false;
     mesh.name = `BicycleLOD${lod}`;
     this.object.add(mesh);
-    return { lod, geometry, mesh, pos, quat, meta, color, capacity, count: 0 };
+    return { lod, geometry, mesh, pos, quat, meta, color, extra, capacity, count: 0 };
   }
 
   private flushReveal(): void {
@@ -641,6 +975,15 @@ export class BicycleField {
     this.pendingUpload += this.revealData.byteLength;
     this.updateRevealedTotal();
   }
+
+  /** 山の表面の有無が変わったら、まとまりのパラメータを書き直す。 */
+  private refreshGroupModes(): void {
+    const has = this.surfaceSource !== null;
+    if (has === this.lastSurfaceState) return;
+    this.lastSurfaceState = has;
+    for (const g of this.groups.values()) if (g.pile) this.markGroupDirty(g);
+  }
+  private lastSurfaceState = false;
 
   private updateRevealedTotal(): void {
     let revealed = 0;
@@ -683,6 +1026,16 @@ export class BicycleField {
     const groups = [...this.groups.values()];
     groups.forEach((g, slot) => (g.slot = slot));
     this.groupBySlot = groups;
+    const hasExtras = groups.some((g) => g.data.pile);
+    if (hasExtras !== this.hasExtras) {
+      // 近景・中景の層に山の表面との関係の属性を足す（または外す）
+      this.hasExtras = hasExtras;
+      this.dynamic.forEach((layer, k) => {
+        this.object.remove(layer.mesh);
+        layer.geometry.dispose();
+        this.dynamic[k] = this.createDynamicLayer(layer.lod, layer.capacity);
+      });
+    }
 
     // 1. セル（まとまり・詳細度の下限ごと）に分ける
     const cellGroupL: number[] = [];
@@ -691,7 +1044,10 @@ export class BicycleField {
     const cellYL: number[] = [];
     const cellZL: number[] = [];
     const bbox: number[] = []; // minx, miny, minz, maxx, maxy, maxz
+    /** 落下・降り直しで動く範囲を含む箱（視錐台の判定用）。 */
+    const cullBox: number[] = [];
     const countL: number[] = [];
+    const hideL: number[] = [];
     const instCell: Int32Array[] = [];
     let total = 0;
     for (const g of groups) {
@@ -703,6 +1059,10 @@ export class BicycleField {
       const oz = d.origin?.z ?? 0;
       const keys = new Map<number, number>();
       const ic = new Int32Array(n);
+      const drop = g.fall?.height ?? 0;
+      const drift = drop * 0.15;
+      const lattice = g.pile?.mode === 'lattice' ? d.pile : undefined;
+      const hideAfter = g.pile?.mode === 'bury' ? d.pile?.hideAfter : undefined;
       for (let i = 0; i < n; i++) {
         const floor = d.lodFloor ? Math.min(3, d.lodFloor[i]!) : 0;
         if (floor >= 3) {
@@ -715,7 +1075,10 @@ export class BicycleField {
         const cx = Math.floor(x / cs);
         const cy = Math.floor(y / cs);
         const cz = Math.floor(z / cs);
-        const key = (((cx + 32768) * 4096 + (cy + 2048)) * 65536 + (cz + 32768)) * 4 + floor;
+        // 埋もれる時期（hideAfter）の近い自転車どうしを同じセルにまとめる（16 段階）
+        const hide = hideAfter ? hideAfter[i]! : Infinity;
+        const bucket = hide >= n ? 15 : Math.max(0, Math.min(14, Math.floor((hide / Math.max(1, n)) * 15)));
+        const key = ((((cx + 32768) * 4096 + (cy + 2048)) * 65536 + (cz + 32768)) * 4 + floor) * 16 + bucket;
         let id = keys.get(key);
         if (id === undefined) {
           id = countL.length;
@@ -726,9 +1089,12 @@ export class BicycleField {
           cellYL.push(cy);
           cellZL.push(cz);
           countL.push(0);
+          hideL.push(-Infinity);
           bbox.push(x, y, z, x, y, z);
+          cullBox.push(x, y, z, x, y, z);
         }
         countL[id]!++;
+        if (hide > hideL[id]!) hideL[id] = hide;
         const b = id * 6;
         if (x < bbox[b]!) bbox[b] = x;
         if (y < bbox[b + 1]!) bbox[b + 1] = y;
@@ -736,6 +1102,14 @@ export class BicycleField {
         if (x > bbox[b + 3]!) bbox[b + 3] = x;
         if (y > bbox[b + 4]!) bbox[b + 4] = y;
         if (z > bbox[b + 5]!) bbox[b + 5] = z;
+        const lo = lattice ? y - lattice.maxLevel![i]! * lattice.spacing![i]! : y;
+        const hi = y + drop;
+        if (x - drift < cullBox[b]!) cullBox[b] = x - drift;
+        if (lo < cullBox[b + 1]!) cullBox[b + 1] = lo;
+        if (z - drift < cullBox[b + 2]!) cullBox[b + 2] = z - drift;
+        if (x + drift > cullBox[b + 3]!) cullBox[b + 3] = x + drift;
+        if (hi > cullBox[b + 4]!) cullBox[b + 4] = hi;
+        if (z + drift > cullBox[b + 5]!) cullBox[b + 5] = z + drift;
         ic[i] = id;
       }
       instCell.push(ic);
@@ -779,6 +1153,8 @@ export class BicycleField {
     this.cellGroup = new Int32Array(cells);
     this.cellFloor = new Int8Array(cells);
     this.cellSphere = new Float64Array(cells * 4);
+    this.cellCull = new Float64Array(cells * 4);
+    this.cellHide = new Float64Array(cells);
     this.cellLod = new Int8Array(cells).fill(-1);
     this.nextLod = new Int8Array(cells);
     this.cellDist = new Float64Array(cells);
@@ -786,6 +1162,7 @@ export class BicycleField {
     const regionCount = regionKeys.size;
     const regionBox = new Float64Array(regionCount * 6);
     for (let r = 0; r < regionCount; r++) regionBox.set([Infinity, Infinity, Infinity, -Infinity, -Infinity, -Infinity], r * 6);
+    const regionCull = Float64Array.from(regionBox);
     const regionCells = new Uint32Array(regionCount + 1);
     const regionInst = new Uint32Array(regionCount);
     for (let i = 0; i < cells; i++) {
@@ -794,6 +1171,7 @@ export class BicycleField {
       this.cellRegion[i] = r;
       this.cellGroup[i] = cellGroupL[old]!;
       this.cellFloor[i] = cellFloorL[old]!;
+      this.cellHide[i] = hideL[old]!;
       const n = countL[old]!;
       this.cellCount[i] = n;
       this.cellStart[i] = regionInst[r]!;
@@ -807,9 +1185,18 @@ export class BicycleField {
       this.cellSphere[i * 4 + 1] = bbox[b + 1]! + hy;
       this.cellSphere[i * 4 + 2] = bbox[b + 2]! + hz;
       this.cellSphere[i * 4 + 3] = Math.hypot(hx, hy, hz) + this.bikeRadius;
+      const ex = (cullBox[b + 3]! - cullBox[b]!) / 2;
+      const ey = (cullBox[b + 4]! - cullBox[b + 1]!) / 2;
+      const ez = (cullBox[b + 5]! - cullBox[b + 2]!) / 2;
+      this.cellCull[i * 4] = cullBox[b]! + ex;
+      this.cellCull[i * 4 + 1] = cullBox[b + 1]! + ey;
+      this.cellCull[i * 4 + 2] = cullBox[b + 2]! + ez;
+      this.cellCull[i * 4 + 3] = Math.hypot(ex, ey, ez) + this.bikeRadius;
       for (let k = 0; k < 3; k++) {
         regionBox[r * 6 + k] = Math.min(regionBox[r * 6 + k]!, bbox[b + k]!);
         regionBox[r * 6 + 3 + k] = Math.max(regionBox[r * 6 + 3 + k]!, bbox[b + 3 + k]!);
+        regionCull[r * 6 + k] = Math.min(regionCull[r * 6 + k]!, cullBox[b + k]!);
+        regionCull[r * 6 + 3 + k] = Math.max(regionCull[r * 6 + 3 + k]!, cullBox[b + 3 + k]!);
       }
     }
     for (let r = 0; r < regionCount; r++) regionCells[r + 1]! += regionCells[r]!;
@@ -819,16 +1206,20 @@ export class BicycleField {
     this.regions = [];
     for (let r = 0; r < regionCount; r++) {
       const b = r * 6;
-      const center = new Vector3((regionBox[b]! + regionBox[b + 3]!) / 2, (regionBox[b + 1]! + regionBox[b + 4]!) / 2, (regionBox[b + 2]! + regionBox[b + 5]!) / 2);
-      const radius = Math.hypot(regionBox[b + 3]! - regionBox[b]!, regionBox[b + 4]! - regionBox[b + 1]!, regionBox[b + 5]! - regionBox[b + 2]!) / 2 + this.bikeRadius;
+      const box = new Vector3((regionBox[b]! + regionBox[b + 3]!) / 2, (regionBox[b + 1]! + regionBox[b + 4]!) / 2, (regionBox[b + 2]! + regionBox[b + 5]!) / 2);
+      const center = new Vector3((regionCull[b]! + regionCull[b + 3]!) / 2, (regionCull[b + 1]! + regionCull[b + 4]!) / 2, (regionCull[b + 2]! + regionCull[b + 5]!) / 2);
+      const radius = Math.hypot(regionCull[b + 3]! - regionCull[b]!, regionCull[b + 4]! - regionCull[b + 1]!, regionCull[b + 5]! - regionCull[b + 2]!) / 2 + this.bikeRadius;
       // 基準点は 1m 単位に丸める（確認しやすさのため。精度には影響しない）
-      const anchor = new Vector3(Math.round(center.x), Math.round(center.y), Math.round(center.z));
+      const anchor = new Vector3(Math.round(box.x), Math.round(box.y), Math.round(box.z));
       const n = regionInst[r]!;
       const f32 = new Float32Array(Math.max(1, n) * STRIDE);
       const u8 = new Uint8Array(Math.max(1, n) * 4);
       const fbuf = new InstancedInterleavedBuffer(f32, STRIDE, 1).setUsage(StaticDrawUsage);
       const cbuf = new InstancedInterleavedBuffer(u8, 4, 1).setUsage(StaticDrawUsage);
       upload += f32.byteLength + u8.byteLength;
+      const e32 = hasExtras ? new Float32Array(Math.max(1, n) * EXTRA) : null;
+      const ebuf = e32 ? new InstancedInterleavedBuffer(e32, EXTRA, 1).setUsage(StaticDrawUsage) : null;
+      if (e32) upload += e32.byteLength;
       const ranges: FarRange[] = [];
       for (let k = 0; k < FAR_RANGES; k++) {
         const geometry = instancedFromBase(this.bases[2]);
@@ -840,7 +1231,7 @@ export class BicycleField {
         this.object.add(mesh);
         ranges.push({ mesh, geometry, start: -1, count: 0 });
       }
-      this.regions.push({ anchor, center, radius, cellBegin: regionCells[r]!, cellEnd: regionCells[r + 1]!, instances: n, f32, u8, fbuf, cbuf, ranges, dirty: true });
+      this.regions.push({ anchor, center, radius, cellBegin: regionCells[r]!, cellEnd: regionCells[r + 1]!, instances: n, f32, u8, fbuf, cbuf, e32, ebuf, ranges, dirty: true });
     }
     const fill = Uint32Array.from(this.cellStart);
     groups.forEach((g, slot) => {
@@ -873,6 +1264,12 @@ export class BicycleField {
         u[o * 4 + 1] = d.colors[i * 3 + 1]!;
         u[o * 4 + 2] = d.colors[i * 3 + 2]!;
         u[o * 4 + 3] = d.shades ? d.shades[i]! : 255;
+        const e = region.e32;
+        if (e && d.pile) {
+          e[o * EXTRA] = d.pile.height[i]!;
+          e[o * EXTRA + 1] = d.pile.spacing ? d.pile.spacing[i]! : d.pile.hideAfter && g.pile?.mode === 'bury' ? Math.min(d.pile.hideAfter[i]!, 1e30) : 0;
+          e[o * EXTRA + 2] = d.pile.maxLevel ? d.pile.maxLevel[i]! : 0;
+        }
       }
     });
 
@@ -892,12 +1289,14 @@ export class BicycleField {
     this.uniforms.uCellMask.value.dispose();
     this.uniforms.uCellMask.value = createDataTexture(this.maskData, maskW, maskH);
     this.uniforms.uMaskWidth.value = maskW;
-    const revW = Math.min(REVEAL_WIDTH, nextPow2(Math.max(4, groups.length)));
-    const revH = Math.max(1, Math.ceil(groups.length / revW));
-    this.revealData = new Float32Array(revW * revH);
-    groups.forEach((g) => (this.revealData[g.slot] = g.reveal));
+    const texels = groups.length * GROUP_TEXELS;
+    const revW = Math.min(REVEAL_WIDTH, nextPow2(Math.max(4, texels)));
+    const revH = Math.max(1, Math.ceil(texels / revW));
+    this.revealData = new Float32Array(revW * revH * 4);
+    this.lastSurfaceState = this.surfaceSource !== null;
+    groups.forEach((g) => this.writeGroupTexels(g));
     this.uniforms.uReveal.value.dispose();
-    this.uniforms.uReveal.value = createDataTexture(this.revealData, revW, revH);
+    this.uniforms.uReveal.value = createDataTexture(this.revealData, revW, revH, true);
     this.uniforms.uRevealWidth.value = revW;
     upload += this.maskData.byteLength + this.revealData.byteLength;
     this.pendingUpload += upload;
@@ -930,6 +1329,7 @@ export class BicycleField {
     const qa = layer.quat.array as Float32Array;
     const ma = layer.meta.array as Float32Array;
     const ca = layer.color.array as Uint8Array;
+    const ea = this.hasExtras ? (layer.extra.array as Float32Array) : null;
     let o = 0;
     for (let c = 0; c < this.cells && o < fit; c++) {
       if (this.cellLod[c] !== layer.lod) continue;
@@ -939,6 +1339,7 @@ export class BicycleField {
       const dz = region.anchor.z - anchor.z;
       const f = region.f32;
       const u = region.u8;
+      const e = region.e32;
       const end = Math.min(this.cellStart[c]! + this.cellCount[c]!, this.cellStart[c]! + (fit - o));
       for (let j = this.cellStart[c]!; j < end; j++, o++) {
         const p = j * STRIDE;
@@ -956,16 +1357,23 @@ export class BicycleField {
         ca[o * 4 + 1] = u[j * 4 + 1]!;
         ca[o * 4 + 2] = u[j * 4 + 2]!;
         ca[o * 4 + 3] = u[j * 4 + 3]!;
+        if (ea && e) {
+          ea[o * EXTRA] = e[j * EXTRA]!;
+          ea[o * EXTRA + 1] = e[j * EXTRA + 1]!;
+          ea[o * EXTRA + 2] = e[j * EXTRA + 2]!;
+        }
       }
     }
     layer.geometry.instanceCount = o;
     layer.mesh.visible = o > 0;
-    for (const [a, size] of [[layer.pos, 3], [layer.quat, 4], [layer.meta, 3], [layer.color, 4]] as const) {
+    const attrs: [InstancedBufferAttribute, number][] = [[layer.pos, 3], [layer.quat, 4], [layer.meta, 3], [layer.color, 4]];
+    if (ea) attrs.push([layer.extra, EXTRA]);
+    for (const [a, size] of attrs) {
       a.clearUpdateRanges();
       a.addUpdateRange(0, Math.max(1, o) * size);
       a.needsUpdate = true;
     }
-    this.pendingUpload += (realloc ? layer.capacity : o) * BYTES_PER_INSTANCE;
+    this.pendingUpload += (realloc ? layer.capacity : o) * (BYTES_PER_INSTANCE + (ea ? EXTRA_BYTES : 0));
   }
 
   /** 遠景で描くセルを覆う描画範囲（最大 FAR_RANGES 個）を決める。インスタンスは送り直さない。 */
@@ -1008,6 +1416,7 @@ export class BicycleField {
         rg.geometry.setAttribute('iQuat', new InterleavedBufferAttribute(r.fbuf, 4, start * STRIDE + 3));
         rg.geometry.setAttribute('iMeta', new InterleavedBufferAttribute(r.fbuf, 3, start * STRIDE + 7));
         rg.geometry.setAttribute('iColor', new InterleavedBufferAttribute(r.cbuf, 4, start * 4, true));
+        if (r.ebuf) rg.geometry.setAttribute('iExtra', new InterleavedBufferAttribute(r.ebuf, EXTRA, start * EXTRA));
         rg.start = start;
       }
       rg.count = end - start;
