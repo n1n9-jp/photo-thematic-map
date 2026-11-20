@@ -73,8 +73,10 @@ export const PART_COLORS = {
   grip: 0x1d1b1a,
   reflector: 0xc8231c,
   lamp: 0xd9d6c8,
-  /** 中景・遠景のかご。ワイヤー越しに奥が透けて見える平均の明るさとして、銀より暗くする。 */
+  /** 遠景のかごの面。ワイヤー越しに奥が透けて見える平均の明るさとして、銀より暗くする。 */
   basketFar: 0x85888c,
+  /** 遠景の車輪。タイヤ（黒）とリム（銀）を面積の比で混ぜた平均の色。 */
+  farWheel: 0x5f5f60,
 } as const;
 
 /** 内部用: 部品を積み上げるビルダー。 */
@@ -335,22 +337,7 @@ function buildNear(): BufferGeometry {
     b.tube(headLow.clone().setZ(0.035 * s), v(D.frontAxleX, AXLE_Y, 0.05 * s), 0.011, 4, 'frame');
   }
   // チェーンケース（右側）
-  b.extrudedConvex(
-    [
-      [D.rearAxleX - 0.05, AXLE_Y - 0.03],
-      [D.rearAxleX + 0.02, AXLE_Y - 0.06],
-      [bb.x - 0.02, bb.y - 0.11],
-      [bb.x + 0.08, bb.y - 0.09],
-      [bb.x + 0.12, bb.y],
-      [bb.x + 0.08, bb.y + 0.09],
-      [bb.x - 0.02, bb.y + 0.11],
-      [D.rearAxleX + 0.02, AXLE_Y + 0.06],
-      [D.rearAxleX - 0.05, AXLE_Y + 0.03],
-    ],
-    0.075,
-    0.1,
-    'frame',
-  );
+  b.extrudedConvex(chainCaseOutline(), 0.075, 0.1, 'frame');
   // クランクとペダル
   for (const s of [-1, 1]) {
     const pedal = v(bb.x + 0.12 * s, bb.y - 0.12 * s, 0.13 * s);
@@ -442,33 +429,69 @@ function buildNear(): BufferGeometry {
   return b.build();
 }
 
+/**
+ * ワイヤーの前かごを、枠の帯と数本の桟で表す（中景用）。
+ * 近景のかごは細いワイヤーなので、横から見ると大部分が透けて見える。面を塗りつぶさず、
+ * 帯と桟の面積を近景のワイヤーの面積に合わせる。底は近景と同じ暗い板。
+ */
+function wireBasket(b: PartBuilder, bandTop: number, bandBottom: number, barWidth: number, barsPerSide: number): void {
+  const D = BIKE_DIMENSIONS;
+  const [x0, x1] = D.basketX;
+  const [y0, y1] = D.basketY;
+  const w = D.basketHalfWidth;
+  // 上下の帯（側面の帯 4 枚ずつ）
+  b.openBox(v(x0, y1 - bandTop, -w), v(x1, y1, w), PART_COLORS.silver, false);
+  b.openBox(v(x0, y0, -w), v(x1, y0 + bandBottom, w), PART_COLORS.silver, false);
+  // 縦の桟（左右の面と前の面）
+  const hb = barWidth / 2;
+  for (let i = 1; i <= barsPerSide; i++) {
+    const x = x0 + ((x1 - x0) * i) / (barsPerSide + 1);
+    for (const s of [-1, 1]) {
+      const z = w * s;
+      const q = [v(x - hb, y0, z), v(x + hb, y0, z), v(x + hb, y1, z), v(x - hb, y1, z)];
+      b.quad(s > 0 ? q : [q[1]!, q[0]!, q[3]!, q[2]!], PART_COLORS.silver);
+    }
+    const z = -w + (2 * w * i) / (barsPerSide + 1);
+    b.quad([v(x1, y0, z + hb), v(x1, y0, z - hb), v(x1, y1, z - hb), v(x1, y1, z + hb)], PART_COLORS.silver);
+  }
+  // 底板
+  b.quad([v(x0, y0 + 0.003, -w), v(x0, y0 + 0.003, w), v(x1, y0 + 0.003, w), v(x1, y0 + 0.003, -w)], PART_COLORS.darkMetal);
+}
+
 /** 中景用（300 三角形以下）。 */
 function buildMid(): BufferGeometry {
   const D = BIKE_DIMENSIONS;
   const b = new PartBuilder();
   for (const ax of [D.rearAxleX, D.frontAxleX]) {
-    const tire = new TorusGeometry(D.wheelRadius - 0.028, 0.028, 3, 10);
+    // タイヤは近景と同じ太さ、内側に銀のリム（平らな輪）
+    const tire = new TorusGeometry(D.wheelRadius - D.tireTube, D.tireTube * 1.15, 3, 9);
     b.addGeometry(tire, PART_COLORS.tire, new Matrix4().makeTranslation(ax, AXLE_Y, 0));
     tire.dispose();
+    b.flatRing(ax, AXLE_Y, 0, D.wheelRadius - D.tireTube * 2 + 0.004, D.wheelRadius - D.tireTube * 2 - 0.026, 8, PART_COLORS.rim);
   }
-  b.curve(mainFramePoints(), 0.024, 3, 4, 'frame');
+  b.curve(mainFramePoints(), 0.024, 3, 3, 'frame');
   const bb = v(D.bottomBracket[0], D.bottomBracket[1]);
-  b.tube(bb, v(D.seatTop[0], D.seatTop[1]), 0.02, 4, 'frame');
-  b.tube(v(D.headLow[0], D.headLow[1]), v(D.headHigh[0], D.headHigh[1]), 0.024, 4, 'frame');
-  b.tube(v(D.headLow[0], D.headLow[1]), v(D.frontAxleX, AXLE_Y), 0.016, 4, 'frame');
-  b.tube(bb, v(D.rearAxleX, AXLE_Y), 0.016, 4, 'frame');
-  b.tube(v(D.seatTop[0] + 0.02, D.seatTop[1] - 0.09), v(D.rearAxleX, AXLE_Y), 0.014, 4, 'frame');
-  // チェーンケース（平板）
-  b.quad(
-    [v(D.rearAxleX, AXLE_Y - 0.05, 0.09), v(bb.x + 0.1, bb.y - 0.09, 0.09), v(bb.x + 0.1, bb.y + 0.09, 0.09), v(D.rearAxleX, AXLE_Y + 0.05, 0.09)],
+  b.tube(bb, v(D.seatTop[0], D.seatTop[1]), 0.02, 3, 'frame');
+  b.tube(v(D.headLow[0], D.headLow[1]), v(D.headHigh[0], D.headHigh[1]), 0.024, 3, 'frame');
+  // フロントフォーク（左右2本。前から見たときのフレーム色の面積を近景に合わせる）
+  for (const s of [-1, 1]) b.tube(v(D.headLow[0], D.headLow[1], 0.03 * s), v(D.frontAxleX, AXLE_Y, 0.05 * s), 0.012, 3, 'frame');
+  b.tube(bb, v(D.rearAxleX, AXLE_Y), 0.016, 3, 'frame');
+  b.tube(v(D.seatTop[0] + 0.02, D.seatTop[1] - 0.09), v(D.rearAxleX, AXLE_Y), 0.014, 3, 'frame');
+  // チェーンケース（近景と同じ輪郭の平板）
+  const chain = chainCaseOutline();
+  b.polygonStrip(
+    chain.map(([x, y]) => v(x, y, 0.1)),
+    Array.from({ length: chain.length - 2 }, (_, i) => [0, i + 1, i + 2] as [number, number, number]),
     'frame',
   );
   // ステム・ハンドル（3区間）
   b.tube(v(D.headHigh[0], D.headHigh[1]), v(0.315, D.handleTopY - 0.02), 0.016, 3, PART_COLORS.silver);
   const hp = handlebarPoints();
-  const hIdx = [0, 2, 4, 6];
+  // 両端だけグリップ、中央2区間は銀
+  const hIdx = [0, 1, 3, 5, 6];
   for (let i = 0; i < hIdx.length - 1; i++) {
-    b.tube(hp[hIdx[i] as number] as Vector3, hp[hIdx[i + 1] as number] as Vector3, 0.015, 4, i === 1 ? PART_COLORS.silver : PART_COLORS.grip);
+    const end = i === 0 || i === hIdx.length - 2;
+    b.tube(hp[hIdx[i] as number] as Vector3, hp[hIdx[i + 1] as number] as Vector3, 0.015, 3, end ? PART_COLORS.grip : PART_COLORS.silver);
   }
   // サドル
   b.openBox(v(D.saddle[0] - 0.14, D.saddle[1] - 0.035, -0.1), v(D.saddle[0] + 0.13, D.saddle[1] + 0.04, 0.1), PART_COLORS.saddle, false);
@@ -479,17 +502,27 @@ function buildMid(): BufferGeometry {
   // 泥よけ
   b.arcStrip(D.frontAxleX, AXLE_Y, D.wheelRadius + 0.035, 0.04, -0.25, Math.PI * 0.95, 4, PART_COLORS.silver, false);
   b.arcStrip(D.rearAxleX, AXLE_Y, D.wheelRadius + 0.035, 0.04, Math.PI * 0.2, Math.PI * 1.15, 4, PART_COLORS.silver, false);
-  // 荷台（板）
-  b.openBox(v(D.rackX[0], D.rackY - 0.01, -D.rackHalfWidth), v(D.rackX[1], D.rackY + 0.01, D.rackHalfWidth), PART_COLORS.silver, true);
-  // スタンド
-  b.tube(v(D.rearAxleX, AXLE_Y), v(D.rearAxleX - 0.12, 0.01), 0.02, 3, PART_COLORS.silver);
-  // 前かご（底つきの箱）
-  b.openBox(
-    v(D.basketX[0], D.basketY[0], -D.basketHalfWidth),
-    v(D.basketX[1], D.basketY[1], D.basketHalfWidth),
-    PART_COLORS.basketFar,
-    true,
-  );
+  // 荷台（天板と左右の側面）
+  {
+    const [x0, x1] = D.rackX;
+    const y0 = D.rackY - 0.01;
+    const y1 = D.rackY + 0.01;
+    const w = D.rackHalfWidth;
+    b.quad([v(x0, y1, -w), v(x0, y1, w), v(x1, y1, w), v(x1, y1, -w)], PART_COLORS.silver);
+    b.quad([v(x0, y0, w), v(x1, y0, w), v(x1, y1, w), v(x0, y1, w)], PART_COLORS.silver);
+    b.quad([v(x1, y0, -w), v(x0, y0, -w), v(x0, y1, -w), v(x1, y1, -w)], PART_COLORS.silver);
+  }
+  // 両立スタンド（左右の脚の板）
+  for (const s of [-1, 1]) {
+    const top = v(D.rearAxleX, AXLE_Y, 0.07 * s);
+    const foot = v(D.rearAxleX - 0.12, 0.01, 0.13 * s);
+    // 板は斜め（X と Z の間）に向け、横からも前からも脚の太さに見えるようにする
+    const o = v(0.009, 0, -0.009 * s);
+    const q = [top.clone().sub(o), foot.clone().sub(o), foot.clone().add(o), top.clone().add(o)];
+    b.quad(s > 0 ? q : [q[3]!, q[2]!, q[1]!, q[0]!], PART_COLORS.silver);
+  }
+  // 前かご（ワイヤーの帯と桟）
+  wireBasket(b, 0.03, 0.022, 0.012, 2);
   return b.build();
 }
 
@@ -497,17 +530,24 @@ function buildMid(): BufferGeometry {
 function buildFar(): BufferGeometry {
   const D = BIKE_DIMENSIONS;
   const b = new PartBuilder();
+  // 車輪: 五角形の輪。タイヤとリムを合わせた面積と平均の色に合わせる。
   for (const ax of [D.rearAxleX, D.frontAxleX]) {
-    b.flatRing(ax, AXLE_Y, 0, D.wheelRadius, D.wheelRadius - 0.07, 6, PART_COLORS.tire);
+    b.flatRing(ax, AXLE_Y, 0, FAR_WHEEL.outer, FAR_WHEEL.inner, 5, PART_COLORS.farWheel);
   }
   // フレームの帯: ヘッド → BB → シート上端（XY 平面の帯 2 区間）
-  const w = 0.035;
+  const w = 0.04;
   const head = v(D.headHigh[0], D.headHigh[1]);
   const bb = v(D.bottomBracket[0] + 0.05, D.bottomBracket[1] + 0.02);
-  const seat = v(D.saddle[0], D.saddle[1]);
+  const seat = v(D.saddle[0], D.saddle[1] - 0.03);
   b.polygonStrip(
     [head.clone().setX(head.x - w), head.clone().setX(head.x + w), bb.clone().setY(bb.y + w), bb.clone().setY(bb.y - w), seat.clone().setX(seat.x - w), seat.clone().setX(seat.x + w)],
-    [[0, 3, 1], [0, 2, 3], [2, 4, 3], [3, 4, 5]],
+    [[0, 2, 3], [0, 3, 1], [2, 4, 3], [3, 5, 4]],
+    'frame',
+  );
+  // チェーンケースと後ろの三角（後輪の車軸 → BB）、フロントフォーク
+  b.polygonStrip(
+    [v(D.rearAxleX, AXLE_Y - 0.05, 0.02), v(D.bottomBracket[0] + 0.1, D.bottomBracket[1] - 0.09, 0.02), v(D.bottomBracket[0] + 0.1, D.bottomBracket[1] + 0.09, 0.02), v(D.rearAxleX, AXLE_Y + 0.06, 0.02)],
+    [[0, 1, 2], [0, 2, 3]],
     'frame',
   );
   // ハンドル（水平の板）
@@ -515,14 +555,43 @@ function buildFar(): BufferGeometry {
     [v(0.1, D.handleTopY - 0.02, -D.handleHalfWidth), v(0.1, D.handleTopY - 0.02, D.handleHalfWidth), v(0.31, D.handleTopY - 0.02, D.handleHalfWidth), v(0.31, D.handleTopY - 0.02, -D.handleHalfWidth)],
     PART_COLORS.silver,
   );
-  // 前かご（側面4枚）
-  b.openBox(
-    v(D.basketX[0], D.basketY[0], -D.basketHalfWidth),
-    v(D.basketX[1], D.basketY[1], D.basketHalfWidth),
-    PART_COLORS.basketFar,
-    false,
+  // サドル（水平の板）
+  b.quad(
+    [v(D.saddle[0] - 0.14, D.saddle[1] + 0.03, -0.1), v(D.saddle[0] - 0.14, D.saddle[1] + 0.03, 0.1), v(D.saddle[0] + 0.13, D.saddle[1] + 0.03, 0.1), v(D.saddle[0] + 0.13, D.saddle[1] + 0.03, -0.1)],
+    PART_COLORS.saddle,
   );
+  // 前かご: 暗い底板と、前の面（銀のワイヤーの平均の色）
+  const [bx0, bx1] = D.basketX;
+  const [by0, by1] = D.basketY;
+  const bw = D.basketHalfWidth;
+  b.quad([v(bx0, by0, -bw), v(bx0, by0, bw), v(bx1, by0, bw), v(bx1, by0, -bw)], PART_COLORS.darkMetal);
+  b.quad([v(bx1, by0, bw), v(bx1, by0, -bw), v(bx1, by1, -bw), v(bx1, by1, bw)], PART_COLORS.basketFar);
+  // 横から見たかご（中心の面）と、荷台・後ろの泥よけ（銀）
+  b.quad([v(bx0, by0, 0), v(bx1, by0, 0), v(bx1, by1, 0), v(bx0, by1, 0)], PART_COLORS.basketFar);
+  b.quad([v(D.rackX[0], D.rackY - 0.05, 0), v(D.rackX[1], D.rackY - 0.05, 0), v(D.rackX[1], D.rackY + 0.01, 0), v(D.rackX[0], D.rackY + 0.01, 0)], PART_COLORS.silver);
+  // 前から見た泥よけと荷台（縦の帯）
+  b.quad([v(D.frontAxleX, 0.05, 0.04), v(D.frontAxleX, 0.05, -0.04), v(D.frontAxleX, 0.7, -0.04), v(D.frontAxleX, 0.7, 0.04)], PART_COLORS.silver);
   return b.build();
+}
+
+/** 遠景の車輪の外径と内径（五角形の外接円の半径）。 */
+const FAR_WHEEL = { outer: 0.36, inner: 0.3 } as const;
+
+/** チェーンケースの輪郭（XY 平面、近景と中景で共有）。 */
+function chainCaseOutline(): [number, number][] {
+  const D = BIKE_DIMENSIONS;
+  const bb = D.bottomBracket;
+  return [
+    [D.rearAxleX - 0.05, AXLE_Y - 0.03],
+    [D.rearAxleX + 0.02, AXLE_Y - 0.06],
+    [bb[0] - 0.02, bb[1] - 0.11],
+    [bb[0] + 0.08, bb[1] - 0.09],
+    [bb[0] + 0.12, bb[1]],
+    [bb[0] + 0.08, bb[1] + 0.09],
+    [bb[0] - 0.02, bb[1] + 0.11],
+    [D.rearAxleX + 0.02, AXLE_Y + 0.06],
+    [D.rearAxleX - 0.05, AXLE_Y + 0.03],
+  ];
 }
 
 /** 指定した詳細度のママチャリ形状を生成する。 */

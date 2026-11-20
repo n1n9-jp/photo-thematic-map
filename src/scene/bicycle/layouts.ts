@@ -3,11 +3,13 @@
  *
  * - `parkedRows`: 駅前の歩道に並んだ駐輪の列。
  * - `heapOnSurface`: 高さ関数の表面に沿って、向きがばらばらで互いにもたれ合う山積み。
+ * - `heapFillToInstances`: 堆積の山に詰めた結果（`fillHeap`）を描画用に変換する。
  * - `singleBicycle`: 1台を置く。
  * - `concatInstances`: 複数の配置を1つにまとめる。
  */
 import { Quaternion, Vector3 } from 'three';
 import type { BicycleInstances } from './field';
+import type { HeapFillResult } from '../../sim/heapFill';
 import { pickFrameColor } from './geometry';
 
 /** 再現可能な乱数（mulberry32）。0 以上 1 未満を返す関数を作る。 */
@@ -255,7 +257,64 @@ export function heapOnSurface(opts: HeapOptions): BicycleInstances {
     out.positions.copyWithin(i * 3, (written - 1) * 3, written * 3);
     out.quaternions.copyWithin(i * 4, (written - 1) * 4, written * 4);
     out.colors.copyWithin(i * 3, (written - 1) * 3, written * 3);
+    out.shades![i] = out.shades![written - 1]!;
     out.lodFloor![i] = out.lodFloor![written - 1]!;
+  }
+  return out;
+}
+
+export interface HeapFillInstanceOptions {
+  /** 色と明るさのばらつきの種。 */
+  seed: number;
+  /** 先頭から何台を使うか（既定: 全台）。成長の途中を表示するのに使う。 */
+  limit?: number;
+  /** 深さ（既定は結果の depths）。成長の途中の山に対する深さ（`surfaceDepths`）に差し替えられる。 */
+  depths?: Float32Array;
+  /** この深さ(m)より深い自転車は外から見えないものとして扱う。既定 1.0。 */
+  buriedDepth?: number;
+  /** 埋もれた自転車の扱い。'far' は遠景用で描く（既定）、'hidden' は描画しない。 */
+  buried?: 'far' | 'hidden';
+}
+
+/** 整数 i と種から 0 以上 1 未満の値（台数を変えても各台の色が変わらないように、順番ではなく番号で決める）。 */
+function hash01(seed: number, i: number, salt: number): number {
+  let h = Math.imul(i ^ Math.imul(seed, 0x9e3779b1), 0x85ebca6b) ^ Math.imul(salt + 1, 0xc2b2ae35);
+  h ^= h >>> 16;
+  h = Math.imul(h, 0x7feb352d);
+  h ^= h >>> 15;
+  h = Math.imul(h, 0x846ca68b);
+  h ^= h >>> 16;
+  return (h >>> 0) / 4294967296;
+}
+
+/**
+ * 堆積の山に詰めた結果を描画用の配置に変換する。
+ * フレームの色はパレット（`pickFrameColor`）から選ぶ。深い自転車ほど暗く（shade）し、
+ * `buriedDepth` より深い自転車は `lodFloor` で遠景用に固定するか（'far'）、描画から外す（'hidden'）。
+ */
+export function heapFillToInstances(fill: HeapFillResult, opts: HeapFillInstanceOptions): BicycleInstances {
+  const n = Math.max(0, Math.min(fill.count, Math.floor(opts.limit ?? fill.count)));
+  const depths = opts.depths ?? fill.depths;
+  const buriedDepth = opts.buriedDepth ?? 1.0;
+  const buriedFloor = opts.buried === 'hidden' ? 3 : 2;
+  const out: BicycleInstances = {
+    count: n,
+    positions: fill.positions.slice(0, n * 3),
+    quaternions: fill.quaternions.slice(0, n * 4),
+    colors: new Uint8Array(n * 3),
+    shades: new Uint8Array(n),
+    lodFloor: new Uint8Array(n),
+  };
+  for (let i = 0; i < n; i++) {
+    const hex = pickFrameColor(hash01(opts.seed, i, 0));
+    out.colors[i * 3] = (hex >> 16) & 255;
+    out.colors[i * 3 + 1] = (hex >> 8) & 255;
+    out.colors[i * 3 + 2] = hex & 255;
+    const d = depths[i] ?? 0;
+    // 表面の隙間の奥ほど暗い。表面の自転車にも少しばらつきを付ける。
+    const shade = Math.max(0.3, 1 - d * 0.35) * (0.85 + 0.15 * hash01(opts.seed, i, 1));
+    out.shades![i] = Math.round(shade * 255);
+    if (d >= buriedDepth) out.lodFloor![i] = buriedFloor;
   }
   return out;
 }
