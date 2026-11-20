@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ORIGIN } from '../../src/config';
-import { ecefToLocalMatrix, geodeticToEcef, latLonToLocal, localToLatLon } from '../../src/geo/enu';
+import { ecefToLocalMatrix, ecefToTangentMatrix, geodeticToEcef, latLonToLocal, localToLatLon } from '../../src/geo/enu';
 
 describe('enu', () => {
   it('原点はローカル(0,0,0)に写る', () => {
@@ -73,7 +73,7 @@ describe('enu', () => {
   });
 
   it('厳密な ENU 行列は、原点の近く（東京タワー、約3.2km）で平らな地図と水平 1m 以内で一致する', () => {
-    const m = ecefToLocalMatrix();
+    const m = ecefToTangentMatrix();
     const p = { lat: 35.65858, lon: 139.74543, alt: 0 };
     const [ex, ey, ez] = geodeticToEcef(p);
     const x = m[0]! * ex + m[1]! * ey + m[2]! * ez + m[3]!;
@@ -84,5 +84,11 @@ describe('enu', () => {
     // 厳密な ENU では、丸みのぶんだけ Y が下がる（3.2km で約 0.8m）
     const d = Math.hypot(v.x, v.z);
     expect(y).toBeCloseTo(-(d * d) / (2 * 6_371_000), 0);
+  });
+});
+
+describe('ecefToLocalMatrix（非推奨の別名）', () => {
+  it('ecefToTangentMatrix と同じ関数', () => {
+    expect(ecefToLocalMatrix).toBe(ecefToTangentMatrix);
   });
 });

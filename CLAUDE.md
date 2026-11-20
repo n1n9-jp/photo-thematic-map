@@ -25,7 +25,7 @@ E2E は `/opt/pw-browsers/chromium` を使う。preview サーバーのポート
 ## ディレクトリ構成
 
 - `src/scene/` 描画（renderer・シーン・カメラ・PLATEAU 表示）
-  - `src/scene/plateau/` PLATEAU の街並み。`stage.ts`（舞台一式）、`buildings.ts`（建物 3D Tiles）、`ground.ts`（航空写真の地面）、`elevation.ts`（標高）、`catalog.ts`（tileset 一覧）、`attribution.ts`（出典表示）
+  - `src/scene/plateau/` PLATEAU の街並み。`stage.ts`（舞台一式）、`buildings.ts`（建物 3D Tiles）、`ground.ts`（航空写真の地面）、`elevation.ts`（標高）、`catalog.ts`（tileset 一覧）、`attribution.ts`（出典表示）、`tileFetch.ts`（タイル取得の再試行と失敗の集計）、`budget.ts`（端末に合わせたメモリの上限）
 - `src/geo/` 座標変換（`enu.ts`）
 - `src/sim/` 堆積計算（描画に依存しない純粋ロジック）
 - `src/story/` スクロール連動
@@ -58,7 +58,7 @@ E2E は `/opt/pw-browsers/chromium` を使う。preview サーバーのポート
 - ENU との対応: `x = east`, `y = up`, `z = -north`。
 - **ローカル座標は平らな地図**。水平（X・Z）は原点の曲率半径を使う局所近似（等距離円筒）、高さ（Y）は標高そのもので、地球の丸みは持たない。同じ標高の地点は、原点からどれだけ離れても同じ Y になる。
 - 水平の近似は、原点から南北に離れるほど東西の縮尺がずれる（南北 20km で約 0.2%）。場面の舞台（秋葉原・丸の内・皇居外苑。原点から 2.5km 以内）では数 cm〜十数 cm。
-- `enu.ts` の `ecefToLocalMatrix()`・`geodeticToEcef()`・`ecefToGeodetic()` は、原点で楕円体に接する厳密な ENU（剛体変換）。原点から数 km 以内のデータ（高さ格子の焼き込みなど）を載せる補助で、Y は楕円体高になり、離れると丸みのぶん下がる（2km で約 0.3m）。平らな地図へ直すときは `GEOID_HEIGHT_M` を引く。街並みの表示は下記のタイルごとの置き直しを使う。
+- `enu.ts` の `ecefToTangentMatrix()`（旧名 `ecefToLocalMatrix()` は非推奨の別名）・`geodeticToEcef()`・`ecefToGeodetic()` は、原点で楕円体に接する厳密な ENU（剛体変換）。楕円体の計算は `src/geo/ecef.ts` に一本化してある。原点から数 km 以内のデータ（高さ格子の焼き込みなど）を載せる補助で、Y は楕円体高になり、離れると丸みのぶん下がる（2km で約 0.3m）。平らな地図へ直すときは `GEOID_HEIGHT_M` を引く。街並みの表示は下記のタイルごとの置き直しを使う。
 
 ### 高さの基準（PLATEAU）
 
