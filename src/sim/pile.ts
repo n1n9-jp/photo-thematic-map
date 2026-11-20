@@ -260,7 +260,12 @@ class Flood {
       }
     }
     if (hasNaN) {
-      this.g = Float32Array.from(grid.data, (v) => (Number.isNaN(v) ? Infinity : v));
+      // Float32Array.from に変換の関数を渡すと 1セルごとの呼び出しで桁違いに遅くなるため、複製してから置き換える。
+      const g = new Float32Array(grid.data);
+      for (let i = 0; i < this.n; i++) {
+        if (Number.isNaN(g[i] as number)) g[i] = Infinity;
+      }
+      this.g = g;
     } else {
       this.g = grid.data;
     }
