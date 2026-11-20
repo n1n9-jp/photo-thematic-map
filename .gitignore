@@ -1,6 +1,10 @@
 node_modules/
 dist/
 test-results/
+screenshots/
+coverage/
+blob-report/
+vite.config.ts.timestamp-*
 playwright-report/
 *.tsbuildinfo
 .DS_Store

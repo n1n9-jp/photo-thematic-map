@@ -108,6 +108,10 @@ export function localToLatLon(v: Vec3, origin: LatLonAlt = ORIGIN): Required<Lat
 /**
  * 原点の ENU 行列（ECEF → three.js ローカル座標）。行優先の 4x4。
  * 3D Tiles など ECEF 座標のデータをシーンに載せるときに使う。
+ *
+ * 返り値は行優先（row-major）の配列なので、three.js では
+ * `new Matrix4().set(...ecefToLocalMatrix())` で使う（`Matrix4.set` は行優先で受け取る）。
+ * `Matrix4.fromArray` は列優先（column-major）で読むため、そのまま渡すと転置した行列になり使えない。
  */
 export function ecefToLocalMatrix(origin: LatLonAlt = ORIGIN): number[] {
   const o = geodeticToEcef(origin);

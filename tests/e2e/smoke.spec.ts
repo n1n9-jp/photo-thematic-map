@@ -14,7 +14,7 @@ test('起動してシーンが描画される', async ({ page }) => {
 
   // 描画が安定するまで数フレーム待つ
   await page.waitForTimeout(500);
-  await page.screenshot({ path: 'test-results/smoke.png' });
+  await page.screenshot({ path: 'screenshots/smoke.png' });
 
   expect(errors).toEqual([]);
 });
