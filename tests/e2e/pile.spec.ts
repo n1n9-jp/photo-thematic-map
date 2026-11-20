@@ -23,7 +23,7 @@ for (const c of CASES) {
     expect(Math.abs(pile!.totalVolume / c.volume - 1)).toBeLessThan(0.005);
 
     await page.waitForTimeout(500);
-    await page.screenshot({ path: `test-results/pile-${c.name}.png` });
+    await page.screenshot({ path: `screenshots/pile-${c.name}.png` });
     expect(errors).toEqual([]);
   });
 }
