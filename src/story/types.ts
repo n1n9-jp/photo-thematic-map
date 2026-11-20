@@ -24,6 +24,8 @@ export interface StoryStat {
   unit?: string;
   /** 数値の下に添える説明。 */
   label?: string;
+  /** 小数点以下の桁数（例: 64.4% なら 1）。既定 0。 */
+  fractionDigits?: number;
 }
 
 export interface StoryText {

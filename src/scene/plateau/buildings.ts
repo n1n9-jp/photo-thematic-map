@@ -37,6 +37,8 @@ export interface PlateauBuildingsOptions {
    * GPU メモリを使い切るので、読み込み時に縮小する。既定 1024。
    */
   maxTextureSize?: number;
+  /** Draco のデコーダー。複数の層で共有するときに渡す（渡したものは dispose しない）。既定は層ごとに作る。 */
+  dracoLoader?: DRACOLoader;
 }
 
 export type BuildingArea = NonNullable<PlateauBuildingsOptions['area']>;
@@ -79,7 +81,7 @@ class LocalFramePlugin {
 
   constructor(
     groupMatrix: Matrix4,
-    private readonly area: BuildingArea | undefined,
+    private readonly clip: AreaClip | null,
   ) {
     this.groupInverse = groupMatrix.clone().invert();
   }
@@ -94,7 +96,7 @@ class LocalFramePlugin {
     scene.matrix.premultiply(this.local).premultiply(this.groupInverse);
     scene.matrix.decompose(scene.position, scene.quaternion, scene.scale);
     scene.updateMatrixWorld(true);
-    const area = this.area;
+    const clip = this.clip;
     scene.traverse((obj) => {
       const mesh = obj as Mesh;
       if (!mesh.isMesh) return;
@@ -106,8 +108,8 @@ class LocalFramePlugin {
         mat.dispose();
         mesh.material = basic;
       }
-      if (area) {
-        for (const m of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) clipMaterialToArea(m, area);
+      if (clip) {
+        for (const m of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) clipMaterialToArea(m, clip);
       }
     });
   }
@@ -132,9 +134,15 @@ function tileRect(tile: TileLike): { minX: number; maxX: number; minZ: number; m
 /** 円柱で読み込むタイルを絞るプラグイン（3d-tiles-renderer の calculateTileViewError フック）。 */
 class AreaPlugin {
   readonly name = 'PTM_AREA';
-  private readonly cache = new WeakMap<object, { intersects: boolean; contained: boolean }>();
+  private cache = new WeakMap<object, { intersects: boolean; contained: boolean }>();
 
-  constructor(private readonly area: BuildingArea) {}
+  constructor(private area: BuildingArea) {}
+
+  /** 円を差し替える。タイルごとの判定のキャッシュは捨てる（次の update で判定し直す）。 */
+  setArea(area: BuildingArea): void {
+    this.area = area;
+    this.cache = new WeakMap();
+  }
 
   calculateTileViewError(tile: TileLike, target: { inView: boolean; error: number; distance: number }): boolean {
     let hit = this.cache.get(tile);
@@ -167,11 +175,22 @@ class AreaPlugin {
   }
 }
 
+/** 円柱の切り抜き。uniform は層の全マテリアルで共有し、円を差し替えると全タイルに効く。 */
+interface AreaClip {
+  sign: number;
+  /** (中心 x, 中心 z, 半径)。 */
+  uniform: { value: Vector3 };
+}
+
+function createAreaClip(area: BuildingArea): AreaClip {
+  return { sign: area.side === 'inside' ? 1 : -1, uniform: { value: new Vector3(area.x, area.z, area.radiusM) } };
+}
+
 /** 円柱の内側または外側だけを描くようにマテリアルのシェーダーを書き換える。 */
-function clipMaterialToArea(material: Material, area: BuildingArea): void {
-  const sign = area.side === 'inside' ? 1 : -1;
+function clipMaterialToArea(material: Material, clip: AreaClip): void {
+  const sign = clip.sign;
   material.onBeforeCompile = (shader) => {
-    shader.uniforms.ptmArea = { value: new Vector3(area.x, area.z, area.radiusM) };
+    shader.uniforms.ptmArea = clip.uniform;
     shader.uniforms.ptmAreaSign = { value: sign };
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', '#include <common>\nvarying vec3 vPtmWorld;')
@@ -240,13 +259,21 @@ export class PlateauBuildings {
   private readonly loading = new Set<TilesRenderer>();
   private readonly camera: Camera;
   private readonly renderer: WebGLRenderer;
-  private readonly draco = createDracoLoader();
+  private readonly draco: DRACOLoader;
+  private readonly ownsDraco: boolean;
+  private readonly areaPlugins: AreaPlugin[] = [];
+  private readonly clip: AreaClip | null;
+  private area: BuildingArea | undefined;
   private resolveReady!: () => void;
   private settledFrames = 0;
 
   constructor(options: PlateauBuildingsOptions) {
     this.camera = options.camera;
     this.renderer = options.renderer;
+    this.ownsDraco = !options.dracoLoader;
+    this.draco = options.dracoLoader ?? createDracoLoader();
+    this.area = options.area;
+    this.clip = options.area ? createAreaClip(options.area) : null;
     this.group.name = 'plateau-buildings';
     this.ready = new Promise((resolve) => {
       this.resolveReady = resolve;
@@ -264,8 +291,12 @@ export class PlateauBuildings {
       tiles.loadSiblings = false;
       tiles.registerPlugin(new GLTFExtensionsPlugin({ dracoLoader: this.draco, autoDispose: false }));
       tiles.registerPlugin(new TextureDownscalePlugin(options.maxTextureSize ?? 1024));
-      tiles.registerPlugin(new LocalFramePlugin(groupMatrix, options.area));
-      if (options.area) tiles.registerPlugin(new AreaPlugin(options.area));
+      tiles.registerPlugin(new LocalFramePlugin(groupMatrix, this.clip));
+      if (options.area) {
+        const plugin = new AreaPlugin(options.area);
+        this.areaPlugins.push(plugin);
+        tiles.registerPlugin(plugin);
+      }
       tiles.group.matrixAutoUpdate = false;
       tiles.group.matrix.copy(groupMatrix);
       tiles.group.matrixWorldNeedsUpdate = true;
@@ -297,6 +328,18 @@ export class PlateauBuildings {
     if (this.settledFrames >= SETTLE_FRAMES) this.markReady();
   }
 
+  /**
+   * 表示する円を差し替える（中心と半径。inside / outside は作成時のまま）。作成時に `area` を渡した層だけで使える。
+   * 読み込み済みのタイルは残り、次の `update()` から新しい円で読むタイルを選び直す。
+   */
+  setArea(area: { x: number; z: number; radiusM: number }): void {
+    if (!this.area || !this.clip) throw new Error('area を指定せずに作った層では setArea を使えません');
+    const next: BuildingArea = { ...area, side: this.area.side };
+    this.area = next;
+    this.clip.uniform.value.set(next.x, next.z, next.radiusM);
+    for (const p of this.areaPlugins) p.setArea(next);
+  }
+
   /** 読み込み中のタイルがあれば true。 */
   get isLoading(): boolean {
     return this.rootPending.size > 0 || this.loading.size > 0;
@@ -305,7 +348,7 @@ export class PlateauBuildings {
   dispose(): void {
     for (const tiles of this.tiles) tiles.dispose();
     this.tiles.length = 0;
-    this.draco.dispose();
+    if (this.ownsDraco) this.draco.dispose();
     this.group.removeFromParent();
   }
 

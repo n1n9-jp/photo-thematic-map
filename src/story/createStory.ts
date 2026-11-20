@@ -5,7 +5,6 @@
  * `update` が false を返したフレームは、カメラも語りの状態も変わっていないので描画を省いてよい
  * （`onProgress` などで 3D 側を変えたときは、呼び出し側で描画する）。
  */
-import { Vector2 } from 'three';
 import { localToLatLon } from '../geo/enu';
 import type { SceneContext } from '../scene/createScene';
 import { defaultGroundY, type GroundYAt } from './cameraPath';
@@ -27,8 +26,10 @@ export interface CreateStoryOptions {
   groundY?: GroundYAt;
   rig?: Omit<CameraRigOptions, 'groundY' | 'groundHeightAt' | 'hold'>;
   /**
-   * canvas の高さを、アドレスバーの出入りで変わらない高さ（100lvh）に固定し、タッチ端末で高さだけが少し変わる
-   * リサイズでは描画バッファを作り直さない（そのリサイズは window の他のリスナーにも届かない）。既定 true。
+   * canvas の入れ物（canvas の親要素）の高さを、アドレスバーの出入りで変わらない高さ（100lvh）に固定する。既定 true。
+   * 描画バッファの大きさは `createScene` が入れ物の大きさに合わせる（ResizeObserver）ので、入れ物の高さが
+   * 変わらなければ作り直されない。入れ物の高さが変わる作りでアドレスバーの出入りを無視したいときは、
+   * `createScene` の `stableViewport` を使う。
    */
   stableViewport?: boolean;
   /** 自由操作のボタンの文言。 */
@@ -49,9 +50,6 @@ export interface Story {
   readonly freeToggle: HTMLButtonElement;
   dispose(): void;
 }
-
-/** 幅が変わらず高さだけが変わる、この割合未満のリサイズはアドレスバーの出入りとみなす。 */
-const MINOR_HEIGHT_CHANGE = 0.25;
 
 export function createStory(options: CreateStoryOptions): Story {
   const { scene, stages, root } = options;
@@ -127,43 +125,11 @@ export function createStory(options: CreateStoryOptions): Story {
     dirty = true;
   });
 
-  // 描画バッファを、アドレスバーの出入りで変わらない高さ（backdrop の高さ = 100lvh）に合わせる。
-  function fitRenderer(): void {
-    if (!stableViewport || !backdrop) return;
-    const w = window.innerWidth;
-    const h = backdrop.clientHeight || window.innerHeight;
-    const r = scene.renderer;
-    const size = r.getSize(new Vector2());
-    if (size.x === w && size.y === h) return;
-    r.setSize(w, h, false);
-    scene.camera.aspect = w / h;
-    scene.camera.updateProjectionMatrix();
-    dirty = true;
-  }
-
-  let lastWidth = window.innerWidth;
-  let lastHeight = window.innerHeight;
-  const isTouch = (): boolean => navigator.maxTouchPoints > 0 && window.matchMedia('(pointer: coarse)').matches;
-  // createScene などの resize リスナーより先に呼ばれる（捕捉フェーズ）。
-  const onResizeCapture = (e: Event): void => {
-    const w = window.innerWidth;
-    const h = window.innerHeight;
-    if (w === lastWidth && Math.abs(h - lastHeight) < lastHeight * MINOR_HEIGHT_CHANGE && isTouch()) {
-      // アドレスバーの出入り。canvas の高さは 100lvh で変わらないので、描画バッファを作り直させない。
-      e.stopImmediatePropagation();
-      return;
-    }
-    lastWidth = w;
-    lastHeight = h;
-  };
-  // ほかのリスナー（createScene の setSize）の後に、高さを 100lvh に合わせ直す。
+  // リサイズ（描画バッファの大きさは createScene が合わせる）の後は描画し直す。
   const onResize = (): void => {
-    fitRenderer();
     dirty = true;
   };
-  if (stableViewport) window.addEventListener('resize', onResizeCapture, { capture: true });
   window.addEventListener('resize', onResize);
-  fitRenderer();
 
   // フォントや画像の読み込みでレイアウトが動くので、読み込み後に位置を計算し直す。
   void document.fonts?.ready.then(() => {
@@ -190,7 +156,6 @@ export function createStory(options: CreateStoryOptions): Story {
       rig.dispose();
       toggle.removeEventListener('click', onToggle);
       document.removeEventListener('keydown', onKeyDown);
-      if (stableViewport) window.removeEventListener('resize', onResizeCapture, { capture: true });
       window.removeEventListener('resize', onResize);
       toggle.remove();
       root.classList.remove('story', 'story--free');

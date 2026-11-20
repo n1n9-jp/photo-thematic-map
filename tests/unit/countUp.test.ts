@@ -28,3 +28,14 @@ describe('countValue', () => {
     expect(countValue(1200, 0, { instant: true })).toBe(1200);
   });
 });
+
+describe('小数の数え上げ', () => {
+  it('fractionDigits の桁で表示する', () => {
+    expect(formatCount(64.4, 1)).toBe('64.4');
+    expect(formatCount(2, 1)).toBe('2.0');
+    expect(countValue(64.4, 1, { fractionDigits: 1 })).toBe(64.4);
+    const mid = countValue(64.4, 0.5, { fractionDigits: 1 });
+    expect(mid).toBeGreaterThan(0);
+    expect(Math.round(mid * 10)).toBeCloseTo(mid * 10, 6);
+  });
+});

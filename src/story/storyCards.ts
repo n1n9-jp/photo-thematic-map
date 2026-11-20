@@ -30,6 +30,7 @@ function el<K extends keyof HTMLElementTagNameMap>(
 interface StatSlot {
   node: HTMLElement;
   value: number;
+  digits: number;
   /** idle: 0 のまま / running: 数え上げ中 / done: 最終値。 */
   phase: 'idle' | 'running' | 'done';
   startedAt: number;
@@ -70,10 +71,11 @@ export function renderStoryCards(
     const stat = stage.text.stat;
     if (stat) {
       const box = el('p', 'story-stat');
-      const value = el('span', 'story-stat__value', formatCount(0));
+      const digits = stat.fractionDigits ?? 0;
+      const value = el('span', 'story-stat__value', formatCount(0, digits));
       value.setAttribute('aria-hidden', 'true');
       // 支援技術には、数え上げ途中の値ではなく最終値だけを読ませる。
-      const finalText = el('span', 'story-visually-hidden', `${formatCount(stat.value)}${stat.unit ?? ''}`);
+      const finalText = el('span', 'story-visually-hidden', `${formatCount(stat.value, digits)}${stat.unit ?? ''}`);
       box.append(value, finalText);
       if (stat.unit) {
         const unit = el('span', 'story-stat__unit', stat.unit);
@@ -82,7 +84,15 @@ export function renderStoryCards(
       }
       if (stat.label) box.append(el('span', 'story-stat__label', stat.label));
       card.append(box);
-      slots.push({ node: value, value: stat.value, phase: 'idle', startedAt: 0, visible: false, shown: formatCount(0) });
+      slots.push({
+        node: value,
+        value: stat.value,
+        digits,
+        phase: 'idle',
+        startedAt: 0,
+        visible: false,
+        shown: formatCount(0, digits),
+      });
     } else {
       slots.push(null);
     }
@@ -97,7 +107,7 @@ export function renderStoryCards(
   let disposed = false;
 
   function show(slot: StatSlot, value: number): void {
-    const text = formatCount(value);
+    const text = formatCount(value, slot.digits);
     if (slot.shown !== text) {
       slot.shown = text;
       slot.node.textContent = text;
@@ -114,7 +124,7 @@ export function renderStoryCards(
       const f = (now - slot.startedAt) / COUNT_DURATION_MS;
       if (f >= 1) slot.phase = 'done';
       else running = true;
-      show(slot, countValue(slot.value, f));
+      show(slot, countValue(slot.value, f, { fractionDigits: slot.digits }));
     }
     if (running) raf = requestAnimationFrame(tick);
   }

@@ -44,6 +44,11 @@ export interface PlateauGroundOptions {
   concurrency?: number;
   /** 保持するタイル数の上限。既定 400。 */
   maxTiles?: number;
+  /**
+   * 最も粗いズームのタイルを要求する範囲（度）。航空写真が無い範囲のタイルは 404 になり、ブラウザがコンソールに
+   * エラーを記録するので、半径を広げるときは撮影範囲に限る。既定は制限なし。
+   */
+  rootBounds?: { west: number; south: number; east: number; north: number };
 }
 
 type NodeState = 'idle' | 'loading' | 'ready' | 'unavailable';
@@ -93,7 +98,9 @@ export class PlateauGround {
 
   private readonly camera: PerspectiveCamera;
   private readonly renderer: WebGLRenderer;
-  private readonly radiusM: number;
+  /** カメラの真下からこの半径(m)の範囲に地面を敷く。俯瞰の高さに合わせて変えてよい。 */
+  radiusM: number;
+  private readonly rootBounds: PlateauGroundOptions['rootBounds'];
   private readonly minZoom: number;
   private readonly maxZoom: number;
   private readonly texelScale: number;
@@ -116,6 +123,7 @@ export class PlateauGround {
     this.camera = options.camera;
     this.renderer = options.renderer;
     this.radiusM = options.radiusM ?? 6000;
+    this.rootBounds = options.rootBounds;
     this.minZoom = options.minZoom ?? 10;
     this.maxZoom = Math.min(options.maxZoom ?? PLATEAU_ORTHO_MAX_ZOOM, PLATEAU_ORTHO_MAX_ZOOM);
     this.texelScale = options.texelScale ?? 1.5;
@@ -187,10 +195,17 @@ export class PlateauGround {
     const r = this.radiusM;
     const nw = localToLatLon({ x: this.camPos.x - r, y: 0, z: this.camPos.z - r });
     const se = localToLatLon({ x: this.camPos.x + r, y: 0, z: this.camPos.z + r });
-    const x0 = Math.floor(lonToTileX(nw.lon, z));
-    const x1 = Math.floor(lonToTileX(se.lon, z));
-    const y0 = Math.floor(latToTileY(nw.lat, z));
-    const y1 = Math.floor(latToTileY(se.lat, z));
+    let x0 = Math.floor(lonToTileX(nw.lon, z));
+    let x1 = Math.floor(lonToTileX(se.lon, z));
+    let y0 = Math.floor(latToTileY(nw.lat, z));
+    let y1 = Math.floor(latToTileY(se.lat, z));
+    const b = this.rootBounds;
+    if (b) {
+      x0 = Math.max(x0, Math.floor(lonToTileX(b.west, z)));
+      x1 = Math.min(x1, Math.floor(lonToTileX(b.east, z)));
+      y0 = Math.max(y0, Math.floor(latToTileY(b.north, z)));
+      y1 = Math.min(y1, Math.floor(latToTileY(b.south, z)));
+    }
     const out: GroundNode[] = [];
     for (let y = y0; y <= y1; y++) {
       for (let x = x0; x <= x1; x++) {
