@@ -53,8 +53,10 @@ export const PLACES = {
   wards: { lat: 35.69, lon: 139.705 },
   /** 東京駅 丸の内口の駅前広場の中央。2024年度の撤去台数の山を置く。 */
   tokyoPlaza: { lat: 35.68163, lon: 139.76539 },
-  /** 皇居外苑（皇居前広場）の中央。15年の累計の山を置く。 */
-  kokyoPlaza: { lat: 35.6808, lon: 139.7577 },
+  /** 新宿中央公園の北側の開けた場所（都庁前）。15年の累計の山を置く。 */
+  shinjukuPark: { lat: 35.6901, lon: 139.6893 },
+  /** 東京都庁第一本庁舎。 */
+  tochoFirstBuilding: { lat: 35.6895, lon: 139.69175 },
 } as const;
 
 /** 数値を本文の書き方にする（1万以上は「万」）。小数は facts の桁数どおり。 */
@@ -181,13 +183,14 @@ export const SCRIPT: readonly ScriptScene[] = [
       heading: `${FISCAL_YEAR - FIRST_FISCAL_YEAR + 1}年で${nu(F.removed15Years)}`,
       paragraphs: [
         `${FIRST_FISCAL_YEAR}年度から${FISCAL_YEAR}年度までの${FISCAL_YEAR - FIRST_FISCAL_YEAR + 1}年間に、都内で撤去された自転車は${nu(F.removed15Years)}。${FISCAL_YEAR}年度の撤去台数の約${nu(F.removed15YearsInYears)}にあたる。`,
-        `皇居外苑に1つの山として積むと、高さはおよそ${formatJaCount(pile6.heightM)}メートル、裾の直径は約${formatJaCount(Math.round(pile6.diameterM / 10) * 10)}メートルになる。`,
+        `新宿の都庁前、新宿中央公園に1つの山として積むと、高さはおよそ${formatJaCount(pile6.heightM)}メートル、裾の直径は約${formatJaCount(Math.round(pile6.diameterM / 10) * 10)}メートルになる。隣に立つ都庁第一本庁舎の高さは${nu(F.tochoHeight)}。`,
         `体積は約${nu(F.cumulativePileVolume)}。東京ドーム約${nu(F.cumulativePileDomes)}になる。`,
       ],
       stat: stat(F.removed15Years, `${FIRST_FISCAL_YEAR}〜${FISCAL_YEAR}年度に撤去された自転車の累計`),
     },
-    camera: cameraFrom(P.kokyoPlaza, { heightM: 150, horizontalM: 850, azimuthDeg: 90, targetAltM: pile6.heightM * 0.4 }),
-    place: { ...P.kokyoPlaza, detailRadiusM: 400, outerRadiusM: 2200 },
+    camera: cameraFrom(P.shinjukuPark, { heightM: 200, horizontalM: 750, azimuthDeg: 80, targetAltM: pile6.heightM * 0.5 }),
+    // テクスチャ付きの範囲に都庁第一本庁舎（山の中心から東へ約 240m）が入るようにする
+    place: { ...P.shinjukuPark, detailRadiusM: 450, outerRadiusM: 2000 },
   },
   {
     id: 'after-removal',

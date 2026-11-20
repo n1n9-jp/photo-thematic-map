@@ -92,7 +92,7 @@ export const SCENE_MODULES: Record<string, SceneModuleFactory> = {
   'removed-fy2024': () =>
     new ConeModule({ id: 'removed-fy2024', ...PLACES.tokyoPlaza, heightM: PILES.removedFY2024.heightM, diameterM: PILES.removedFY2024.diameterM }),
   'removed-15years': () =>
-    new ConeModule({ id: 'removed-15years', ...PLACES.kokyoPlaza, heightM: PILES.removed15Years.heightM, diameterM: PILES.removed15Years.diameterM }),
+    new ConeModule({ id: 'removed-15years', ...PLACES.shinjukuPark, heightM: PILES.removed15Years.heightM, diameterM: PILES.removed15Years.diameterM }),
   'after-removal': () =>
     new ConeModule({ id: 'after-removal', ...PLACES.tokyoPlaza, heightM: PILES.removedFY2024.heightM, diameterM: PILES.removedFY2024.diameterM }),
   'since-1990': () =>

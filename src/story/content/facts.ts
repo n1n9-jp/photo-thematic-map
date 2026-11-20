@@ -82,6 +82,7 @@ export const FACTS = {
   removed15Years: fact(5_798_477, '台', SOURCES.full, { note: '2010〜2024年度の撤去台数（自転車）の合計' }),
   removed15YearsInYears: fact(31, '年分', `${CALC}（579万8,477 ÷ 18万7,262）`),
   cumulativePileVolume: fact(2_030_000, '立方メートル', `${CALC}（堆積計算 src/sim/pile.ts）`),
+  tochoHeight: fact(243, 'メートル', '東京都財務局の資料（都庁第一本庁舎の高さ、最高部 243.4m）'),
   cumulativePileDomes: fact(1.6, '杯分', `${CALC}（東京ドームの容積 124万立方メートル）`, { fractionDigits: 1 }),
 
   // --- 撤去のあと（場面7）
@@ -103,7 +104,7 @@ export const FACTS = {
 /**
  * 仮の山の大きさ（堆積計算の結果の目安）。
  * - removedFY2024: 2024年度の撤去台数を東京駅丸の内口の駅前広場に積んだ山。
- * - removed15Years: 15年の累計を皇居外苑に積んだ山。
+ * - removed15Years: 15年の累計を新宿中央公園（都庁前）に積んだ山。
  */
 export const PILES = {
   removedFY2024: { heightM: 31, diameterM: 89, source: `${CALC}（堆積計算 src/sim/pile.ts）` },
