@@ -47,7 +47,8 @@ E2E は `/opt/pw-browsers/chromium` を使う。別の場所の Chrome を使う
 - 原点は `src/config.ts` の `ORIGIN`（既定: 東京駅 緯度 35.68124 / 経度 139.76712 / 標高 0）。ローカル Y=0 が標高 `ORIGIN.alt`。
 - 緯度経度（度）とローカル座標の変換は必ず `src/geo/enu.ts` の `latLonToLocal` / `localToLatLon` を使う。別実装を作らない。
 - ENU との対応: `x = east`, `y = up`, `z = -north`。
-- 原点から数十 km 以内の局所近似（WGS84 曲率半径）。
+- 変換は WGS84 の ECEF を経由する厳密な ENU（原点で楕円体に接する平面）。ECEF 座標のデータ（3D Tiles）は `ecefToLocalMatrix()` の行列で同じ座標系に載せる。
+- 接平面なので、原点から離れると地表は Y の負の方向へ下がる（10km で約 8m、20km で約 31m）。離れた地点に物を置くときは、その地点の地表の Y を基準にする。
 
 ## 規約
 
