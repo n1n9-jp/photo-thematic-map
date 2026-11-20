@@ -1,5 +1,5 @@
 /**
- * PLATEAU の街並みが使うメモリの上限（建物の LRU キャッシュ・地面のタイル数・標高タイル数・テクスチャの大きさ）。
+ * PLATEAU の街並みが使うメモリの上限（建物の LRU キャッシュ・地面のタイル数・標高タイル数）。
  * 端末のメモリと画面の幅から、スマートフォン向けの小さい値か、パソコン向けの値を選ぶ。
  */
 import type { BufferAttribute } from 'three';
@@ -18,8 +18,6 @@ export interface BuildingCacheBudget {
 export interface PlateauMemoryBudget {
   /** 建物の層（PlateauBuildings 1 つ）ごとの LRU キャッシュ。 */
   buildingCache: BuildingCacheBudget;
-  /** 建物のテクスチャの長辺の上限(px)。 */
-  maxTextureSize: number;
   /** 地面に保持するタイル数の上限。 */
   groundMaxTiles: number;
   /** 標高タイルのキャッシュの上限（タイル数。1 枚 256KB）。 */
@@ -38,7 +36,6 @@ const MB = 1024 * 1024;
 /** スマートフォン向け（メモリ 3〜4GB を想定）。 */
 export const SMALL_DEVICE_BUDGET: PlateauMemoryBudget = {
   buildingCache: { minBytes: 64 * MB, maxBytes: 96 * MB, minTiles: 300, maxTiles: 400 },
-  maxTextureSize: 512,
   groundMaxTiles: 120,
   elevationMaxTiles: 48,
 };
@@ -46,7 +43,6 @@ export const SMALL_DEVICE_BUDGET: PlateauMemoryBudget = {
 /** パソコン向け。 */
 export const DEFAULT_BUDGET: PlateauMemoryBudget = {
   buildingCache: { minBytes: 128 * MB, maxBytes: 192 * MB, minTiles: 600, maxTiles: 800 },
-  maxTextureSize: 1024,
   groundMaxTiles: 240,
   elevationMaxTiles: 96,
 };

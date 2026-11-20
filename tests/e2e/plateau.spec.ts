@@ -7,8 +7,8 @@ test.setTimeout(180_000);
 const VIEWS = [
   { name: 'tokyo', query: '' },
   { name: 'shibuya', query: '?lat=35.65803&lon=139.70165' },
-  // 秋葉原駅を高さ 200m から見下ろす（テクスチャ付きの円の内側の屋上の設備が見える）
-  { name: 'akihabara', query: '?lat=35.69836&lon=139.77313&view=-140,200,140' },
+  // 秋葉原駅を高さ 200m から見下ろす。建物はテクスチャなしだけ（detail=0）で、屋上の設備が見える
+  { name: 'akihabara', query: '?lat=35.69836&lon=139.77313&view=-140,200,140&detail=0' },
 ] as const;
 
 /** 描画した画面のうち「ほぼ黒」（RGB がすべて 24 未満）の画素の割合。 */

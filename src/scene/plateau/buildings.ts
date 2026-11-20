@@ -17,9 +17,9 @@
  * - タイルの取得は `tileFetch.ts` の方針で再試行し、取得できなかったタイルは空のタイルとして扱う
  *   （読み込み完了の判定を止めず、ライブラリにタイルごとのエラーを出させない）。
  * - LRU キャッシュは層（このクラスの 1 インスタンス）ごとに持ち、上限は `budget.ts` で端末に合わせて選ぶ。
- * - テクスチャは画像の復号の時点で縮小する。頂点の位置・索引・_batchid 以外は GPU へ転送した後に解放する。
+ * - 頂点の位置・索引・_batchid 以外は GPU へ転送した後に解放する。
  */
-import { Box3, Color, Group, Matrix4, MeshBasicMaterial, PerspectiveCamera, Vector3 } from 'three';
+import { Box3, Group, Matrix4, MeshBasicMaterial, PerspectiveCamera, Vector3 } from 'three';
 import type {
   BufferAttribute,
   Camera,
@@ -31,7 +31,6 @@ import type {
   WebGLRenderer,
 } from 'three';
 import { DRACO_GLTF_CONFIG, DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
-import type { GLTFLoaderPlugin, GLTFParser } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { DEFAULT_LRU_CACHE, LRUCache } from '3d-tiles-renderer/core';
 import { TilesRenderer } from '3d-tiles-renderer/three';
 import { GLTFExtensionsPlugin } from '3d-tiles-renderer/three/plugins';
@@ -60,7 +59,7 @@ export interface PlateauBuildingsOptions {
   area?: { x: number; z: number; radiusM: number; side: 'inside' | 'outside' };
   /**
    * テクスチャの長辺の上限(px)。PLATEAU のテクスチャは 1 タイルで最大 4096px 四方あり、そのままでは
-   * GPU メモリを使い切るので、復号の時点で縮小する。既定は plateauMemoryBudget()（パソコン 1024・スマートフォン 512）。
+   * GPU メモリを使い切るので、読み込み時に縮小する。既定 1024。
    */
   maxTextureSize?: number;
   /**
@@ -184,41 +183,11 @@ class LocalFramePlugin {
       if (area) {
         for (const m of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) clipMaterialToArea(m, area);
       }
-      for (const m of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) {
-        if ((m as MeshBasicMaterial).map) fillUntexturedTexels(m);
-      }
       for (const [name, attribute] of Object.entries(mesh.geometry.attributes)) {
         if (!KEEP_ATTRIBUTES.has(name)) releaseAfterUpload(attribute as BufferAttribute);
       }
     });
   }
-}
-
-/** 写真のない面を塗る色（テクスチャなしの建物の明るい面に近い灰色）。 */
-const UNTEXTURED_FILL = new Color('#a7a9ab');
-
-/**
- * テクスチャの真っ黒な画素を灰色で塗るように、マテリアルのシェーダーを書き換える。
- * PLATEAU のテクスチャのアトラスは未使用の領域が黒（RGB=0）で、写真のない面（屋上の設備など）の UV がそこを指すため、
- * そのままでは黒く塗りつぶされる。写真の暗い部分（影）は sRGB で 4/255 以上あるので残る。
- * 既にある onBeforeCompile（円での切り抜き）の後ろにつなぐ。
- */
-function fillUntexturedTexels(material: Material): void {
-  const previous = material.onBeforeCompile.bind(material);
-  const previousKey = material.customProgramCacheKey.bind(material);
-  material.onBeforeCompile = (shader, renderer) => {
-    previous(shader, renderer);
-    shader.uniforms.ptmFill = { value: UNTEXTURED_FILL };
-    shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', '#include <common>\nuniform vec3 ptmFill;')
-      .replace(
-        '#include <map_fragment>',
-        // map_fragment の後の diffuseColor は線形の色。sRGB 4/255 ≒ 線形 0.0012
-        '#include <map_fragment>\nif (max(max(diffuseColor.r, diffuseColor.g), diffuseColor.b) < 0.0012) diffuseColor.rgb = ptmFill;',
-      );
-  };
-  material.customProgramCacheKey = () => `${previousKey()}-ptm-fill`;
-  material.needsUpdate = true;
 }
 
 /** 取得できなかったタイルの代わりに返す中身（parseTile で空のタイルにする）。 */
@@ -267,87 +236,6 @@ class TileFetchPlugin {
   }
 }
 
-/** 画像の先頭のバイト列から、幅と高さを読む（PNG・JPEG・WebP）。読めなければ null。 */
-export function readImageSize(bytes: Uint8Array): { width: number; height: number } | null {
-  const b = bytes;
-  const u16be = (i: number): number => ((b[i] ?? 0) << 8) | (b[i + 1] ?? 0);
-  const u32be = (i: number): number => u16be(i) * 65536 + u16be(i + 2);
-  const u24le = (i: number): number => (b[i] ?? 0) | ((b[i + 1] ?? 0) << 8) | ((b[i + 2] ?? 0) << 16);
-  const ascii = (i: number, n: number): string => String.fromCharCode(...b.subarray(i, i + n));
-  // PNG: IHDR の幅・高さ
-  if (b[0] === 0x89 && ascii(1, 3) === 'PNG') return { width: u32be(16), height: u32be(20) };
-  // WebP: RIFF....WEBP の最初のチャンク
-  if (ascii(0, 4) === 'RIFF' && ascii(8, 4) === 'WEBP') {
-    const chunk = ascii(12, 4);
-    if (chunk === 'VP8 ') return { width: u16le(b, 26) & 0x3fff, height: u16le(b, 28) & 0x3fff };
-    if (chunk === 'VP8L') {
-      const bits = (b[21] ?? 0) | ((b[22] ?? 0) << 8) | ((b[23] ?? 0) << 16) | ((b[24] ?? 0) << 24);
-      return { width: (bits & 0x3fff) + 1, height: ((bits >>> 14) & 0x3fff) + 1 };
-    }
-    if (chunk === 'VP8X') return { width: u24le(24) + 1, height: u24le(27) + 1 };
-    return null;
-  }
-  // JPEG: SOFn マーカーの幅・高さ
-  if (b[0] === 0xff && b[1] === 0xd8) {
-    let i = 2;
-    while (i + 9 < b.length) {
-      if (b[i] !== 0xff) return null;
-      const marker = b[i + 1] ?? 0;
-      if (marker >= 0xc0 && marker <= 0xcf && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc) {
-        return { width: u16be(i + 7), height: u16be(i + 5) };
-      }
-      i += 2 + u16be(i + 2);
-    }
-  }
-  return null;
-}
-
-function u16le(b: Uint8Array, i: number): number {
-  return (b[i] ?? 0) | ((b[i + 1] ?? 0) << 8);
-}
-
-/** 先頭から読むバイト数（JPEG の Exif などを越えて SOF に届く大きさ）。 */
-const HEADER_BYTES = 256 * 1024;
-
-/**
- * glTF の画像を、復号の時点で長辺 maxSize 以下に縮小して読むローダー（GLTFLoader の ImageBitmapLoader の代わり）。
- * 画像の大きさをヘッダーから読み、createImageBitmap の resizeWidth・resizeHeight で縮小する。
- */
-class DownscalingImageLoader {
-  readonly isImageBitmapLoader = true;
-
-  constructor(private readonly maxSize: number) {}
-
-  load(url: string, onLoad: (image: ImageBitmap) => void, _onProgress?: unknown, onError?: (err: unknown) => void): void {
-    void this.decode(url).then(onLoad, (err: unknown) => onError?.(err));
-  }
-
-  private async decode(url: string): Promise<ImageBitmap> {
-    const blob = await (await fetch(url)).blob();
-    const options: ImageBitmapOptions = { colorSpaceConversion: 'none', premultiplyAlpha: 'none' };
-    const size = readImageSize(new Uint8Array(await blob.slice(0, HEADER_BYTES).arrayBuffer()));
-    if (size && size.width > 0 && size.height > 0) {
-      const scale = this.maxSize / Math.max(size.width, size.height);
-      if (scale < 1) {
-        options.resizeWidth = Math.max(1, Math.round(size.width * scale));
-        options.resizeHeight = Math.max(1, Math.round(size.height * scale));
-        options.resizeQuality = 'medium';
-      }
-    }
-    return createImageBitmap(blob, options);
-  }
-}
-
-/** GLTFLoader のプラグイン: 画像の読み込みを DownscalingImageLoader に差し替える。 */
-function downscaleTexturesOnDecode(maxSize: number): (parser: GLTFParser) => GLTFLoaderPlugin {
-  return (parser) => {
-    // createImageBitmap が使えないブラウザ（TextureLoader を使う場合）はそのまま。後段の縮小で補う
-    if ((parser.textureLoader as { isImageBitmapLoader?: boolean }).isImageBitmapLoader) {
-      (parser as unknown as { textureLoader: unknown }).textureLoader = new DownscalingImageLoader(maxSize);
-    }
-    return { name: 'PTM_DOWNSCALE_ON_DECODE' };
-  };
-}
 
 interface TileLike {
   boundingVolume?: { region?: number[] };
@@ -426,11 +314,7 @@ function clipMaterialToArea(material: Material, area: BuildingArea): void {
   material.needsUpdate = true;
 }
 
-
-/**
- * 復号の時点で縮小できなかった大きすぎるテクスチャを、読み込み後に縮小するプラグイン
- * （画像の大きさをヘッダーから読めなかったとき・TextureLoader を使うブラウザのときの予備）。
- */
+/** 大きすぎるテクスチャを読み込み時に縮小するプラグイン。 */
 class TextureDownscalePlugin {
   readonly name = 'PTM_TEXTURE_DOWNSCALE';
 
@@ -512,7 +396,7 @@ export class PlateauBuildings {
     this.lruCache.minSize = cache.minTiles;
     this.lruCache.maxSize = Math.max(cache.maxTiles, cache.minTiles);
     this.fetchPolicy = new TileFetchPolicy('建物', options.fetchPolicy);
-    const maxTextureSize = options.maxTextureSize ?? budget.maxTextureSize;
+    const maxTextureSize = options.maxTextureSize ?? 1024;
 
     // 原点（標高 ORIGIN.alt の地点）での ECEF → ローカルの剛体変換。カリング・LOD 判定に使われる。
     this.groupMatrix = originGroupMatrix();
@@ -529,13 +413,7 @@ export class PlateauBuildings {
       const fetchPlugin = new TileFetchPlugin(this.fetchPolicy);
       this.fetchPlugins.push(fetchPlugin);
       tiles.registerPlugin(fetchPlugin);
-      tiles.registerPlugin(
-        new GLTFExtensionsPlugin({
-          dracoLoader: this.draco,
-          autoDispose: false,
-          plugins: [downscaleTexturesOnDecode(maxTextureSize)],
-        }),
-      );
+      tiles.registerPlugin(new GLTFExtensionsPlugin({ dracoLoader: this.draco, autoDispose: false }));
       tiles.registerPlugin(new TextureDownscalePlugin(maxTextureSize));
       tiles.registerPlugin(new LocalFramePlugin(this.groupMatrix, options.area));
       if (options.area) tiles.registerPlugin(new AreaPlugin(options.area));

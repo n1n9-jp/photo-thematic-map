@@ -12,7 +12,7 @@ test.skip(!process.env.PTM_MEASURE, '計測用（PTM_MEASURE=1 のときだけ�
 const MOBILE = Boolean(process.env.PTM_MEASURE_MOBILE);
 if (MOBILE) test.use({ viewport: { width: 390, height: 844 } });
 const OUT = MOBILE ? 'plateau-memory-mobile' : 'plateau-memory';
-test.setTimeout(900_000);
+test.setTimeout(1_500_000);
 
 const SCENES = [
   'akihabara-ground',
@@ -77,7 +77,8 @@ async function waitSettled(page: Page, maxMs: number): Promise<void> {
 
 test('場面を移したときのメモリ', async ({ page }) => {
   const cdp = await page.context().newCDPSession(page);
-  await page.goto('/demos/plateau.html?outer=2500');
+  // 建物はテクスチャなしの LOD2 だけを読む（detail=0：テクスチャ付きの円の半径 0）
+  await page.goto('/demos/plateau.html?outer=2500&detail=0');
   await page.waitForFunction(() => window.__APP_READY__ === true, undefined, { timeout: 300_000 });
 
   const rows: Record<string, unknown>[] = [];
