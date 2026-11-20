@@ -1,0 +1,157 @@
+/* 語りの本文カード。報道のビジュアル記事のような落ち着いた組版。 */
+
+.story-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+}
+
+.story {
+  --story-ink: #1d1d1b;
+  --story-ink-soft: #55534e;
+  --story-paper: rgba(250, 248, 243, 0.9);
+  --story-rule: rgba(29, 29, 27, 0.16);
+  --story-accent: #b8321f;
+  --story-sans: 'Hiragino Kaku Gothic ProN', 'Hiragino Sans', 'Yu Gothic UI', 'Yu Gothic', 'Meiryo',
+    'Noto Sans JP', 'IPAexGothic', 'IPAPGothic', sans-serif;
+  --story-serif: 'Hiragino Mincho ProN', 'Yu Mincho', 'Noto Serif JP', 'IPAexMincho', 'IPAPMincho', serif;
+
+  position: relative;
+  z-index: 1;
+  /* canvas の操作（自由に動かす段階）を邪魔しないよう、カード以外はポインタを通す。 */
+  pointer-events: none;
+  font-family: var(--story-sans);
+  color: var(--story-ink);
+}
+
+.story-step {
+  box-sizing: border-box;
+  min-height: 130vh;
+  /* 上端が画面中央に来たとき、カードの上端もそこに来る（段階の進捗 0）。 */
+  padding: 0 16px;
+  display: flex;
+  align-items: flex-start;
+}
+
+/* 最初のセクションは上端がページ先頭にあり進捗の開始がスクロール位置 0 になるため、他と同じスクロール量になるよう長くする。 */
+.story-step:first-child {
+  min-height: 180vh;
+  /* 読み込み直後は、カードが画面中央から始まる。 */
+  padding-top: 50vh;
+}
+
+.story-step--last {
+  min-height: 100vh;
+}
+
+.story-card {
+  pointer-events: auto;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 28rem;
+  padding: 20px 20px 22px;
+  background: var(--story-paper);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+  border-top: 3px solid var(--story-accent);
+  border-radius: 2px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.18);
+}
+
+.story-card__index {
+  margin: 0 0 8px;
+  font-size: 0.72rem;
+  letter-spacing: 0.12em;
+  color: var(--story-ink-soft);
+  font-variant-numeric: tabular-nums;
+}
+
+.story-card__heading {
+  margin: 0 0 12px;
+  font-family: var(--story-serif);
+  font-size: 1.4rem;
+  font-weight: 700;
+  line-height: 1.4;
+  letter-spacing: 0.02em;
+}
+
+.story-card__body {
+  margin: 0 0 0.9em;
+  font-size: 0.95rem;
+  line-height: 1.9;
+  letter-spacing: 0.02em;
+  /* 日本語の折り返しを自然にする（対応ブラウザのみ）。 */
+  word-break: auto-phrase;
+  overflow-wrap: anywhere;
+}
+
+.story-stat {
+  margin: 14px 0 0;
+  padding-top: 12px;
+  border-top: 1px solid var(--story-rule);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: 0.3em;
+}
+
+.story-stat__value {
+  font-family: var(--story-serif);
+  font-size: clamp(2.6rem, 11vw, 3.8rem);
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: -0.01em;
+  color: var(--story-accent);
+  font-variant-numeric: tabular-nums;
+}
+
+.story-stat__unit {
+  font-size: 1.1rem;
+  font-weight: 700;
+}
+
+.story-stat__label {
+  flex-basis: 100%;
+  margin-top: 4px;
+  font-size: 0.78rem;
+  line-height: 1.6;
+  color: var(--story-ink-soft);
+}
+
+.story-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (min-width: 768px) {
+  .story-step {
+    padding-left: clamp(24px, 6vw, 96px);
+    padding-right: 24px;
+  }
+
+  .story-card {
+    padding: 28px 32px 30px;
+  }
+
+  .story-card__heading {
+    font-size: 1.7rem;
+  }
+
+  .story-card__body {
+    font-size: 1rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .story-card {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}

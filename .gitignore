@@ -1,9 +1,23 @@
 node_modules/
 dist/
 test-results/
+screenshots/
+coverage/
+blob-report/
+vite.config.ts.timestamp-*
 playwright-report/
 *.tsbuildinfo
 .DS_Store
 .env
 .env.*
 !.env.example
+
+# 大きな原本（data/raw/bicycles/SOURCES.md に URL と SHA-256 を記録）
+data/raw/bicycles/large/
+
+# 東京都の原本（Excel・PDF・報道発表）とそのページ抽出は再配布しない。
+# 取得元 URL と SHA-256 は data/raw/bicycles/SOURCES.md に記録している。
+data/raw/bicycles/*.xlsx
+data/raw/bicycles/*.pdf
+data/raw/bicycles/*.html
+data/raw/bicycles/extracts/

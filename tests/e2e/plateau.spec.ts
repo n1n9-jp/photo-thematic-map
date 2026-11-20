@@ -28,7 +28,7 @@ for (const view of VIEWS) {
     await expect(page.locator('.ptm-attribution')).toContainText('出典：国土交通省 Project PLATEAU');
 
     await page.waitForTimeout(500);
-    await page.screenshot({ path: `test-results/plateau-${view.name}.png` });
+    await page.screenshot({ path: `screenshots/plateau-${view.name}.png` });
 
     expect(errors).toEqual([]);
   });

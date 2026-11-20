@@ -2,6 +2,8 @@
  * `public/data/plateau/tilesets.json`（`npm run data:plateau` で生成）の型と、視点の近くの区を選ぶ関数。
  */
 
+import { assetUrl } from '../../paths';
+
 export type TilesetVariant = 'lod2_texture' | 'lod2_no_texture' | 'lod1';
 
 export interface WardTilesets {
@@ -21,14 +23,7 @@ export interface PlateauCatalog {
   wards: WardTilesets[];
 }
 
-/** サイトのルート（index.html のある場所）からの相対パスを、どのページからでも使える URL にする。 */
-export function siteUrl(path: string): string {
-  // 開発時はルートから配信される。本番ビルドではこのモジュールは <root>/assets/ に置かれる。
-  const root = import.meta.env.DEV ? new URL('/', location.href) : new URL('../', import.meta.url);
-  return new URL(path, root).href;
-}
-
-export async function loadPlateauCatalog(url = siteUrl('data/plateau/tilesets.json')): Promise<PlateauCatalog> {
+export async function loadPlateauCatalog(url = assetUrl('data/plateau/tilesets.json')): Promise<PlateauCatalog> {
   const res = await fetch(url);
   if (!res.ok) throw new Error(`PLATEAU カタログを読めません: ${res.status} ${url}`);
   return (await res.json()) as PlateauCatalog;

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ORIGIN } from '../../src/config';
-import { latLonToLocal, localToLatLon } from '../../src/geo/enu';
+import { ecefToLocalMatrix, geodeticToEcef, latLonToLocal, localToLatLon } from '../../src/geo/enu';
 
 describe('enu', () => {
   it('原点はローカル(0,0,0)に写る', () => {
@@ -28,7 +28,7 @@ describe('enu', () => {
     const e = latLonToLocal({ lat: ORIGIN.lat, lon: ORIGIN.lon + 0.001 });
     expect(e.x).toBeGreaterThan(0);
     const u = latLonToLocal({ lat: ORIGIN.lat, lon: ORIGIN.lon, alt: 100 });
-    expect(u.y).toBeCloseTo(100, 9);
+    expect(u.y).toBeCloseTo(100, 6);
   });
 
   it('緯度1度は約111km、経度1度は約90km（東京付近）', () => {
@@ -65,5 +65,27 @@ describe('enu', () => {
       const back = latLonToLocal(localToLatLon(v));
       expect(Math.hypot(back.x - v.x, back.y - v.y, back.z - v.z)).toBeLessThan(0.01);
     }
+  });
+
+  it('接平面なので、同じ高さでも原点から離れると Y が下がる（20km で約31m）', () => {
+    // 緯度 0.18 度 ≒ 北へ約 20km
+    const v = latLonToLocal({ lat: ORIGIN.lat + 0.18, lon: ORIGIN.lon });
+    const d = Math.hypot(v.x, v.z);
+    expect(d).toBeGreaterThan(19_500);
+    expect(d).toBeLessThan(20_500);
+    const expected = -(d * d) / (2 * 6_371_000);
+    expect(v.y).toBeLessThan(expected + 1);
+    expect(v.y).toBeGreaterThan(expected - 1);
+  });
+
+  it('ECEF→ローカルの行列は latLonToLocal と一致する', () => {
+    const m = ecefToLocalMatrix();
+    const p = { lat: 35.65858, lon: 139.74543, alt: 333 };
+    const [ex, ey, ez] = geodeticToEcef(p);
+    const x = m[0]! * ex + m[1]! * ey + m[2]! * ez + m[3]!;
+    const y = m[4]! * ex + m[5]! * ey + m[6]! * ez + m[7]!;
+    const z = m[8]! * ex + m[9]! * ey + m[10]! * ez + m[11]!;
+    const v = latLonToLocal(p);
+    expect(Math.hypot(x - v.x, y - v.y, z - v.z)).toBeLessThan(1e-6);
   });
 });

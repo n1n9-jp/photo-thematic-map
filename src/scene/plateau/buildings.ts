@@ -1,22 +1,17 @@
 /**
  * PLATEAU 建物 3D Tiles をローカル座標（X=東, Y=上, Z=南, 1単位=1m, 原点 ORIGIN）に置くレイヤー。
  *
- * 高さの扱い:
- * - タイルのジオメトリは ECEF・楕円体高。ローカル Y は標高なので GEOID_HEIGHT_M だけ下げる。
- * - ローカル座標は `enu.ts` の局所近似（地球の丸みを持たない平面）。ECEF を剛体変換しただけでは
- *   原点から離れるほど地面が丸みで下がる（6km で約 3m）。そこでタイルごとに、タイル中心の
- *   緯度経度・高さを latLonToLocal で写した点へ、その地点の東・上・南を X・Y・Z に合わせて置き直す。
- *   航空写真の地面も latLonToLocal で置いているので、どこでも建物の足元と地面が一致する。
+ * 高さの扱い: タイルのジオメトリは ECEF・楕円体高、ローカル Y は標高基準。
+ * 原点の ENU 行列を「原点の標高 + ジオイド高」の点で作ると、楕円体高からジオイド高が差し引かれ、
+ * `latLonToLocal({ lat, lon, alt: 標高 })` と同じ座標系に載る（航空写真の地面とも一致する）。
  */
-import { Box3, Group, Matrix4, MeshBasicMaterial, Vector3 } from 'three';
+import { Group, Matrix4, MeshBasicMaterial, Vector3 } from 'three';
 import type { Camera, Material, Mesh, MeshStandardMaterial, Object3D, Texture, WebGLRenderer } from 'three';
 import { DRACO_GLTF_CONFIG, DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
 import { TilesRenderer } from '3d-tiles-renderer/three';
 import { GLTFExtensionsPlugin } from '3d-tiles-renderer/three/plugins';
 import { GEOID_HEIGHT_M, ORIGIN } from '../../config';
-import { ecefToGeodetic, enuBasis, geodeticToEcef } from '../../geo/ecef';
-import type { Ecef } from '../../geo/ecef';
-import { latLonToLocal } from '../../geo/enu';
+import { ecefToLocalMatrix, latLonToLocal } from '../../geo/enu';
 
 export interface PlateauBuildingsOptions {
   /** tileset.json の URL の配列。 */
@@ -44,22 +39,11 @@ export type BuildingArea = NonNullable<PlateauBuildingsOptions['area']>;
 /** 連続でこのフレーム数だけ読み込み待ちがなければ「読み込み完了」とみなす。 */
 const SETTLE_FRAMES = 10;
 
-/**
- * ECEF → ローカル座標の剛体変換。ECEF の点 center がローカルの latLonToLocal(center) に写り、
- * center での東・上・南がローカルの +X・+Y・+Z を向く。
- */
-export function ecefToLocalMatrix(center: Ecef, target = new Matrix4()): Matrix4 {
-  const g = ecefToGeodetic(center);
-  const l = latLonToLocal({ lat: g.lat, lon: g.lon, alt: g.height - GEOID_HEIGHT_M });
-  const { east: e, north: n, up: u } = enuBasis(g.lat, g.lon);
-  const dot = (a: Ecef): number => a.x * center.x + a.y * center.y + a.z * center.z;
-  // prettier-ignore
-  return target.set(
-    e.x, e.y, e.z, l.x - dot(e),
-    u.x, u.y, u.z, l.y - dot(u),
-    -n.x, -n.y, -n.z, l.z + dot(n),
-    0, 0, 0, 1,
-  );
+/** ECEF（楕円体高）→ ローカル座標（標高基準）の行列。3D Tiles の group に設定する。 */
+export function plateauTilesMatrix(): Matrix4 {
+  const m = ecefToLocalMatrix({ ...ORIGIN, alt: ORIGIN.alt + GEOID_HEIGHT_M });
+  // 行優先なので Matrix4.set で受け取る
+  return new Matrix4().set(...(m as Parameters<Matrix4['set']>));
 }
 
 function createDracoLoader(): DRACOLoader {
@@ -70,30 +54,13 @@ function createDracoLoader(): DRACOLoader {
 }
 
 /** タイル中心で ECEF→ローカルの置き直しを行うプラグイン。group の剛体変換との差分だけを掛ける。 */
-class LocalFramePlugin {
-  readonly name = 'PTM_LOCAL_FRAME';
-  private readonly groupInverse: Matrix4;
-  private readonly box = new Box3();
-  private readonly center = new Vector3();
-  private readonly local = new Matrix4();
+/** 読み込んだタイルのマテリアルを整えるプラグイン（照明なし化・円柱での切り分け）。 */
+class TileMaterialPlugin {
+  readonly name = 'PTM_TILE_MATERIAL';
 
-  constructor(
-    groupMatrix: Matrix4,
-    private readonly area: BuildingArea | undefined,
-  ) {
-    this.groupInverse = groupMatrix.clone().invert();
-  }
+  constructor(private readonly area: BuildingArea | undefined) {}
 
   processTileModel(scene: Object3D): void {
-    // この時点の scene.matrix はタイル座標 → ECEF（親を持たない）
-    scene.updateMatrixWorld(true);
-    this.box.setFromObject(scene);
-    if (this.box.isEmpty()) return;
-    this.box.getCenter(this.center);
-    ecefToLocalMatrix(this.center, this.local);
-    scene.matrix.premultiply(this.local).premultiply(this.groupInverse);
-    scene.matrix.decompose(scene.position, scene.quaternion, scene.scale);
-    scene.updateMatrixWorld(true);
     const area = this.area;
     scene.traverse((obj) => {
       const mesh = obj as Mesh;
@@ -252,9 +219,8 @@ export class PlateauBuildings {
       this.resolveReady = resolve;
     });
 
-    // 原点（標高 ORIGIN.alt の地点）での ECEF → ローカルの剛体変換。カリング・LOD 判定に使われる。
-    const originEcef = geodeticToEcef(ORIGIN.lat, ORIGIN.lon, ORIGIN.alt + GEOID_HEIGHT_M);
-    const groupMatrix = ecefToLocalMatrix(originEcef);
+    // ECEF（楕円体高）→ ローカル（標高基準）の ENU 行列。
+    const groupMatrix = plateauTilesMatrix();
 
     for (const url of options.urls) {
       const tiles = new TilesRenderer(url);
@@ -264,7 +230,7 @@ export class PlateauBuildings {
       tiles.loadSiblings = false;
       tiles.registerPlugin(new GLTFExtensionsPlugin({ dracoLoader: this.draco, autoDispose: false }));
       tiles.registerPlugin(new TextureDownscalePlugin(options.maxTextureSize ?? 1024));
-      tiles.registerPlugin(new LocalFramePlugin(groupMatrix, options.area));
+      tiles.registerPlugin(new TileMaterialPlugin(options.area));
       if (options.area) tiles.registerPlugin(new AreaPlugin(options.area));
       tiles.group.matrixAutoUpdate = false;
       tiles.group.matrix.copy(groupMatrix);

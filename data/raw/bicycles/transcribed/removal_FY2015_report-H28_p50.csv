@@ -1,0 +1,5 @@
+# 出典: 東京都「駅前放置自転車等の現況と対策 －平成28年度調査－」（全文）第1-3-(3)「区市町村の撤去・返還・処分状況（平成27年度）」p.50（PDF物理ページ56）の「総数」行。
+# 原本PDFは画像のみ（テキストなし）のため、画像 extracts/removal_FY2015_report-H28_phys056.png を目視で転記した。
+# 検算: 計 = 自転車 + 原付 が3項目とも成立。処分台数の計 189,119 は同PDF p.49 の円グラフ「27年度処分台数合計 189,119台」とも一致。
+fiscal_year,removed_total,removed_bicycle,removed_moped,returned_total,returned_bicycle,returned_moped,disposed_total,disposed_bicycle,disposed_moped,return_rate_percent
+2015,435561,432040,3521,253326,250616,2710,189119,188106,1013,58.2
