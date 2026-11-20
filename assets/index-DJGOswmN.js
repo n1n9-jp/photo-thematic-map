@@ -1,0 +1,1 @@
+import"./modulepreload-polyfill-P2Xu9kJm.js";import{t as e}from"./createScene-CqB_7_I2.js";var t=document.getElementById(`app`);if(!t)throw Error(`#app が見つかりません`);var n=e(t);n.renderer.setAnimationLoop(n.render),n.render(),requestAnimationFrame(()=>{window.__APP_READY__=!0});

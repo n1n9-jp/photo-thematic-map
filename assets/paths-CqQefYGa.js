@@ -1,0 +1,1 @@
+var e=new URL(`..`,import.meta.url);function t(t){return new URL(t.replace(/^(\.?\/)+/,``),e).href}export{t};

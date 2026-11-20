@@ -1,0 +1,417 @@
+{
+ "title": "東京都 駅前放置自転車の主要数値",
+ "generatedFrom": "scripts/data/build-bicycles.ts",
+ "note": "「放置」は駅から概ね半径500m以内の路上等に置かれ、利用者が直ちに移動できない状態のもの。島しょ部を除く。",
+ "metrics": [
+  {
+   "id": "bicycleParked",
+   "label": "放置自転車の台数（1日）",
+   "value": 13394,
+   "unit": "台",
+   "period": "2025年10月中の晴天の平日1日・午前11時頃（令和7年度調査）",
+   "definition": "駅周辺（概ね半径500m以内）で自転車等駐車場以外の道路等に放置されていた自転車。原付・自二を含まない。",
+   "sources": [
+    {
+     "document": "「駅前放置自転車等の現況と対策－令和７年度調査－」について －調査結果の概要－",
+     "url": "https://www.metro.tokyo.lg.jp/documents/d/tosei/20260326_24_03a",
+     "location": "p.1「１ 駅周辺における自転車等の放置状況」"
+    },
+    {
+     "document": "駅前放置自転車等の現況と対策 －令和７年度調査－ （4）駅別放置自転車、原動機付自転車及び自動二輪車の状況（Excel）",
+     "url": "https://www.tomin-anzen.metro.tokyo.lg.jp/documents/d/tomin-anzen/07ekibetsuhouchi",
+     "location": "総数行 D列（自転車）"
+    },
+    {
+     "document": "東京都 報道発表「駅前放置自転車等の現況と対策」調査結果（2026年3月26日）",
+     "url": "https://www.metro.tokyo.lg.jp/information/press/2026/03/2026032616",
+     "location": "「自転車の放置台数」表"
+    }
+   ]
+  },
+  {
+   "id": "allParked",
+   "label": "放置台数（自転車・原付・自二の計）",
+   "value": 14366,
+   "unit": "台",
+   "period": "2025年10月（令和7年度調査）",
+   "definition": "自転車、原動機付自転車（一般原付・特定原付）、自動二輪車の放置台数の合計。",
+   "sources": [
+    {
+     "document": "「駅前放置自転車等の現況と対策－令和７年度調査－」について －調査結果の概要－",
+     "url": "https://www.metro.tokyo.lg.jp/documents/d/tosei/20260326_24_03a",
+     "location": "p.1 (1)"
+    },
+    {
+     "document": "駅前放置自転車等の現況と対策 －令和７年度調査－ （4）駅別放置自転車、原動機付自転車及び自動二輪車の状況（Excel）",
+     "url": "https://www.tomin-anzen.metro.tokyo.lg.jp/documents/d/tomin-anzen/07ekibetsuhouchi",
+     "location": "総数行 H列"
+    }
+   ]
+  },
+  {
+   "id": "bicycleParkedPrevYear",
+   "label": "放置自転車の台数（前年）",
+   "value": 14876,
+   "unit": "台",
+   "period": "2024年10月（令和6年度調査）",
+   "definition": "同上の前年値。",
+   "sources": [
+    {
+     "document": "東京都 報道発表「駅前放置自転車等の現況と対策」調査結果（2026年3月26日）",
+     "url": "https://www.metro.tokyo.lg.jp/information/press/2026/03/2026032616",
+     "location": "「自転車の放置台数」表 令和6年"
+    },
+    {
+     "document": "駅前放置自転車等の現況と対策 －令和７年度調査－（全文）",
+     "url": "https://www.tomin-anzen.metro.tokyo.lg.jp/documents/d/tomin-anzen/202603_jitensyagenkyo",
+     "location": "p.27 推移表 令和6年（放置台数16,042 − 原付・自二1,166）"
+    }
+   ]
+  },
+  {
+   "id": "bicycleInflow",
+   "label": "自転車の乗入台数",
+   "value": 545983,
+   "unit": "台",
+   "period": "2025年10月（令和7年度調査）",
+   "definition": "駅周辺に乗り入れた自転車（放置台数 + 自転車等駐車場の実収容台数）。",
+   "sources": [
+    {
+     "document": "「駅前放置自転車等の現況と対策－令和７年度調査－」について －調査結果の概要－",
+     "url": "https://www.metro.tokyo.lg.jp/documents/d/tosei/20260326_24_03a",
+     "location": "p.1"
+    }
+   ]
+  },
+  {
+   "id": "bicycleParkedRate",
+   "label": "自転車の放置率（都全体）",
+   "value": 2.5,
+   "unit": "%",
+   "period": "2025年10月",
+   "definition": "自転車放置台数 ÷ 自転車の乗入台数。概要 p.1 は「約2.5％」と記載。",
+   "sources": [
+    {
+     "document": "「駅前放置自転車等の現況と対策－令和７年度調査－」について －調査結果の概要－",
+     "url": "https://www.metro.tokyo.lg.jp/documents/d/tosei/20260326_24_03a",
+     "location": "p.1"
+    }
+   ]
+  },
+  {
+   "id": "allInflow",
+   "label": "乗入台数（自転車・原付・自二）",
+   "value": 563857,
+   "unit": "台",
+   "period": "2025年10月",
+   "definition": "放置台数と自転車等駐車場の駐車台数（実収容台数）の合計。",
+   "sources": [
+    {
+     "document": "「駅前放置自転車等の現況と対策－令和７年度調査－」について －調査結果の概要－",
+     "url": "https://www.metro.tokyo.lg.jp/documents/d/tosei/20260326_24_03a",
+     "location": "p.1"
+    },
+    {
+     "document": "駅前放置自転車等の現況と対策 －令和７年度調査－ （4）駅別放置自転車、原動機付自転車及び自動二輪車の状況（Excel）",
+     "url": "https://www.tomin-anzen.metro.tokyo.lg.jp/documents/d/tomin-anzen/07ekibetsuhouchi",
+     "location": "総数行 O列"
+    }
+   ]
+  },
+  {
+   "id": "parkingCapacity",
+   "label": "自転車等駐車場の収容能力",
+   "value": 897461,
+   "unit": "台",
+   "period": "2025年8月末",
+   "definition": "駅周辺の自転車等駐車場の整備計画上の収容予定台数。",
+   "sources": [
+    {
+     "document": "「駅前放置自転車等の現況と対策－令和７年度調査－」について －調査結果の概要－",
+     "url": "https://www.metro.tokyo.lg.jp/documents/d/tosei/20260326_24_03a",
+     "location": "p.3 4(2)"
+    },
+    {
+     "document": "駅前放置自転車等の現況と対策 －令和７年度調査－ （4）駅別放置自転車、原動機付自転車及び自動二輪車の状況（Excel）",
+     "url": "https://www.tomin-anzen.metro.tokyo.lg.jp/documents/d/tomin-anzen/07ekibetsuhouchi",
+     "location": "総数行 N列"
+    }
+   ]
+  },
+  {
+   "id": "parkingOccupancy",
+   "label": "自転車等駐車場の実収容台数",
+   "value": 549491,
+   "unit": "台",
+   "period": "2025年10月の調査日",
+   "definition": "調査時に自転車等駐車場に実際に駐車していた台数。",
+   "sources": [
+    {
+     "document": "「駅前放置自転車等の現況と対策－令和７年度調査－」について －調査結果の概要－",
+     "url": "https://www.metro.tokyo.lg.jp/documents/d/tosei/20260326_24_03a",
+     "location": "p.3 4(2)"
+    },
+    {
+     "document": "駅前放置自転車等の現況と対策 －令和７年度調査－ （4）駅別放置自転車、原動機付自転車及び自動二輪車の状況（Excel）",
+     "url": "https://www.tomin-anzen.metro.tokyo.lg.jp/documents/d/tomin-anzen/07ekibetsuhouchi",
+     "location": "総数行 K列"
+    }
+   ]
+  },
+  {
+   "id": "parkingLots",
+   "label": "駅周辺の自転車等駐車場の数",
+   "value": 2943,
+   "unit": "箇所",
+   "period": "2025年8月末",
+   "definition": "公設1,326・民設1,617。",
+   "sources": [
+    {
+     "document": "「駅前放置自転車等の現況と対策－令和７年度調査－」について －調査結果の概要－",
+     "url": "https://www.metro.tokyo.lg.jp/documents/d/tosei/20260326_24_03a",
+     "location": "p.3 4(1)"
+    }
+   ]
+  },
+  {
+   "id": "stationsSurveyed",
+   "label": "調査対象の駅（Excel の行数）",
+   "value": 663,
+   "unit": "駅",
+   "period": "2025年10月",
+   "definition": "Excel の駅別表の行数。近接する複数駅を1行にまとめた行や、複数区市町村にまたがる駅（例: 東京駅）を区市町村ごとに別行にした行を含む。",
+   "sources": [
+    {
+     "document": "駅前放置自転車等の現況と対策 －令和７年度調査－ （4）駅別放置自転車、原動機付自転車及び自動二輪車の状況（Excel）",
+     "url": "https://www.tomin-anzen.metro.tokyo.lg.jp/documents/d/tomin-anzen/07ekibetsuhouchi",
+     "location": "駅別の行"
+    }
+   ]
+  },
+  {
+   "id": "stationsWithParkedBicycles",
+   "label": "放置自転車のある駅",
+   "value": 530,
+   "unit": "駅",
+   "period": "2025年10月",
+   "definition": "放置自転車が1台以上の駅（Excel の行単位）。",
+   "sources": [
+    {
+     "document": "駅前放置自転車等の現況と対策 －令和７年度調査－（全文）",
+     "url": "https://www.tomin-anzen.metro.tokyo.lg.jp/documents/d/tomin-anzen/202603_jitensyagenkyo",
+     "location": "p.7 合計行「計 530」"
+    }
+   ]
+  },
+  {
+   "id": "stationsWith100PlusBicycles",
+   "label": "放置自転車が100台以上の駅",
+   "value": 29,
+   "unit": "駅",
+   "period": "2025年10月",
+   "definition": "Excel の行単位。",
+   "sources": [
+    {
+     "document": "駅前放置自転車等の現況と対策 －令和７年度調査－（全文）",
+     "url": "https://www.tomin-anzen.metro.tokyo.lg.jp/documents/d/tomin-anzen/202603_jitensyagenkyo",
+     "location": "p.6 (2)・p.7 合計行"
+    }
+   ]
+  },
+  {
+   "id": "removedFY2024",
+   "label": "撤去された放置自転車等（年間）",
+   "value": 188561,
+   "unit": "台",
+   "period": "2024年度（令和6年度）",
+   "definition": "区市町村が撤去した自転車と原付の合計（自二を含まない）。区市町村単位の集計で、駅単位の値は公表されていない。",
+   "sources": [
+    {
+     "document": "「駅前放置自転車等の現況と対策－令和７年度調査－」について －調査結果の概要－",
+     "url": "https://www.metro.tokyo.lg.jp/documents/d/tosei/20260326_24_03a",
+     "location": "p.3 5(1)"
+    },
+    {
+     "document": "駅前放置自転車等の現況と対策 －令和７年度調査－（全文）",
+     "url": "https://www.tomin-anzen.metro.tokyo.lg.jp/documents/d/tomin-anzen/202603_jitensyagenkyo",
+     "location": "p.51 (3) 総数行"
+    }
+   ]
+  },
+  {
+   "id": "removedBicycleFY2024",
+   "label": "撤去された自転車（年間）",
+   "value": 187262,
+   "unit": "台",
+   "period": "2024年度",
+   "definition": "上のうち自転車。",
+   "sources": [
+    {
+     "document": "駅前放置自転車等の現況と対策 －令和７年度調査－（全文）",
+     "url": "https://www.tomin-anzen.metro.tokyo.lg.jp/documents/d/tomin-anzen/202603_jitensyagenkyo",
+     "location": "p.51 (3) 総数行 自転車"
+    }
+   ]
+  },
+  {
+   "id": "returnedFY2024",
+   "label": "持ち主に返還された台数",
+   "value": 121425,
+   "unit": "台",
+   "period": "2024年度",
+   "definition": "自転車と原付の合計。前年度に撤去されたものを含み、当年度の撤去分のうち翌年度に返還されるものを含まない。",
+   "sources": [
+    {
+     "document": "「駅前放置自転車等の現況と対策－令和７年度調査－」について －調査結果の概要－",
+     "url": "https://www.metro.tokyo.lg.jp/documents/d/tosei/20260326_24_03a",
+     "location": "p.3 5(2)"
+    },
+    {
+     "document": "駅前放置自転車等の現況と対策 －令和７年度調査－（全文）",
+     "url": "https://www.tomin-anzen.metro.tokyo.lg.jp/documents/d/tomin-anzen/202603_jitensyagenkyo",
+     "location": "p.51 (3)"
+    }
+   ]
+  },
+  {
+   "id": "disposedFY2024",
+   "label": "区市町村が処分した台数",
+   "value": 67831,
+   "unit": "台",
+   "period": "2024年度",
+   "definition": "自転車と原付の合計。前年度に撤去されたものや、粗大ごみとして収集されたもの等を含む場合がある。",
+   "sources": [
+    {
+     "document": "「駅前放置自転車等の現況と対策－令和７年度調査－」について －調査結果の概要－",
+     "url": "https://www.metro.tokyo.lg.jp/documents/d/tosei/20260326_24_03a",
+     "location": "p.3 5(3)"
+    },
+    {
+     "document": "駅前放置自転車等の現況と対策 －令和７年度調査－（全文）",
+     "url": "https://www.tomin-anzen.metro.tokyo.lg.jp/documents/d/tomin-anzen/202603_jitensyagenkyo",
+     "location": "p.51 (3)・凡例 2(3)"
+    }
+   ]
+  },
+  {
+   "id": "disposedRecycledFY2024",
+   "label": "処分のうちリサイクル用途（自転車として再利用）",
+   "value": 51646,
+   "unit": "台",
+   "period": "2024年度",
+   "definition": "売却（F）47,210台と無償（G）4,436台の計。処分台数の76.1％。",
+   "sources": [
+    {
+     "document": "「駅前放置自転車等の現況と対策－令和７年度調査－」について －調査結果の概要－",
+     "url": "https://www.metro.tokyo.lg.jp/documents/d/tosei/20260326_24_03a",
+     "location": "p.3 図-7"
+    },
+    {
+     "document": "駅前放置自転車等の現況と対策 －令和７年度調査－（全文）",
+     "url": "https://www.tomin-anzen.metro.tokyo.lg.jp/documents/d/tomin-anzen/202603_jitensyagenkyo",
+     "location": "p.50 (2)"
+    }
+   ]
+  },
+  {
+   "id": "disposedScrapFY2024",
+   "label": "処分のうち鉄くずとして資源活用",
+   "value": 6360,
+   "unit": "台",
+   "period": "2024年度",
+   "definition": "処分台数の9.4％。",
+   "sources": [
+    {
+     "document": "「駅前放置自転車等の現況と対策－令和７年度調査－」について －調査結果の概要－",
+     "url": "https://www.metro.tokyo.lg.jp/documents/d/tosei/20260326_24_03a",
+     "location": "p.3 図-7"
+    }
+   ]
+  },
+  {
+   "id": "disposedWasteFY2024",
+   "label": "処分のうち廃棄",
+   "value": 9825,
+   "unit": "台",
+   "period": "2024年度",
+   "definition": "有償8,619台・無償1,206台。処分台数の14.5％。",
+   "sources": [
+    {
+     "document": "「駅前放置自転車等の現況と対策－令和７年度調査－」について －調査結果の概要－",
+     "url": "https://www.metro.tokyo.lg.jp/documents/d/tosei/20260326_24_03a",
+     "location": "p.3 図-7"
+    },
+    {
+     "document": "駅前放置自転車等の現況と対策 －令和７年度調査－（全文）",
+     "url": "https://www.tomin-anzen.metro.tokyo.lg.jp/documents/d/tomin-anzen/202603_jitensyagenkyo",
+     "location": "p.50 (2)"
+    }
+   ]
+  },
+  {
+   "id": "removalCostFY2024",
+   "label": "放置自転車の撤去・保管・返還の経費",
+   "value": 53.7,
+   "unit": "億円",
+   "period": "2024年度",
+   "definition": "区市町村の経費の合計。",
+   "sources": [
+    {
+     "document": "「駅前放置自転車等の現況と対策－令和７年度調査－」について －調査結果の概要－",
+     "url": "https://www.metro.tokyo.lg.jp/documents/d/tosei/20260326_24_03a",
+     "location": "p.2 3(2)"
+    }
+   ]
+  },
+  {
+   "id": "campaignRemoved",
+   "label": "クリーンキャンペーン期間中の撤去台数",
+   "value": 6987,
+   "unit": "台",
+   "period": "2025年10月",
+   "definition": "542駅で実施。",
+   "sources": [
+    {
+     "document": "「駅前放置自転車等の現況と対策－令和７年度調査－」について －調査結果の概要－",
+     "url": "https://www.metro.tokyo.lg.jp/documents/d/tosei/20260326_24_03a",
+     "location": "p.2 3(4)"
+    }
+   ]
+  },
+  {
+   "id": "peakAllParked",
+   "label": "放置台数の過去最多（自転車・原付・自二）",
+   "value": 242760,
+   "unit": "台",
+   "period": "1990年（平成2年）",
+   "definition": "当時の調査方式（自転車100台以上、原付・自二は合わせて50台以上の駅のみ計上）による値。",
+   "sources": [
+    {
+     "document": "東京都 報道発表「駅前放置自転車等の現況と対策」調査結果（2026年3月26日）",
+     "url": "https://www.metro.tokyo.lg.jp/information/press/2026/03/2026032616",
+     "location": "「最も多かった平成2年」"
+    },
+    {
+     "document": "駅前放置自転車等の現況と対策 －令和７年度調査－（全文）",
+     "url": "https://www.tomin-anzen.metro.tokyo.lg.jp/documents/d/tomin-anzen/202603_jitensyagenkyo",
+     "location": "p.3「平成２年の約24.3万台をピーク」"
+    }
+   ]
+  },
+  {
+   "id": "targetBicycleParked",
+   "label": "都の目標（放置自転車）",
+   "value": 15000,
+   "unit": "台以下",
+   "period": "2025年度中",
+   "definition": "東京都自転車安全利用推進計画の数値目標。",
+   "sources": [
+    {
+     "document": "東京都 報道発表「駅前放置自転車等の現況と対策」調査結果（2026年3月26日）",
+     "url": "https://www.metro.tokyo.lg.jp/information/press/2026/03/2026032616",
+     "location": "【注2】"
+    }
+   ]
+  }
+ ]
+}
