@@ -32,7 +32,7 @@ for (const shot of SHOTS) {
     expect(stats?.visible).toBeGreaterThan(0);
     expect(stats?.perLod[shot.lod]).toBeGreaterThan(0);
     await expect(page.locator('#hud')).toContainText('30,000');
-    await page.screenshot({ path: `test-results/${shot.file}` });
+    await page.screenshot({ path: `screenshots/${shot.file}` });
     expect(errors).toEqual([]);
   });
 }
