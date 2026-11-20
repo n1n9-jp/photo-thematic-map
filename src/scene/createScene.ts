@@ -27,8 +27,13 @@ export interface SceneContext {
 
 const SKY_COLOR = 0x9ec9ee;
 
+export interface CreateSceneOptions {
+  /** 原点に基準箱を置くか（既定 true）。 */
+  referenceBox?: boolean;
+}
+
 /** 最小シーン（空・光・地面・基準箱・OrbitControls）を構築する。 */
-export function createScene(container: HTMLElement): SceneContext {
+export function createScene(container: HTMLElement, options: CreateSceneOptions = {}): SceneContext {
   const renderer = new WebGLRenderer({ antialias: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.setSize(window.innerWidth, window.innerHeight);
@@ -59,7 +64,7 @@ export function createScene(container: HTMLElement): SceneContext {
     new MeshStandardMaterial({ color: 0xe0533d, roughness: 0.6 }),
   );
   box.position.y = REFERENCE_BOX_SIZE_M / 2;
-  scene.add(box);
+  if (options.referenceBox ?? true) scene.add(box);
 
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.target.set(0, REFERENCE_BOX_SIZE_M / 2, 0);
