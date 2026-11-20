@@ -7,3 +7,6 @@ playwright-report/
 .env
 .env.*
 !.env.example
+
+# 大きな原本（data/raw/bicycles/SOURCES.md に URL と SHA-256 を記録）
+data/raw/bicycles/large/
