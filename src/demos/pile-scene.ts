@@ -85,7 +85,7 @@ const pilePromise = createPileScene({
     if (infoEl) infoEl.textContent = `山を計算中… ${p.phase} ${Math.round(p.fraction * 100)}%`;
   },
 });
-const stagePromise = createPlateauStage({ container, center: { lat: trial.lat, lon: trial.lon }, detailRadiusM: siteName === 'shinjuku' ? 400 : 300 });
+const stagePromise = createPlateauStage({ container, center: { lat: trial.lat, lon: trial.lon } });
 const [pile, stage] = await Promise.all([pilePromise, stagePromise]);
 const wallMs = performance.now() - tStart;
 void computeProgress;
