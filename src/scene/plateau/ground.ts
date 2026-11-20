@@ -5,6 +5,11 @@
  * - 四分木でカメラからの距離に応じたズームを選ぶ。子タイルが全部そろうまでは親タイルを表示する。
  * - 子タイルの有無は親タイル画像の透明部分（撮影範囲外・海域）から判断し、存在しないタイルは
  *   要求しない（404 をコンソールに出さない）。標高タイルも同様に、親の標高が無効値だけの範囲は要求しない。
+ * - 取得に失敗したタイルは間隔を延ばして再試行し、上限に達したら取得不能（failed）として扱う（`tileFetch.ts`）。
+ *   取得不能のタイルは親タイルのまま表示し、読み込み完了（ready）の判定では「済み」とみなす。
+ *   標高タイルを取得できないときは、祖先の標高（無ければ 0m）で地面を作る。
+ * - メモリ: 保持するタイル数に上限を設け、使っていないタイルの画像・標高の参照・木の枝を解放する。
+ *   画像（ImageBitmap）と UV は GPU へ転送した後に CPU 側から解放する。
  */
 import {
   Box3,
@@ -26,8 +31,11 @@ import { GSI_DEM10_MAX_ZOOM, GSI_DEM5A_ZOOM, PLATEAU_ORTHO_MAX_ZOOM, PLATEAU_ORT
 import { latLonToLocal, localToLatLon } from '../../geo/enu';
 import { latToTileY, lonToTileX, tileBounds, tileXToLon, tileYToLat } from '../../geo/tiles';
 import type { TileBounds } from '../../geo/tiles';
+import { plateauMemoryBudget, releaseAfterUpload } from './budget';
 import { GsiElevationSource, fetchImagePixels, hasValidHeights, sampleDemAt } from './elevation';
 import type { DemKind, DemTile } from './elevation';
+import { TileFetchPolicy, reportTileFailure } from './tileFetch';
+import type { TileFetchPolicyOptions } from './tileFetch';
 
 export interface PlateauGroundOptions {
   camera: PerspectiveCamera;
@@ -42,11 +50,16 @@ export interface PlateauGroundOptions {
   texelScale?: number;
   /** 同時に読み込むタイル数。既定 12。 */
   concurrency?: number;
-  /** 保持するタイル数の上限。既定 400。 */
+  /** 保持するタイル数の上限。既定は端末に合わせて plateauMemoryBudget() から選ぶ（パソコン 240・スマートフォン 120）。 */
   maxTiles?: number;
+  /** キャッシュする標高タイル数の上限。既定は plateauMemoryBudget() から選ぶ（96・48）。 */
+  elevationMaxTiles?: number;
+  /** 航空写真・標高の再試行の方針（回数・間隔）。 */
+  fetchPolicy?: TileFetchPolicyOptions;
 }
 
-type NodeState = 'idle' | 'loading' | 'ready' | 'unavailable';
+/** unavailable: 存在しない（撮影範囲外など）。failed: 取得できなかった（再試行の上限に達した）。 */
+type NodeState = 'idle' | 'loading' | 'ready' | 'unavailable' | 'failed';
 
 interface GroundNode {
   z: number;
@@ -69,6 +82,8 @@ interface GroundNode {
 
 const SEGMENTS = 16;
 const SETTLE_FRAMES = 10;
+/** 使っていない木の枝を刈り込む間隔（フレーム）。 */
+const PRUNE_INTERVAL = 120;
 const IMG = 256;
 
 function orthoUrl(z: number, x: number, y: number): string {
@@ -89,7 +104,9 @@ export class PlateauGround {
   readonly ready: Promise<void>;
   isReady = false;
   /** 標高の参照（ほかのレイヤーが地面の高さを知るのにも使える）。 */
-  readonly elevation = new GsiElevationSource();
+  readonly elevation: GsiElevationSource;
+  /** 航空写真の再試行の方針。 */
+  readonly orthoPolicy: TileFetchPolicy;
 
   private readonly camera: PerspectiveCamera;
   private readonly renderer: WebGLRenderer;
@@ -111,6 +128,8 @@ export class PlateauGround {
   private settledFrames = 0;
   private resolveReady!: () => void;
   private disposed = false;
+  /** 取得はできたが復号などに失敗したタイルの数。 */
+  private brokenTiles = 0;
 
   constructor(options: PlateauGroundOptions) {
     this.camera = options.camera;
@@ -120,7 +139,13 @@ export class PlateauGround {
     this.maxZoom = Math.min(options.maxZoom ?? PLATEAU_ORTHO_MAX_ZOOM, PLATEAU_ORTHO_MAX_ZOOM);
     this.texelScale = options.texelScale ?? 1.5;
     this.concurrency = options.concurrency ?? 12;
-    this.maxTiles = options.maxTiles ?? 400;
+    const budget = plateauMemoryBudget();
+    this.maxTiles = options.maxTiles ?? budget.groundMaxTiles;
+    this.orthoPolicy = new TileFetchPolicy('航空写真', options.fetchPolicy);
+    this.elevation = new GsiElevationSource({
+      maxTiles: options.elevationMaxTiles ?? budget.elevationMaxTiles,
+      policy: new TileFetchPolicy('標高', options.fetchPolicy),
+    });
     this.anisotropy = Math.min(8, this.renderer.capabilities.getMaxAnisotropy());
     this.group.name = 'plateau-ground';
     this.ready = new Promise((resolve) => {
@@ -140,7 +165,8 @@ export class PlateauGround {
 
     const visible = new Set<GroundNode>();
     const wanted: GroundNode[] = [];
-    for (const root of this.currentRoots()) this.select(root, visible, wanted);
+    const roots = this.currentRoots();
+    for (const root of roots) this.select(root, visible, wanted);
 
     for (const node of this.loaded) {
       if (node.mesh) node.mesh.visible = visible.has(node);
@@ -153,6 +179,7 @@ export class PlateauGround {
       void this.load(node);
     }
     this.evict();
+    if (this.frame % PRUNE_INTERVAL === 0) this.prune(new Set(roots));
 
     if (!this.isReady) {
       const busy = wanted.length > 0 || this.loadingCount > 0;
@@ -174,10 +201,36 @@ export class PlateauGround {
     return this.loaded.size;
   }
 
+  /** 取得できなかった航空写真のタイル数（復号に失敗したものを含む）。 */
+  get failedTileCount(): number {
+    return this.orthoPolicy.failedCount + this.brokenTiles;
+  }
+
+  /** 取得できなかった標高タイルの数。 */
+  get failedElevationTileCount(): number {
+    return this.elevation.failedTileCount;
+  }
+
+  /** 取得できなかったタイルを、次のフレームから取り直す（配信サーバーに再び接続できたときなど）。 */
+  retryFailedTiles(): void {
+    this.orthoPolicy.reset();
+    this.elevation.policy.reset();
+    // 取得できなかった標高タイルは null としてキャッシュしているので、キャッシュごと捨てる
+    this.elevation.dispose();
+    this.brokenTiles = 0;
+    const visit = (node: GroundNode): void => {
+      if (node.state === 'failed') node.state = 'idle';
+      for (const child of node.children ?? []) if (child) visit(child);
+    };
+    for (const root of this.roots.values()) visit(root);
+  }
+
   dispose(): void {
     this.disposed = true;
     for (const node of this.loaded) this.unload(node);
     this.loaded.clear();
+    this.roots.clear();
+    this.elevation.dispose();
     this.group.removeFromParent();
   }
 
@@ -254,7 +307,7 @@ export class PlateauGround {
   private select(node: GroundNode, visible: Set<GroundNode>, wanted: GroundNode[]): void {
     if (!this.inRange(node) || !this.frustum.intersectsBox(node.box)) return;
     node.lastUsed = this.frame;
-    if (node.state === 'unavailable') return;
+    if (node.state === 'unavailable' || node.state === 'failed') return;
     if (node.state !== 'ready') {
       if (node.state === 'idle') wanted.push(node);
       return;
@@ -262,7 +315,11 @@ export class PlateauGround {
     if (this.wantsSplit(node)) {
       const kids = this.childrenOf(node).filter(
         (k): k is GroundNode =>
-          k !== null && k.state !== 'unavailable' && this.inRange(k) && this.frustum.intersectsBox(k.box),
+          k !== null &&
+          k.state !== 'unavailable' &&
+          k.state !== 'failed' &&
+          this.inRange(k) &&
+          this.frustum.intersectsBox(k.box),
       );
       if (kids.every((k) => k.state === 'ready')) {
         for (const k of kids) this.select(k, visible, wanted);
@@ -289,7 +346,10 @@ export class PlateauGround {
     node.state = 'loading';
     this.loadingCount++;
     try {
-      const [img, ownDem] = await Promise.all([fetchImagePixels(orthoUrl(node.z, node.x, node.y)), this.loadDem(node)]);
+      const [img, ownDem] = await Promise.all([
+        fetchImagePixels(orthoUrl(node.z, node.x, node.y), undefined, this.orthoPolicy),
+        this.loadDem(node),
+      ]);
       if (this.disposed) {
         img?.bitmap.close();
         return;
@@ -305,8 +365,12 @@ export class PlateauGround {
       node.state = 'ready';
       this.loaded.add(node);
     } catch (err) {
-      node.state = 'idle';
-      console.warn('地面タイルの読み込みに失敗しました', node.z, node.x, node.y, err);
+      // 再試行の上限に達した（TileUnavailableError。報告は tileFetch.ts がまとめて行う）か、画像を復号できなかった
+      node.state = 'failed';
+      if (!(err instanceof Error && err.name === 'TileUnavailableError')) {
+        this.brokenTiles++;
+        reportTileFailure('航空写真');
+      }
     } finally {
       this.loadingCount--;
     }
@@ -411,6 +475,13 @@ export class PlateauGround {
     texture.colorSpace = SRGBColorSpace;
     texture.anisotropy = this.anisotropy;
     texture.needsUpdate = true;
+    // GPU へ転送したら CPU 側の画像は要らない（このテクスチャは 1 枚ずつ別の画像を持つ）
+    texture.onUpdate = () => {
+      bitmap.close();
+      texture.onUpdate = null;
+    };
+    // UV もレイキャストに使わないので、転送後に解放する
+    releaseAfterUpload(geometry.getAttribute('uv') as BufferAttribute);
 
     const material = new MeshBasicMaterial({ map: texture, side: DoubleSide, alphaTest: 0.5 });
     const mesh = new Mesh(geometry, material);
@@ -450,6 +521,28 @@ export class PlateauGround {
     }
     node.mesh = null;
     node.state = 'idle';
+    // 標高タイルの参照を手放す（再び読むときに親の標高から作り直す）
+    node.dems = [];
+  }
+
+  /**
+   * 使っていない木の枝を刈り込む。読み込み済み・読み込み中のタイルを含まない枝は、
+   * 子の配列ごと捨てる（次に要るときは親の画像の情報から作り直す）。
+   */
+  private prune(currentRoots: Set<GroundNode>): void {
+    const keep = (node: GroundNode): boolean => {
+      let used = node.state === 'loading' || node.state === 'ready';
+      if (node.children) {
+        let childUsed = false;
+        for (const child of node.children) if (child && keep(child)) childUsed = true;
+        if (!childUsed) node.children = null;
+        used ||= childUsed;
+      }
+      return used;
+    };
+    for (const [key, root] of this.roots) {
+      if (!keep(root) && !currentRoots.has(root)) this.roots.delete(key);
+    }
   }
 }
 
