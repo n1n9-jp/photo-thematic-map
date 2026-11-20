@@ -1,0 +1,321 @@
+{
+  "formatVersion": 1,
+  "name": "akihabara",
+  "width": 700,
+  "height": 700,
+  "cellSize": 1,
+  "originX": 274,
+  "originZ": -2258,
+  "center": {
+    "lat": 35.698439,
+    "lon": 139.774018
+  },
+  "heightReference": {
+    "description": "ローカル Y(m) = 標高（東京湾平均海面基準）。CLAUDE.md の座標規約（平らな地図）に従う。建物・橋梁は PLATEAU の 3D Tiles（ECEF・楕円体高）を、街並みの表示と同じくタイルごとに置き直した: タイルの中心（ECEF の軸平行の箱の中心）を latLonToLocal（高さ = 楕円体高 − GEOID_HEIGHT_M）の位置へ、その地点の東・上・南を X・Y・Z に合わせる剛体変換。地面は国土地理院 5m メッシュ標高（dem5a）をそのまま Y にした。水平はセルの中心を localToLatLon で緯度経度にして標本化した。",
+    "origin": {
+      "lat": 35.68124,
+      "lon": 139.76712,
+      "alt": 0
+    },
+    "tilesHeight": "ellipsoidal",
+    "geoidHeightM": 36.7
+  },
+  "quantization": {
+    "height": {
+      "offset": -0.42,
+      "scale": 0.02,
+      "nodata": 65535
+    },
+    "ground": {
+      "offset": -0.42,
+      "scale": 0.02,
+      "nodata": 65535
+    }
+  },
+  "classes": {
+    "ground": 0,
+    "building": 1,
+    "bridge": 2,
+    "nodata": 255
+  },
+  "files": {
+    "height": {
+      "path": "data/grids/akihabara.height.bin",
+      "bytes": 980000,
+      "sha256": "9223e343b8f42ea79d9ff7c4d36f25025ae493b5dcdef85a243e69c8c75d2f8f"
+    },
+    "ground": {
+      "path": "data/grids/akihabara.ground.bin",
+      "bytes": 980000,
+      "sha256": "8d15aa92faf0e6848a2a3f15c9ba9273d5dd8d1f3fb2efa83f286dd81f9322a4"
+    },
+    "class": {
+      "path": "data/grids/akihabara.class.bin",
+      "bytes": 490000,
+      "sha256": "b8383fff5b73569c8d6352e2d33935026e4ae672c1f08899529101426238c348"
+    }
+  },
+  "sources": {
+    "tilesets": [
+      {
+        "type": "bldg",
+        "city": "千代田区",
+        "lod": 2,
+        "texture": false,
+        "year": 2025,
+        "url": "https://assets.cms.plateau.reearth.io/assets/72/e900e5-938c-4376-a9de-a124b270880c/13101_chiyoda-ku_pref_2025_citygml_1_op_bldg_3dtiles_13101_chiyoda-ku_lod2_no_texture/tileset.json",
+        "leafTiles": 34,
+        "leafGeometricErrors": [
+          0
+        ]
+      },
+      {
+        "type": "brid",
+        "city": "千代田区",
+        "lod": 2,
+        "texture": true,
+        "year": 2025,
+        "url": "https://assets.cms.plateau.reearth.io/assets/11/2c138e-e156-46f1-b3a1-abc47865366e/13101_chiyoda-ku_pref_2025_citygml_1_op_brid_3dtiles_lod2/tileset.json",
+        "leafTiles": 1,
+        "leafGeometricErrors": [
+          0
+        ]
+      },
+      {
+        "type": "brid",
+        "city": "中央区",
+        "lod": 2,
+        "texture": true,
+        "year": 2025,
+        "url": "https://assets.cms.plateau.reearth.io/assets/2f/77dc90-7824-4349-924a-f5f862c430d4/13102_chuo-ku_pref_2025_citygml_1_op_brid_3dtiles_lod2/tileset.json",
+        "leafTiles": 2,
+        "leafGeometricErrors": [
+          0
+        ]
+      },
+      {
+        "type": "bldg",
+        "city": "台東区",
+        "lod": 2,
+        "texture": false,
+        "year": 2025,
+        "url": "https://assets.cms.plateau.reearth.io/assets/89/471b74-c5ca-4673-afaa-c194d18b5c8c/13106_taito-ku_city_2025_citygml_1_op_bldg_3dtiles_lod2_no_texture/tileset.json",
+        "leafTiles": 6,
+        "leafGeometricErrors": [
+          8.025475099232512
+        ]
+      },
+      {
+        "type": "brid",
+        "city": "台東区",
+        "lod": 2,
+        "texture": true,
+        "year": 2025,
+        "url": "https://assets.cms.plateau.reearth.io/assets/ae/6dcdeb-fe04-4853-ba66-02993dacc87c/13106_taito-ku_city_2025_citygml_1_op_brid_3dtiles_lod2/tileset.json",
+        "leafTiles": 1,
+        "leafGeometricErrors": [
+          0
+        ]
+      },
+      {
+        "type": "bldg",
+        "city": "文京区",
+        "lod": 2,
+        "texture": false,
+        "year": 2025,
+        "url": "https://assets.cms.plateau.reearth.io/assets/ed/58552b-52fc-484b-99c0-b1313e2d717d/13105_bunkyo-ku_pref_2025_citygml_1_op_bldg_3dtiles_13105_bunkyo-ku_lod2_no_texture/tileset.json",
+        "leafTiles": 1,
+        "leafGeometricErrors": [
+          0
+        ]
+      },
+      {
+        "type": "brid",
+        "city": "文京区",
+        "lod": 2,
+        "texture": true,
+        "year": 2025,
+        "url": "https://assets.cms.plateau.reearth.io/assets/4f/15af09-95bb-4ff0-b38f-1301b8228f78/13105_bunkyo-ku_pref_2025_citygml_1_op_brid_3dtiles_lod2/tileset.json",
+        "leafTiles": 2,
+        "leafGeometricErrors": [
+          0
+        ]
+      }
+    ],
+    "catalog": "https://api.plateauview.mlit.go.jp/datacatalog/plateau-datasets",
+    "dem": [
+      {
+        "id": "dem5a",
+        "url": "https://cyberjapandata.gsi.go.jp/xyz/dem5a_png/{z}/{x}/{y}.png",
+        "zoom": 15,
+        "description": "国土地理院 基盤地図情報 数値標高モデル 5m メッシュ（航空レーザ測量）",
+        "cells": 471984
+      }
+    ],
+    "method": "葉のタイル（最も細かい詳細度）の三角形を真上から投影し、セルの中心を覆う三角形の高さの最大を屋上とした。地面は標高タイルを双一次補間（dem5a の欠けは dem5b で補う）。どちらも無効値のセル（主に水面: お濠・川）は fillMissingHeights で近傍の最も低い地面の値で埋め、建物・橋梁がなければ分類 255 とした。"
+  },
+  "generatedAt": "2026-11-20",
+  "stats": {
+    "classes": {
+      "ground": 274489,
+      "building": 183500,
+      "bridge": 15990,
+      "nodata": 16021
+    },
+    "classFractions": {
+      "ground": 0.5602,
+      "building": 0.3745,
+      "bridge": 0.0326,
+      "nodata": 0.0327
+    },
+    "surfaceY": {
+      "min": -0.41,
+      "max": 151.19
+    },
+    "groundY": {
+      "min": -0.41,
+      "median": 3.33,
+      "max": 11.86
+    },
+    "triangles": 220247,
+    "features": 2019,
+    "buildingBaseMinusGround": {
+      "description": "建物の頂点の最小のローカル Y − 足元のセルの地面（標高タイル）の中央値(m)。足元が 20 セル以上の建物。",
+      "count": 1098,
+      "p10": -0.27,
+      "median": -0.08,
+      "p90": 0.01,
+      "medianAbs": 0.08,
+      "versusLowGround": {
+        "description": "足元のセルの地面の 5 パーセンタイル（足元の低い側）との差(m)。",
+        "p10": -0.1,
+        "median": 0.01,
+        "p90": 0.07
+      }
+    },
+    "plateauGeoidEstimate": {
+      "description": "建物の最下部の頂点の楕円体高 − 属性 _zmin（標高）の中央値(m)。PLATEAU の変換に使われたジオイド高の推定（格子では定数 GEOID_HEIGHT_M を引いている）。",
+      "count": 1166,
+      "median": 36.757,
+      "p10": 36.74,
+      "p90": 36.785
+    },
+    "tallest": [
+      {
+        "kind": "bldg",
+        "name": "富士ソフト秋葉原ビル",
+        "gmlId": "bldg_ea2ab14d-e1c6-4db3-978c-76e69ded14de",
+        "topY": 151.19,
+        "modelHeight": 148.18,
+        "measuredHeight": 145.2
+      },
+      {
+        "kind": "bldg",
+        "name": "秋葉原ダイビル",
+        "gmlId": "bldg_fd8bcf9b-b06e-4cee-80cf-ee3f44b58957",
+        "topY": 150.88,
+        "modelHeight": 148.14,
+        "measuredHeight": 145.5
+      },
+      {
+        "kind": "bldg",
+        "name": null,
+        "gmlId": "bldg_c6bc3f6c-39a7-4b7b-8e4e-8e383116466c",
+        "topY": 140.25,
+        "modelHeight": 137.05,
+        "measuredHeight": 133.9
+      },
+      {
+        "kind": "bldg",
+        "name": null,
+        "gmlId": "bldg_dff78476-eb77-419f-80f0-4ba67e1164e0",
+        "topY": 117.74,
+        "modelHeight": 114.92,
+        "measuredHeight": 112.2
+      },
+      {
+        "kind": "bldg",
+        "name": null,
+        "gmlId": "bldg_49919967-a7c6-4212-9306-46e29c130c25",
+        "topY": 109.82,
+        "modelHeight": 106.53,
+        "measuredHeight": 103.3
+      },
+      {
+        "kind": "bldg",
+        "name": null,
+        "gmlId": "bldg_90b6767c-7eb3-4850-9910-8935e3cfd5a5",
+        "topY": 104.7,
+        "modelHeight": 101.32,
+        "measuredHeight": 98
+      },
+      {
+        "kind": "bldg",
+        "name": null,
+        "gmlId": "bldg_d5cd10e1-e2f0-4fc4-8dd5-64744f0d6a12",
+        "topY": 104.34,
+        "modelHeight": 99.42,
+        "measuredHeight": 94.6
+      },
+      {
+        "kind": "bldg",
+        "name": null,
+        "gmlId": "bldg_8b6b32da-6793-438a-9f9c-d025f414bdc4",
+        "topY": 84.21,
+        "modelHeight": 81.19,
+        "measuredHeight": 78.2
+      }
+    ],
+    "gltfExtensions": [
+      "CESIUM_RTC",
+      "EXT_mesh_features",
+      "EXT_structural_metadata",
+      "EXT_texture_webp",
+      "KHR_draco_mesh_compression"
+    ]
+  },
+  "landmarks": [
+    {
+      "query": "秋葉原UDX",
+      "found": true,
+      "matchedBy": "point",
+      "gmlId": "bldg_49919967-a7c6-4212-9306-46e29c130c25",
+      "name": null,
+      "lod": 2,
+      "footprintCells": 6077,
+      "roofY": 109.82,
+      "groundY": 3.3,
+      "gridHeight": 106.52,
+      "measuredHeight": 103.3,
+      "modelHeight": 106.53
+    },
+    {
+      "query": "秋葉原ダイビル",
+      "found": true,
+      "matchedBy": "name",
+      "gmlId": "bldg_fd8bcf9b-b06e-4cee-80cf-ee3f44b58957",
+      "name": "秋葉原ダイビル",
+      "lod": 2,
+      "footprintCells": 2524,
+      "roofY": 150.88,
+      "groundY": 3.42,
+      "gridHeight": 147.46,
+      "measuredHeight": 145.5,
+      "modelHeight": 148.14
+    },
+    {
+      "query": "富士ソフト秋葉原ビル",
+      "found": true,
+      "matchedBy": "name",
+      "gmlId": "bldg_ea2ab14d-e1c6-4db3-978c-76e69ded14de",
+      "name": "富士ソフト秋葉原ビル",
+      "lod": 2,
+      "footprintCells": 2475,
+      "roofY": 151.19,
+      "groundY": 3.24,
+      "gridHeight": 147.96,
+      "measuredHeight": 145.2,
+      "modelHeight": 148.18
+    }
+  ]
+}

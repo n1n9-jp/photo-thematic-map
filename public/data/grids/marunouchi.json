@@ -1,0 +1,351 @@
+{
+  "formatVersion": 1,
+  "name": "marunouchi",
+  "width": 700,
+  "height": 700,
+  "cellSize": 1,
+  "originX": -451,
+  "originZ": -368,
+  "center": {
+    "lat": 35.6814,
+    "lon": 139.766
+  },
+  "heightReference": {
+    "description": "ローカル Y(m) = 標高（東京湾平均海面基準）。CLAUDE.md の座標規約（平らな地図）に従う。建物・橋梁は PLATEAU の 3D Tiles（ECEF・楕円体高）を、街並みの表示と同じくタイルごとに置き直した: タイルの中心（ECEF の軸平行の箱の中心）を latLonToLocal（高さ = 楕円体高 − GEOID_HEIGHT_M）の位置へ、その地点の東・上・南を X・Y・Z に合わせる剛体変換。地面は国土地理院 5m メッシュ標高（dem5a）をそのまま Y にした。水平はセルの中心を localToLatLon で緯度経度にして標本化した。",
+    "origin": {
+      "lat": 35.68124,
+      "lon": 139.76712,
+      "alt": 0
+    },
+    "tilesHeight": "ellipsoidal",
+    "geoidHeightM": 36.7
+  },
+  "quantization": {
+    "height": {
+      "offset": -2.92,
+      "scale": 0.02,
+      "nodata": 65535
+    },
+    "ground": {
+      "offset": -2.92,
+      "scale": 0.02,
+      "nodata": 65535
+    }
+  },
+  "classes": {
+    "ground": 0,
+    "building": 1,
+    "bridge": 2,
+    "nodata": 255
+  },
+  "files": {
+    "height": {
+      "path": "data/grids/marunouchi.height.bin",
+      "bytes": 980000,
+      "sha256": "7940ce2f58ff4892e5c836084999ff4112fcf1fd21b7ae1b47413c0a1665d726"
+    },
+    "ground": {
+      "path": "data/grids/marunouchi.ground.bin",
+      "bytes": 980000,
+      "sha256": "77281eac9d932eeb09f5091dcd4a4f2a2dff9c95e90f51fcbbe775b827018385"
+    },
+    "class": {
+      "path": "data/grids/marunouchi.class.bin",
+      "bytes": 490000,
+      "sha256": "0cd8752a73c57984a8ff22f7679ec0130cfff3d410e04b66967c1b4d104c4bbd"
+    }
+  },
+  "sources": {
+    "tilesets": [
+      {
+        "type": "bldg",
+        "city": "千代田区",
+        "lod": 2,
+        "texture": false,
+        "year": 2025,
+        "url": "https://assets.cms.plateau.reearth.io/assets/72/e900e5-938c-4376-a9de-a124b270880c/13101_chiyoda-ku_pref_2025_citygml_1_op_bldg_3dtiles_13101_chiyoda-ku_lod2_no_texture/tileset.json",
+        "leafTiles": 30,
+        "leafGeometricErrors": [
+          0
+        ]
+      },
+      {
+        "type": "brid",
+        "city": "千代田区",
+        "lod": 2,
+        "texture": true,
+        "year": 2025,
+        "url": "https://assets.cms.plateau.reearth.io/assets/11/2c138e-e156-46f1-b3a1-abc47865366e/13101_chiyoda-ku_pref_2025_citygml_1_op_brid_3dtiles_lod2/tileset.json",
+        "leafTiles": 4,
+        "leafGeometricErrors": [
+          0
+        ]
+      },
+      {
+        "type": "bldg",
+        "city": "中央区",
+        "lod": 2,
+        "texture": false,
+        "year": 2025,
+        "url": "https://assets.cms.plateau.reearth.io/assets/92/43303e-6eb5-44ad-b65f-e21e63bdf98a/13102_chuo-ku_pref_2025_citygml_1_op_bldg_3dtiles_13102_chuo-ku_lod2_no_texture/tileset.json",
+        "leafTiles": 4,
+        "leafGeometricErrors": [
+          0
+        ]
+      },
+      {
+        "type": "brid",
+        "city": "中央区",
+        "lod": 2,
+        "texture": true,
+        "year": 2025,
+        "url": "https://assets.cms.plateau.reearth.io/assets/2f/77dc90-7824-4349-924a-f5f862c430d4/13102_chuo-ku_pref_2025_citygml_1_op_brid_3dtiles_lod2/tileset.json",
+        "leafTiles": 5,
+        "leafGeometricErrors": [
+          0
+        ]
+      },
+      {
+        "type": "brid",
+        "city": "港区",
+        "lod": 2,
+        "texture": true,
+        "year": 2025,
+        "url": "https://assets.cms.plateau.reearth.io/assets/4c/2e16d4-56fd-492f-a67b-bbb38e8ef0d0/13103_minato-ku_pref_2025_citygml_1_op_brid_3dtiles_lod2/tileset.json",
+        "leafTiles": 2,
+        "leafGeometricErrors": [
+          0
+        ]
+      }
+    ],
+    "catalog": "https://api.plateauview.mlit.go.jp/datacatalog/plateau-datasets",
+    "dem": [
+      {
+        "id": "dem5a",
+        "url": "https://cyberjapandata.gsi.go.jp/xyz/dem5a_png/{z}/{x}/{y}.png",
+        "zoom": 15,
+        "description": "国土地理院 基盤地図情報 数値標高モデル 5m メッシュ（航空レーザ測量）",
+        "cells": 487292
+      }
+    ],
+    "method": "葉のタイル（最も細かい詳細度）の三角形を真上から投影し、セルの中心を覆う三角形の高さの最大を屋上とした。地面は標高タイルを双一次補間（dem5a の欠けは dem5b で補う）。どちらも無効値のセル（主に水面: お濠・川）は fillMissingHeights で近傍の最も低い地面の値で埋め、建物・橋梁がなければ分類 255 とした。"
+  },
+  "generatedAt": "2026-11-20",
+  "stats": {
+    "classes": {
+      "ground": 212582,
+      "building": 213812,
+      "bridge": 60898,
+      "nodata": 2708
+    },
+    "classFractions": {
+      "ground": 0.4338,
+      "building": 0.4364,
+      "bridge": 0.1243,
+      "nodata": 0.0055
+    },
+    "surfaceY": {
+      "min": -2.9,
+      "max": 241.49
+    },
+    "groundY": {
+      "min": -2.9,
+      "median": 3.2,
+      "max": 4.54
+    },
+    "triangles": 227756,
+    "features": 474,
+    "buildingBaseMinusGround": {
+      "description": "建物の頂点の最小のローカル Y − 足元のセルの地面（標高タイル）の中央値(m)。足元が 20 セル以上の建物。",
+      "count": 153,
+      "p10": -1.16,
+      "median": -0.2,
+      "p90": -0.07,
+      "medianAbs": 0.2,
+      "versusLowGround": {
+        "description": "足元のセルの地面の 5 パーセンタイル（足元の低い側）との差(m)。",
+        "p10": -0.59,
+        "median": -0.1,
+        "p90": -0.02
+      }
+    },
+    "plateauGeoidEstimate": {
+      "description": "建物の最下部の頂点の楕円体高 − 属性 _zmin（標高）の中央値(m)。PLATEAU の変換に使われたジオイド高の推定（格子では定数 GEOID_HEIGHT_M を引いている）。",
+      "count": 211,
+      "median": 36.664,
+      "p10": 36.644,
+      "p90": 36.685
+    },
+    "tallest": [
+      {
+        "kind": "bldg",
+        "name": "区立城東小学校",
+        "gmlId": "bldg_25d370de-2c35-457b-b756-3444a3d02eb3",
+        "topY": 241.49,
+        "modelHeight": 238.4,
+        "measuredHeight": 235.2
+      },
+      {
+        "kind": "bldg",
+        "name": "グラントウキョウサウスタワー",
+        "gmlId": "bldg_cbea6733-379b-4490-b641-a1e68192107d",
+        "topY": 209.6,
+        "modelHeight": 209.59,
+        "measuredHeight": 209.5
+      },
+      {
+        "kind": "bldg",
+        "name": "グラントウキョウ  ノースタワー",
+        "gmlId": "bldg_b5b4d7d4-a078-4ca9-8ec3-87e5bdc63cde",
+        "topY": 208.36,
+        "modelHeight": 205.36,
+        "measuredHeight": 202.3
+      },
+      {
+        "kind": "bldg",
+        "name": "新丸の内ビルディング",
+        "gmlId": "bldg_104b6adf-6a30-41d4-9bdc-dc866513368e",
+        "topY": 205.51,
+        "modelHeight": 202.74,
+        "measuredHeight": 199.9
+      },
+      {
+        "kind": "bldg",
+        "name": "JPタワー",
+        "gmlId": "bldg_f0028aa3-e666-4608-8b70-4e981a45d6b5",
+        "topY": 202.69,
+        "modelHeight": 203.95,
+        "measuredHeight": 205.2
+      },
+      {
+        "kind": "bldg",
+        "name": "丸の内ビルディング",
+        "gmlId": "bldg_a98349a1-56c0-4ec4-b22c-abe49301bd04",
+        "topY": 185.03,
+        "modelHeight": 182.6,
+        "measuredHeight": 180.1
+      },
+      {
+        "kind": "bldg",
+        "name": "丸の内トラストタワー本館",
+        "gmlId": "bldg_69c213d2-4c13-46ee-8e04-cee5404a11b1",
+        "topY": 183.21,
+        "modelHeight": 179.88,
+        "measuredHeight": 176.5
+      },
+      {
+        "kind": "bldg",
+        "name": "丸の内パークビルディング",
+        "gmlId": "bldg_66be0e64-a0f8-4974-9b90-cd0da900205d",
+        "topY": 177.27,
+        "modelHeight": 174.71,
+        "measuredHeight": 172.1
+      }
+    ],
+    "gltfExtensions": [
+      "CESIUM_RTC",
+      "EXT_texture_webp",
+      "KHR_draco_mesh_compression"
+    ]
+  },
+  "landmarks": [
+    {
+      "query": "丸の内ビルディング",
+      "found": true,
+      "matchedBy": "name",
+      "gmlId": "bldg_a98349a1-56c0-4ec4-b22c-abe49301bd04",
+      "name": "丸の内ビルディング",
+      "lod": 2,
+      "footprintCells": 7361,
+      "roofY": 185.03,
+      "groundY": 2.91,
+      "gridHeight": 182.12,
+      "measuredHeight": 180.1,
+      "modelHeight": 182.6
+    },
+    {
+      "query": "新丸の内ビルディング",
+      "found": true,
+      "matchedBy": "name",
+      "gmlId": "bldg_104b6adf-6a30-41d4-9bdc-dc866513368e",
+      "name": "新丸の内ビルディング",
+      "lod": 2,
+      "footprintCells": 7443,
+      "roofY": 205.51,
+      "groundY": 2.92,
+      "gridHeight": 202.59,
+      "measuredHeight": 199.9,
+      "modelHeight": 202.74
+    },
+    {
+      "query": "JPタワー",
+      "found": true,
+      "matchedBy": "name",
+      "gmlId": "bldg_f0028aa3-e666-4608-8b70-4e981a45d6b5",
+      "name": "JPタワー",
+      "lod": 2,
+      "footprintCells": 8572,
+      "roofY": 202.69,
+      "groundY": 3.2,
+      "gridHeight": 199.49,
+      "measuredHeight": 205.2,
+      "modelHeight": 203.95
+    },
+    {
+      "query": "東京駅丸の内駅舎（中央部）",
+      "found": true,
+      "matchedBy": "point",
+      "gmlId": "bldg_5c10c04e-d235-4783-85c3-01b691187319",
+      "name": null,
+      "lod": 2,
+      "footprintCells": 3624,
+      "roofY": 27.09,
+      "groundY": 3.5,
+      "gridHeight": 23.59,
+      "measuredHeight": 20.3,
+      "modelHeight": 23.73
+    },
+    {
+      "query": "丸の内パークビルディング",
+      "found": true,
+      "matchedBy": "name",
+      "gmlId": "bldg_66be0e64-a0f8-4974-9b90-cd0da900205d",
+      "name": "丸の内パークビルディング",
+      "lod": 2,
+      "footprintCells": 5869,
+      "roofY": 177.27,
+      "groundY": 2.94,
+      "gridHeight": 174.34,
+      "measuredHeight": 172.1,
+      "modelHeight": 174.71
+    },
+    {
+      "query": "東京ビルTOKIA",
+      "found": true,
+      "matchedBy": "name",
+      "gmlId": "bldg_5d5dd52d-bfdd-4bb6-9cbf-f865fb6946fb",
+      "name": "東京ビルTOKIA",
+      "lod": 2,
+      "footprintCells": 3822,
+      "roofY": 167.29,
+      "groundY": 3,
+      "gridHeight": 164.29,
+      "measuredHeight": 173,
+      "modelHeight": 170.16
+    },
+    {
+      "query": "ノースタワー",
+      "found": true,
+      "matchedBy": "name",
+      "gmlId": "bldg_b5b4d7d4-a078-4ca9-8ec3-87e5bdc63cde",
+      "name": "グラントウキョウ  ノースタワー",
+      "lod": 2,
+      "footprintCells": 6112,
+      "roofY": 208.36,
+      "groundY": 3.41,
+      "gridHeight": 204.96,
+      "measuredHeight": 202.3,
+      "modelHeight": 205.36
+    }
+  ]
+}
