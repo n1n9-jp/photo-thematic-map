@@ -85,14 +85,13 @@ function viewFromQuery(): { x: number; y: number; z: number } | undefined {
   return { x, y, z };
 }
 
-// ?detail=（テクスチャ付きの半径 m）・?outer=（外側の建物を読む半径 m）・?outerError=（外側の許容誤差 px）は読み込み量の調整用
+// ?radius=（建物を読む区を選ぶ半径 m）と ?error=（画面上の許容誤差 px）は読み込み量の調整用
 const stage = await createPlateauStage({
   container,
   center: centerFromQuery(),
   cameraOffset: viewFromQuery(),
-  detailRadiusM: numberParam('detail'),
-  outerRadiusM: numberParam('outer'),
-  outerErrorTarget: numberParam('outerError'),
+  radiusM: numberParam('radius'),
+  errorTarget: numberParam('error'),
 });
 
 /** カメラを場面へ移す。地面の高さは標高タイルから取る。 */
@@ -123,7 +122,7 @@ interface LayerLike {
 
 /** 計測用の統計。修正前のコードでも読めるよう、公開されていない値は有無を確かめて読む。 */
 function stats(s: PlateauStage): Record<string, number | boolean> {
-  const layers = [s.buildings, s.outerBuildings] as unknown as LayerLike[];
+  const layers = s.city.buildingLayers as unknown as LayerLike[];
   const tiles = layers.flatMap((l) => l.tiles ?? []);
   const ground = s.ground as unknown as { tileCount: number; isLoading: boolean; failedTileCount?: number };
   const elevation = s.ground.elevation as unknown as { failedTileCount?: number; size?: number };

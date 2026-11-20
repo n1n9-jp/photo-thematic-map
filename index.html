@@ -2,17 +2,35 @@
 <html lang="ja">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
-    <title>photo-thematic-map</title>
+    <title>東京の放置自転車 ― 実数ぶんを街に置く</title>
     <style>
-      html, body { margin: 0; height: 100%; overflow: hidden; background: #000; }
-      #app { position: fixed; inset: 0; }
+      html, body { margin: 0; background: #bfd9ee; }
       canvas { display: block; }
+      /* 自由操作のボタンを、左下の出典表示に重ならない高さへ上げる */
+      .story-free-toggle { bottom: calc(max(16px, env(safe-area-inset-bottom)) + var(--ptm-attribution-height, 0px)); }
+      .methods {
+        position: relative;
+        z-index: 1;
+        box-sizing: border-box;
+        padding: 48px 16px calc(96px + var(--ptm-attribution-height, 0px));
+        background: #faf8f3;
+        color: #1d1d1b;
+        font-family: 'Hiragino Kaku Gothic ProN', 'Hiragino Sans', 'Yu Gothic UI', 'Meiryo', 'Noto Sans JP', sans-serif;
+      }
+      .methods > * { max-width: 40rem; margin-left: auto; margin-right: auto; }
+      .methods h2 { margin-top: 0; font-size: 1.4rem; }
+      .methods p { line-height: 1.9; }
     </style>
   </head>
   <body>
     <div id="app"></div>
+    <main id="story"></main>
+    <section id="data-and-methods" class="methods" aria-labelledby="data-and-methods-heading">
+      <h2 id="data-and-methods-heading">データと方法</h2>
+      <p>準備中</p>
+    </section>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

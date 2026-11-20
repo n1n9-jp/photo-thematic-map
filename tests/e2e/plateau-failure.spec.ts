@@ -7,7 +7,7 @@ test.setTimeout(180_000);
 const OBSERVE_MS = 12_000;
 
 const CASES = [
-  { name: '航空写真', pattern: /api\.plateauview\.mlit\.go\.jp\/tiles\//, statKey: 'groundFailed', maxRequests: 40 },
+  { name: '航空写真', pattern: /(api|tile)\.plateauview\.mlit\.go\.jp\/tiles\//, statKey: 'groundFailed', maxRequests: 40 },
   { name: '標高', pattern: /cyberjapandata\.gsi\.go\.jp\/xyz\//, statKey: 'elevationFailed', maxRequests: 40 },
   { name: '建物 b3dm', pattern: /\.b3dm(\?|$)/, statKey: 'buildingsFailed', maxRequests: 60 },
 ] as const;

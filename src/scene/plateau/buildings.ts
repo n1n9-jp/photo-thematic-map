@@ -13,23 +13,17 @@
  *   原点から離れた場所では、表示の位置と判定の位置がずれる（高さ方向に 11.5km で約 10m、
  *   水平にも数 m）。そこで判定には、カメラの位置で平らな地図 → 判定の座標へ写したカメラ（cullCamera）を渡す。
  *
+ * 見た目:
+ * - 写真テクスチャは使わない（lod2_no_texture を読む）。タイルのマテリアルは共有の白（面の向きで陰影）に置き換える。
+ *
  * 失敗とメモリ:
  * - タイルの取得は `tileFetch.ts` の方針で再試行し、取得できなかったタイルは空のタイルとして扱う
  *   （読み込み完了の判定を止めず、ライブラリにタイルごとのエラーを出させない）。
  * - LRU キャッシュは層（このクラスの 1 インスタンス）ごとに持ち、上限は `budget.ts` で端末に合わせて選ぶ。
  * - 頂点の位置・索引・_batchid 以外は GPU へ転送した後に解放する。
  */
-import { Box3, Group, Matrix4, MeshBasicMaterial, PerspectiveCamera, Vector3 } from 'three';
-import type {
-  BufferAttribute,
-  Camera,
-  Material,
-  Mesh,
-  MeshStandardMaterial,
-  Object3D,
-  Texture,
-  WebGLRenderer,
-} from 'three';
+import { Box3, Group, Matrix4, MeshLambertMaterial, PerspectiveCamera, Vector3 } from 'three';
+import type { BufferAttribute, Camera, Material, Mesh, MeshStandardMaterial, Object3D, WebGLRenderer } from 'three';
 import { DRACO_GLTF_CONFIG, DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
 import { DEFAULT_LRU_CACHE, LRUCache } from '3d-tiles-renderer/core';
 import { TilesRenderer } from '3d-tiles-renderer/three';
@@ -51,27 +45,41 @@ export interface PlateauBuildingsOptions {
   /** 画面上の許容誤差(px)。小さいほど細かいタイルまで読む。既定 16。 */
   errorTarget?: number;
   /**
-   * 表示する範囲を、ローカル座標の鉛直な円柱の内側か外側に限る。
-   * - inside: 円に掛かるタイルだけを読み、カメラの位置によらず最も細かいタイルまで読む。円の外の部分は描かない。
-   * - outside: 円にすっぽり入るタイルは読まない。円の内の部分は描かない。
-   * 同じ円で inside（テクスチャ付き）と outside（テクスチャなし）の 2 層を重ねると、境界で建物が二重にならない。
+   * 建物に貼るマテリアル。タイルのマテリアル（テクスチャを含む）は捨ててこれに置き換える。
+   * 既定は `whiteBuildingMaterial()`（面の向きで陰影の付く白）。
    */
-  area?: { x: number; z: number; radiusM: number; side: 'inside' | 'outside' };
+  material?: Material;
   /**
-   * テクスチャの長辺の上限(px)。PLATEAU のテクスチャは 1 タイルで最大 4096px 四方あり、そのままでは
-   * GPU メモリを使い切るので、読み込み時に縮小する。既定 1024。
+   * カメラからこの距離(m)より遠いタイルは読まず、描かない（霧で見えなくなる距離に合わせる）。毎フレーム呼ぶ。
+   * 既定は制限なし。区の範囲の矩形は広いことがあり、地平線の近くの粗いタイル（1つ数MB〜10MB）を読んでしまうため。
    */
-  maxTextureSize?: number;
+  maxDistanceM?: () => number;
+  /** Draco のデコーダー。複数の層で共有するときに渡す（渡したものは dispose しない）。既定は層ごとに作る。 */
+  dracoLoader?: DRACOLoader;
   /**
    * この層の LRU キャッシュの上限。既定は plateauMemoryBudget()。
    * 上限に達すると新しいタイルを読まないので、表示に要るタイルが収まる大きさにする。
    */
   cache?: Partial<BuildingCacheBudget>;
+  /**
+   * 複数の層で共有する LRU キャッシュ（区ごとに層を分けるときに、上限を層の数だけ増やさないため）。
+   * 渡したときは `cache` を使わず、上限は渡す側で設定する。
+   */
+  lruCache?: LRUCache;
   /** タイル取得の再試行の方針（回数・間隔）。 */
   fetchPolicy?: TileFetchPolicyOptions;
 }
 
-export type BuildingArea = NonNullable<PlateauBuildingsOptions['area']>;
+let sharedWhite: MeshLambertMaterial | null = null;
+
+/**
+ * 白い建物のマテリアル（全層で共有）。面ごとの法線（flatShading）で陰影を付けるので、タイルに法線が無くても
+ * 屋上と壁、壁どうしの向きの違いが明暗で読み取れる。真っ白に飛ばないよう、色は少しだけ灰色に寄せる。
+ */
+export function whiteBuildingMaterial(): MeshLambertMaterial {
+  sharedWhite ??= new MeshLambertMaterial({ color: 0xe9e7e2, flatShading: true });
+  return sharedWhite;
+}
 
 /** 連続でこのフレーム数だけ読み込み待ちがなければ「読み込み完了」とみなす。 */
 const SETTLE_FRAMES = 10;
@@ -146,7 +154,7 @@ class LocalFramePlugin {
 
   constructor(
     groupMatrix: Matrix4,
-    private readonly area: BuildingArea | undefined,
+    private readonly material: Material,
   ) {
     this.groupInverse = groupMatrix.clone().invert();
   }
@@ -162,32 +170,33 @@ class LocalFramePlugin {
     scene.matrix.premultiply(this.local).premultiply(this.groupInverse);
     scene.matrixAutoUpdate = false;
     scene.updateMatrixWorld(true);
-    const area = this.area;
     scene.traverse((obj) => {
       const mesh = obj as Mesh;
       if (!mesh.isMesh) return;
-      const mat = mesh.material as MeshStandardMaterial;
-      if (!Array.isArray(mesh.material)) {
-        if (mat.map) {
-          // 写真テクスチャは撮影時の陰影を含むので、地面の航空写真と同じく照明を当てずに貼る
-          const basic = new MeshBasicMaterial({ map: mat.map, side: mat.side, vertexColors: mat.vertexColors });
-          basic.name = mat.name;
-          mat.dispose();
-          mesh.material = basic;
-        } else if (mat.isMeshStandardMaterial) {
-          // 屋上の設備など（BuildingInstallation）は metallicFactor 0.67 で、環境マップのない場面では
-          // 金属の反射で暗くなる。金属にしないで、頂点カラーに照明を当てて描く
-          mat.metalness = 0;
-        }
+      // タイルのマテリアル（とテクスチャ）は使わず、共有の白に置き換える。屋上の設備（BuildingInstallation）の
+      // 金属のマテリアルも置き換わるので、環境マップのない場面で暗くなることもない
+      for (const m of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) {
+        (m as MeshStandardMaterial).map?.dispose();
+        m.dispose();
       }
-      if (area) {
-        for (const m of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) clipMaterialToArea(m, area);
-      }
+      mesh.material = this.material;
       for (const [name, attribute] of Object.entries(mesh.geometry.attributes)) {
         if (!KEEP_ATTRIBUTES.has(name)) releaseAfterUpload(attribute as BufferAttribute);
       }
     });
   }
+}
+
+/** 建物の LRU キャッシュを、端末に合わせた上限（plateauMemoryBudget）で作る。 */
+export function createBuildingLruCache(overrides: Partial<BuildingCacheBudget> = {}): LRUCache {
+  const cache = { ...plateauMemoryBudget().buildingCache, ...overrides };
+  const lru = new LRUCache();
+  lru.unloadPriorityCallback = DEFAULT_LRU_CACHE.unloadPriorityCallback;
+  lru.minBytesSize = cache.minBytes;
+  lru.maxBytesSize = Math.max(cache.maxBytes, cache.minBytes);
+  lru.minSize = cache.minTiles;
+  lru.maxSize = Math.max(cache.maxTiles, cache.minTiles);
+  return lru;
 }
 
 /** 取得できなかったタイルの代わりに返す中身（parseTile で空のタイルにする）。 */
@@ -237,115 +246,22 @@ class TileFetchPlugin {
 }
 
 
-interface TileLike {
-  boundingVolume?: { region?: number[] };
-  geometricError?: number;
-  children?: unknown[];
-}
+/** カメラから遠いタイルを読まない・描かないプラグイン（3d-tiles-renderer の calculateTileViewError フック）。 */
+class DistanceLimitPlugin {
+  readonly name = 'PTM_DISTANCE_LIMIT';
+  /** タイルセットの座標系（tiles.group の行列の逆）での判定用カメラの位置。update の前に設定する。 */
+  readonly cameraLocal = new Vector3();
+  maxDistance = Infinity;
 
-/** タイルの範囲（region）をローカル XZ の矩形にする。region でなければ null。 */
-function tileRect(tile: TileLike): { minX: number; maxX: number; minZ: number; maxZ: number } | null {
-  const r = tile.boundingVolume?.region;
-  if (!r || r.length < 4) return null;
-  const [w, s, e, n] = r.map((v) => (v * 180) / Math.PI) as [number, number, number, number];
-  const a = latLonToLocal({ lat: n, lon: w });
-  const b = latLonToLocal({ lat: s, lon: e });
-  return { minX: a.x, maxX: b.x, minZ: a.z, maxZ: b.z };
-}
-
-/** 円柱で読み込むタイルを絞るプラグイン（3d-tiles-renderer の calculateTileViewError フック）。 */
-class AreaPlugin {
-  readonly name = 'PTM_AREA';
-  private readonly cache = new WeakMap<object, { intersects: boolean; contained: boolean }>();
-
-  constructor(private readonly area: BuildingArea) {}
-
-  calculateTileViewError(tile: TileLike, target: { inView: boolean; error: number; distance: number }): boolean {
-    let hit = this.cache.get(tile);
-    if (!hit) {
-      const rect = tileRect(tile);
-      const { x, z, radiusM } = this.area;
-      if (rect) {
-        const nx = Math.max(rect.minX - x, 0, x - rect.maxX);
-        const nz = Math.max(rect.minZ - z, 0, z - rect.maxZ);
-        const fx = Math.max(Math.abs(rect.minX - x), Math.abs(rect.maxX - x));
-        const fz = Math.max(Math.abs(rect.minZ - z), Math.abs(rect.maxZ - z));
-        hit = { intersects: Math.hypot(nx, nz) <= radiusM, contained: Math.hypot(fx, fz) <= radiusM };
-      } else {
-        hit = { intersects: true, contained: false };
-      }
-      this.cache.set(tile, hit);
-    }
-    if (this.area.side === 'inside') {
-      target.inView = hit.intersects;
-      // 円の中は常に最も細かいタイルまで読む
-      target.error = tile.children && tile.children.length > 0 ? Number.MAX_VALUE : 0;
-      target.distance = 0;
-      return true;
-    }
-    if (hit.contained) {
-      target.inView = false;
-      return true;
-    }
-    return false;
-  }
-}
-
-/** 円柱の内側または外側だけを描くようにマテリアルのシェーダーを書き換える。 */
-function clipMaterialToArea(material: Material, area: BuildingArea): void {
-  const sign = area.side === 'inside' ? 1 : -1;
-  material.onBeforeCompile = (shader) => {
-    shader.uniforms.ptmArea = { value: new Vector3(area.x, area.z, area.radiusM) };
-    shader.uniforms.ptmAreaSign = { value: sign };
-    shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', '#include <common>\nvarying vec3 vPtmWorld;')
-      .replace(
-        '#include <project_vertex>',
-        '#include <project_vertex>\nvPtmWorld = (modelMatrix * vec4(transformed, 1.0)).xyz;',
-      );
-    shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', '#include <common>\nvarying vec3 vPtmWorld;\nuniform vec3 ptmArea;\nuniform float ptmAreaSign;')
-      .replace(
-        '#include <clipping_planes_fragment>',
-        '#include <clipping_planes_fragment>\nif (ptmAreaSign * (length(vPtmWorld.xz - ptmArea.xy) - ptmArea.z) > 0.0) discard;',
-      );
-  };
-  material.customProgramCacheKey = () => `ptm-area-${sign}`;
-  material.needsUpdate = true;
-}
-
-/** 大きすぎるテクスチャを読み込み時に縮小するプラグイン。 */
-class TextureDownscalePlugin {
-  readonly name = 'PTM_TEXTURE_DOWNSCALE';
-
-  constructor(private readonly maxSize: number) {}
-
-  async processTileModel(scene: Object3D): Promise<void> {
-    const textures = new Set<Texture>();
-    scene.traverse((obj) => {
-      const mat = (obj as Mesh).material;
-      if (!mat) return;
-      for (const m of Array.isArray(mat) ? mat : [mat]) {
-        const map = (m as MeshStandardMaterial).map;
-        if (map) textures.add(map);
-      }
-    });
-    await Promise.all([...textures].map((t) => this.downscale(t)));
-  }
-
-  private async downscale(texture: Texture): Promise<void> {
-    const image = texture.image as ImageBitmap | HTMLImageElement | undefined;
-    if (!image || !('width' in image)) return;
-    const scale = this.maxSize / Math.max(image.width, image.height);
-    if (scale >= 1) return;
-    const resized = await createImageBitmap(image, {
-      resizeWidth: Math.max(1, Math.round(image.width * scale)),
-      resizeHeight: Math.max(1, Math.round(image.height * scale)),
-      resizeQuality: 'medium',
-    });
-    if ('close' in image) image.close();
-    texture.image = resized;
-    texture.needsUpdate = true;
+  calculateTileViewError(
+    tile: { engineData?: { boundingVolume?: { distanceToPoint(p: Vector3): number } } },
+    target: { inView: boolean },
+  ): boolean {
+    const bv = tile.engineData?.boundingVolume;
+    if (!bv || !Number.isFinite(this.maxDistance)) return false;
+    if (bv.distanceToPoint(this.cameraLocal) <= this.maxDistance) return false;
+    target.inView = false;
+    return true;
   }
 }
 
@@ -364,9 +280,14 @@ export class PlateauBuildings {
   private readonly loading = new Set<TilesRenderer>();
   private readonly camera: Camera;
   private readonly renderer: WebGLRenderer;
-  private readonly draco = createDracoLoader();
+  private readonly draco: DRACOLoader;
+  private readonly ownsDraco: boolean;
+  private readonly material: Material;
+  private readonly maxDistanceM: (() => number) | undefined;
+  private readonly distancePlugins: DistanceLimitPlugin[] = [];
+  private readonly groupInverse = new Matrix4();
   /** この層の tileset が共有する LRU キャッシュ。 */
-  private readonly lruCache = new LRUCache();
+  private readonly lruCache: LRUCache;
   private readonly fetchPlugins: TileFetchPlugin[] = [];
   /** 取得の再試行の方針（この層の tileset で共有）。 */
   readonly fetchPolicy: TileFetchPolicy;
@@ -383,20 +304,17 @@ export class PlateauBuildings {
   constructor(options: PlateauBuildingsOptions) {
     this.camera = options.camera;
     this.renderer = options.renderer;
+    this.ownsDraco = !options.dracoLoader;
+    this.draco = options.dracoLoader ?? createDracoLoader();
+    this.material = options.material ?? whiteBuildingMaterial();
+    this.maxDistanceM = options.maxDistanceM;
     this.group.name = 'plateau-buildings';
     this.ready = new Promise((resolve) => {
       this.resolveReady = resolve;
     });
 
-    const budget = plateauMemoryBudget();
-    const cache = { ...budget.buildingCache, ...options.cache };
-    this.lruCache.unloadPriorityCallback = DEFAULT_LRU_CACHE.unloadPriorityCallback;
-    this.lruCache.minBytesSize = cache.minBytes;
-    this.lruCache.maxBytesSize = Math.max(cache.maxBytes, cache.minBytes);
-    this.lruCache.minSize = cache.minTiles;
-    this.lruCache.maxSize = Math.max(cache.maxTiles, cache.minTiles);
+    this.lruCache = options.lruCache ?? createBuildingLruCache(options.cache);
     this.fetchPolicy = new TileFetchPolicy('建物', options.fetchPolicy);
-    const maxTextureSize = options.maxTextureSize ?? 1024;
 
     // 原点（標高 ORIGIN.alt の地点）での ECEF → ローカルの剛体変換。カリング・LOD 判定に使われる。
     this.groupMatrix = originGroupMatrix();
@@ -414,9 +332,12 @@ export class PlateauBuildings {
       this.fetchPlugins.push(fetchPlugin);
       tiles.registerPlugin(fetchPlugin);
       tiles.registerPlugin(new GLTFExtensionsPlugin({ dracoLoader: this.draco, autoDispose: false }));
-      tiles.registerPlugin(new TextureDownscalePlugin(maxTextureSize));
-      tiles.registerPlugin(new LocalFramePlugin(this.groupMatrix, options.area));
-      if (options.area) tiles.registerPlugin(new AreaPlugin(options.area));
+      tiles.registerPlugin(new LocalFramePlugin(this.groupMatrix, this.material));
+      if (this.maxDistanceM) {
+        const plugin = new DistanceLimitPlugin();
+        this.distancePlugins.push(plugin);
+        tiles.registerPlugin(plugin);
+      }
       tiles.group.matrixAutoUpdate = false;
       tiles.group.matrix.copy(this.groupMatrix);
       tiles.group.matrixWorldNeedsUpdate = true;
@@ -439,6 +360,15 @@ export class PlateauBuildings {
     this.camera.updateMatrixWorld();
     this.group.updateMatrixWorld();
     this.updateCullCamera();
+    if (this.maxDistanceM && this.tiles[0]) {
+      // 判定はライブラリの座標（tiles.group）で行われるので、判定用カメラの位置をその座標へ写す
+      const max = this.maxDistanceM();
+      this.groupInverse.copy(this.tiles[0].group.matrixWorld).invert();
+      for (const p of this.distancePlugins) {
+        p.maxDistance = max;
+        p.cameraLocal.setFromMatrixPosition(this.cullCamera.matrixWorld).applyMatrix4(this.groupInverse);
+      }
+    }
     for (const tiles of this.tiles) {
       tiles.setResolutionFromRenderer(this.cullCamera, this.renderer);
       tiles.update();
@@ -499,7 +429,7 @@ export class PlateauBuildings {
   dispose(): void {
     for (const tiles of this.tiles) tiles.dispose();
     this.tiles.length = 0;
-    this.draco.dispose();
+    if (this.ownsDraco) this.draco.dispose();
     this.group.removeFromParent();
   }
 
