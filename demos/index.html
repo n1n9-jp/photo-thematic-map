@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>確認ページの一覧 | photo-thematic-map</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <style>
+      :root {
+        --bg: #f4f3ef;
+        --ink: #1d1d1b;
+        --muted: #63625d;
+        --line: #d9d7cf;
+        --card: #ffffff;
+        --accent: #b8321f;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #151614;
+          --ink: #ecebe6;
+          --muted: #a3a29b;
+          --line: #33342f;
+          --card: #1f201d;
+          --accent: #ff8a73;
+        }
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--ink);
+        font-family: 'Hiragino Sans', 'Noto Sans JP', 'Yu Gothic', system-ui, sans-serif;
+        line-height: 1.7;
+      }
+      main { max-width: 760px; margin: 0 auto; padding: 32px 16px 64px; }
+      h1 { font-size: 1.5rem; margin: 0 0 4px; }
+      .lead { color: var(--muted); margin: 0 0 28px; font-size: 0.95rem; }
+      h2 { font-size: 1rem; margin: 32px 0 10px; color: var(--muted); font-weight: 600; }
+      ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+      li { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; }
+      li > a.title { color: var(--ink); font-weight: 700; text-decoration: none; display: block; }
+      li > a.title:hover, li > a.title:focus-visible { color: var(--accent); }
+      li p { margin: 4px 0 0; color: var(--muted); font-size: 0.9rem; }
+      .variants { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 6px 8px; }
+      .variants a {
+        font-size: 0.85rem;
+        color: var(--accent);
+        text-decoration: none;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        padding: 2px 12px;
+      }
+      .variants a:hover, .variants a:focus-visible { border-color: var(--accent); }
+      .heavy { color: var(--accent); font-size: 0.8rem; font-weight: 700; margin-left: 6px; }
+      footer { margin-top: 40px; color: var(--muted); font-size: 0.8rem; }
+      footer a { color: inherit; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>確認ページの一覧</h1>
+      <p class="lead">
+        東京都の放置自転車を、実数ぶんの3D自転車として東京の街に置く作品の、開発中の部品です。部品ごとに単独で動きます。本編は準備中です。
+      </p>
+
+      <h2>自転車</h2>
+      <ul>
+        <li>
+          <a class="title" href="./bicycles.html?view=closeup">自転車の3Dモデルと大量描画</a>
+          <p>ママチャリ1台の接写、駐輪の列、山積み。画面の隅に台数と描画の負荷が出ます。</p>
+          <div class="variants">
+            <a href="./bicycles.html?view=closeup">接写</a>
+            <a href="./bicycles.html?view=parked">駐輪の列</a>
+            <a href="./bicycles.html?view=heap&count=30000">山積み 3万台</a>
+            <a href="./bicycles.html?view=heap&count=187262">山積み 18.7万台</a>
+          </div>
+        </li>
+        <li>
+          <a class="title" href="./heap.html?count=30000&view=base">建物の間に積んだ自転車の山</a>
+          <p>合成した街区で、堆積の形に自転車を詰めたもの。</p>
+          <div class="variants">
+            <a href="./heap.html?count=30000&view=base">裾の接写</a>
+            <a href="./heap.html?count=30000&view=overview">全景</a>
+            <a href="./heap.html?count=30000&view=overview&reveal=0.3">3割だけ表示</a>
+            <a href="./heap.html?count=187262&view=overview">18.7万台</a>
+          </div>
+        </li>
+        <li>
+          <a class="title" href="./station.html?count=462&view=street">駅前の路上への配置（462台）</a>
+          <p>合成した街区で、壁際に沿って1台ずつ並べたもの。</p>
+          <div class="variants">
+            <a href="./station.html?count=462&view=street">路上の目線</a>
+            <a href="./station.html?count=462&view=overview">上空から</a>
+            <a href="./station.html?count=462&shown=100&view=overview">先頭の100台</a>
+          </div>
+        </li>
+      </ul>
+
+      <h2>地図と街並み</h2>
+      <ul>
+        <li>
+          <a class="title" href="./stations-overview.html?view=wards&shape=column">駅ごとの放置自転車（柱の地図）</a>
+          <p>都内489か所、合計13,394台。背景の街並みは未合成です。</p>
+          <div class="variants">
+            <a href="./stations-overview.html?view=wards&shape=column">23区・柱</a>
+            <a href="./stations-overview.html?view=wards&shape=cone">23区・山</a>
+            <a href="./stations-overview.html?view=tokyo&shape=column">都全体・柱</a>
+          </div>
+        </li>
+        <li>
+          <a class="title" href="./grid.html?name=shinjuku&pile=1&view=close">実際の街の高さデータに積んだ山の形</a>
+          <p>PLATEAU から作った高さ格子と、堆積計算の結果（自転車を詰める前の形）。</p>
+          <div class="variants">
+            <a href="./grid.html?name=shinjuku&pile=1&view=close">新宿中央公園（15年ぶん）</a>
+            <a href="./grid.html?name=marunouchi&pile=1">東京駅丸の内口（1年ぶん）</a>
+            <a href="./grid.html?name=akihabara">秋葉原</a>
+          </div>
+        </li>
+        <li>
+          <a class="title" href="./plateau.html">PLATEAU の街並み<span class="heavy">読み込み 約90MB</span></a>
+          <p>建物の写真テクスチャを含む旧版です。白い建物の版に作り替え中のため、モバイル回線では開かないでください。</p>
+          <div class="variants">
+            <a href="./plateau.html">東京駅</a>
+            <a href="./plateau.html?lat=35.65803&lon=139.70165">渋谷駅</a>
+          </div>
+        </li>
+      </ul>
+
+      <h2>語りと計算</h2>
+      <ul>
+        <li>
+          <a class="title" href="./story.html">スクロール連動の語り</a>
+          <p>仮の本文で、スクロールに合わせてカメラが引いていきます。背景は仮の地面です。</p>
+        </li>
+        <li>
+          <a class="title" href="./pile.html?volume=80000">堆積計算（合成した街区）</a>
+          <p>体積を指定して、建物の間に積もる山の形を計算します。</p>
+          <div class="variants">
+            <a href="./pile.html?volume=8000">8,000 m³</a>
+            <a href="./pile.html?volume=80000">80,000 m³</a>
+            <a href="./pile.html?volume=500000">500,000 m³</a>
+          </div>
+        </li>
+      </ul>
+
+      <footer>
+        出典：国土交通省 <a href="https://www.mlit.go.jp/plateau/">Project PLATEAU</a>、
+        <a href="https://maps.gsi.go.jp/development/ichiran.html">国土地理院</a>、
+        <a href="https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-N02-2024.html">国土数値情報</a>、
+        <a href="https://www.tomin-anzen.metro.tokyo.lg.jp/kotsu/jitensha/houchi/0000001962">東京都</a>のデータを加工して作成。非公式の作品です。
+      </footer>
+    </main>
+  </body>
+</html>
