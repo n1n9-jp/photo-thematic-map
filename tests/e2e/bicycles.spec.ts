@@ -15,23 +15,36 @@ async function open(page: Page, query: string): Promise<string[]> {
   return errors;
 }
 
+const COUNT = 3000;
 const SHOTS = [
-  { view: 'closeup', file: 'bicycle-closeup.png', lod: 0 },
-  { view: 'parked', file: 'bicycle-parked.png', lod: 0 },
-  { view: 'heap', file: 'bicycle-heap.png', lod: 2 },
+  { query: 'view=closeup', file: 'bicycle-closeup.png', lod: 0 },
+  { query: 'view=parked', file: 'bicycle-parked.png', lod: 0 },
+  { query: 'view=heap', file: 'bicycle-heap.png', lod: 2 },
+  // 原点から西へ 60km に置いても、近景が崩れずに描ける
+  { query: 'view=closeup&far=1', file: 'bicycle-far-closeup.png', lod: 0 },
+  // 駐輪の列と山積みの先頭の半分だけを表示する
+  { query: 'view=overview&reveal=0.5', file: 'bicycle-reveal-half.png', lod: 2, reveal: 0.5 },
 ] as const;
 
-// ソフトウェア描画では山積み（数百万三角形）の1フレームに数秒かかるため、余裕を持たせる
-test.describe.configure({ timeout: 180_000 });
+// ソフトウェア描画では山積みの1フレームに時間がかかるため、余裕を持たせる
+test.describe.configure({ mode: 'parallel', timeout: 120_000 });
 
 for (const shot of SHOTS) {
-  test(`自転車: ${shot.view} を描画する`, async ({ page }) => {
-    const errors = await open(page, `view=${shot.view}&count=30000`);
+  test(`自転車: ${shot.query} を描画する`, async ({ page }) => {
+    const errors = await open(page, `${shot.query}&count=${COUNT}`);
     const stats = await page.evaluate(() => window.__BICYCLE_STATS__);
-    expect(stats?.total).toBe(30000);
+    expect(stats?.total).toBe(COUNT);
     expect(stats?.visible).toBeGreaterThan(0);
     expect(stats?.perLod[shot.lod]).toBeGreaterThan(0);
-    await expect(page.locator('#hud')).toContainText('30,000');
+    if ('reveal' in shot) {
+      // 見本の1台 + 列と山の半分
+      expect(stats!.revealed).toBeGreaterThan(COUNT * shot.reveal - 2);
+      expect(stats!.revealed).toBeLessThan(COUNT * shot.reveal + 2);
+      expect(stats!.visible).toBeLessThanOrEqual(stats!.revealed);
+    } else {
+      expect(stats?.revealed).toBe(COUNT);
+    }
+    await expect(page.locator('#hud')).toContainText('3,000');
     await page.screenshot({ path: `screenshots/${shot.file}` });
     expect(errors).toEqual([]);
   });

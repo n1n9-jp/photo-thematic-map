@@ -20,7 +20,7 @@ import { DRACO_GLTF_CONFIG, DRACOLoader } from 'three/examples/jsm/loaders/DRACO
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { latLonToLocal } from '../../geo/enu';
 import { addAttribution } from './attribution';
-import { PlateauBuildings } from './buildings';
+import { PlateauBuildings, createBuildingLruCache } from './buildings';
 import { loadPlateauCatalog, selectTilesets } from './catalog';
 import type { PlateauCatalog } from './catalog';
 import { PlateauGround } from './ground';
@@ -95,6 +95,8 @@ export class PlateauCity {
   readonly ready: Promise<void>;
   private readonly options: PlateauCityOptions;
   private readonly draco = new DRACOLoader();
+  /** 全区の層で共有する LRU キャッシュ（上限は端末に合わせる）。 */
+  private readonly lruCache = createBuildingLruCache();
   /** tileset の URL（区）ごとの層。 */
   private readonly layers = new Map<string, PlateauBuildings>();
   private current: ResolvedFocus;
@@ -158,6 +160,25 @@ export class PlateauCity {
     return this.quietFrames < SETTLE_FRAMES;
   }
 
+  /** 区ごとの建物の層。 */
+  get buildingLayers(): PlateauBuildings[] {
+    return [...this.layers.values()];
+  }
+
+  /** 取得できなかったタイルの数（建物・航空写真・標高）。 */
+  get failedTileCount(): { buildings: number; ground: number; elevation: number } {
+    let buildings = 0;
+    for (const layer of this.layers.values()) buildings += layer.failedTileCount;
+    return { buildings, ground: this.ground.failedTileCount, elevation: this.ground.failedElevationTileCount };
+  }
+
+  /** 取得できなかったタイルを取り直す（配信サーバーに再び接続できたときなど）。 */
+  retryFailedTiles(): void {
+    for (const layer of this.layers.values()) layer.retryFailedTiles();
+    this.ground.retryFailedTiles();
+    this.quietFrames = 0;
+  }
+
   status(): PlateauCityStatus {
     const visible = this.buildingsVisible;
     return {
@@ -203,6 +224,7 @@ export class PlateauCity {
         camera,
         renderer,
         dracoLoader: this.draco,
+        lruCache: this.lruCache,
         errorTarget: this.options.errorTarget ?? DEFAULT_ERROR_TARGET,
         maxDistanceM: () => buildingsMaxDistanceForHeight(camera.position.y),
       });

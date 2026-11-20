@@ -8,6 +8,8 @@
  */
 import { GSI_DEM10_MAX_ZOOM, GSI_DEM10_URL, GSI_DEM5A_URL, GSI_DEM5A_ZOOM } from '../../config';
 import { decodeGsiDemPixel, latToTileY, lonToTileX } from '../../geo/tiles';
+import { plateauMemoryBudget } from './budget';
+import { TileFetchPolicy, TileUnavailableError } from './tileFetch';
 
 export type DemKind = 'dem5a' | 'dem10';
 
@@ -27,13 +29,24 @@ function demUrl(kind: DemKind, z: number, x: number, y: number): string {
   return tpl.replace('{z}', String(z)).replace('{x}', String(x)).replace('{y}', String(y));
 }
 
-/** 画像（PNG）を取得して RGBA 画素を返す。色空間変換・乗算済みアルファを無効にして値を保つ。 */
+/**
+ * 画像（PNG）を取得して RGBA 画素を返す。色空間変換・乗算済みアルファを無効にして値を保つ。
+ * 存在しない（404 など）なら null。policy を渡すと、その再試行の方針で取得する
+ * （取得不能なら TileUnavailableError を投げる）。
+ */
 export async function fetchImagePixels(
   url: string,
   signal?: AbortSignal,
+  policy?: TileFetchPolicy,
 ): Promise<{ bitmap: ImageBitmap; pixels: Uint8ClampedArray } | null> {
-  const res = await fetch(url, { signal });
-  if (!res.ok) return null;
+  let res: Response | null;
+  if (policy) {
+    res = await policy.fetch(url, { signal });
+  } else {
+    res = await fetch(url, { signal });
+    if (!res.ok) res = null;
+  }
+  if (!res) return null;
   const blob = await res.blob();
   const bitmap = await createImageBitmap(blob, { colorSpaceConversion: 'none', premultiplyAlpha: 'none' });
   const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
@@ -92,29 +105,83 @@ export function hasValidHeights(tile: DemTile, x0: number, y0: number, x1: numbe
   return false;
 }
 
-/** 標高タイルの取得とキャッシュ。 */
+export interface GsiElevationSourceOptions {
+  /** キャッシュする標高タイルの上限（1 枚 256KB）。既定は端末に合わせて plateauMemoryBudget() から選ぶ。 */
+  maxTiles?: number;
+  /** 再試行の方針。既定は「標高」の名前で新しく作る。 */
+  policy?: TileFetchPolicy;
+}
+
+/**
+ * 標高タイルの取得とキャッシュ（LRU）。
+ * 取得できなかったタイル（存在しない・上限まで再試行しても失敗）は null として覚え、要求し直さない。
+ */
 export class GsiElevationSource {
+  /** 再試行の方針（失敗の件数は failedTileCount）。 */
+  readonly policy: TileFetchPolicy;
+  private readonly maxTiles: number;
+  /** 挿入順＝使った順（古い順）。 */
   private readonly cache = new Map<string, Promise<DemTile | null>>();
 
-  /** 標高タイルを取得する（同じタイルは 1 回だけ取得）。存在しなければ null。 */
+  constructor(options: GsiElevationSourceOptions = {}) {
+    this.maxTiles = Math.max(1, options.maxTiles ?? plateauMemoryBudget().elevationMaxTiles);
+    this.policy = options.policy ?? new TileFetchPolicy('標高');
+  }
+
+  /** 取得不能になった標高タイルの件数。 */
+  get failedTileCount(): number {
+    return this.policy.failedCount;
+  }
+
+  /** キャッシュしている標高タイルの数。 */
+  get size(): number {
+    return this.cache.size;
+  }
+
+  /**
+   * 標高タイルを取得する（同じタイルは 1 回だけ取得）。存在しない・取得できなければ null。
+   * キャッシュから外れたタイルも、呼び出し側が持っている参照は使い続けられる。
+   */
   getTile(kind: DemKind, z: number, x: number, y: number): Promise<DemTile | null> {
     const key = `${kind}/${z}/${x}/${y}`;
     let p = this.cache.get(key);
-    if (!p) {
-      p = fetchImagePixels(demUrl(kind, z, x, y)).then((img) => {
+    if (p) {
+      // 使った順に並べ直す
+      this.cache.delete(key);
+      this.cache.set(key, p);
+      return p;
+    }
+    p = fetchImagePixels(demUrl(kind, z, x, y), undefined, this.policy).then(
+      (img) => {
         if (!img) return null;
         img.bitmap.close();
         return { kind, z, x, y, heights: decodeDemPixels(img.pixels) };
-      });
-      p.catch(() => this.cache.delete(key));
-      this.cache.set(key, p);
+      },
+      (err: unknown) => {
+        if (err instanceof TileUnavailableError) return null;
+        // 復号の失敗など。キャッシュに残さず、次に要求されたときに取り直す
+        if (this.cache.get(key) === p) this.cache.delete(key);
+        throw err;
+      },
+    );
+    this.cache.set(key, p);
+    while (this.cache.size > this.maxTiles) {
+      const oldest = this.cache.keys().next().value;
+      if (oldest === undefined) break;
+      this.cache.delete(oldest);
     }
     return p;
+  }
+
+  /** キャッシュを空にする。 */
+  dispose(): void {
+    this.cache.clear();
   }
 
   /**
    * 指定地点の標高(m)。5m メッシュ → 10m メッシュの順に参照し、どちらも無効なら 0。
    * 海上などタイルが存在しない場所ではブラウザが 404 をコンソールに記録する点に注意。
+   * 標高タイルを取得できないとき（配信サーバーに接続できないなど）も 0 を返す。
    */
   async elevationAt(lat: number, lon: number): Promise<number> {
     const z5 = GSI_DEM5A_ZOOM;
