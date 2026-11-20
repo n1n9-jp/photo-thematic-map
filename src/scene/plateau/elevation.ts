@@ -1,0 +1,129 @@
+/**
+ * 国土地理院 標高タイル（PNG）の読み込みと標高の参照。
+ *
+ * - 5m メッシュ（dem5a_png、ズーム15のみ、航空レーザー測量）を主に使い、
+ *   無効値（水面など）や未整備の場所は 10m メッシュ（dem_png、ズーム14まで）で補う。
+ * - 標高は「標高(m)」（東京湾平均海面基準）で、ローカル Y にそのまま対応する（ORIGIN.alt=0 のとき）。
+ * 仕様: https://maps.gsi.go.jp/development/demtile.html
+ */
+import { GSI_DEM10_MAX_ZOOM, GSI_DEM10_URL, GSI_DEM5A_URL, GSI_DEM5A_ZOOM } from '../../config';
+import { decodeGsiDemPixel, latToTileY, lonToTileX } from '../../geo/tiles';
+
+export type DemKind = 'dem5a' | 'dem10';
+
+/** 256×256 の標高格子。無効値は NaN。 */
+export interface DemTile {
+  kind: DemKind;
+  z: number;
+  x: number;
+  y: number;
+  heights: Float32Array;
+}
+
+const SIZE = 256;
+
+function demUrl(kind: DemKind, z: number, x: number, y: number): string {
+  const tpl = kind === 'dem5a' ? GSI_DEM5A_URL : GSI_DEM10_URL;
+  return tpl.replace('{z}', String(z)).replace('{x}', String(x)).replace('{y}', String(y));
+}
+
+/** 画像（PNG）を取得して RGBA 画素を返す。色空間変換・乗算済みアルファを無効にして値を保つ。 */
+export async function fetchImagePixels(
+  url: string,
+  signal?: AbortSignal,
+): Promise<{ bitmap: ImageBitmap; pixels: Uint8ClampedArray } | null> {
+  const res = await fetch(url, { signal });
+  if (!res.ok) return null;
+  const blob = await res.blob();
+  const bitmap = await createImageBitmap(blob, { colorSpaceConversion: 'none', premultiplyAlpha: 'none' });
+  const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  if (!ctx) throw new Error('2D コンテキストを作れません');
+  ctx.drawImage(bitmap, 0, 0);
+  const pixels = ctx.getImageData(0, 0, bitmap.width, bitmap.height).data;
+  return { bitmap, pixels };
+}
+
+/** RGBA 画素列を標高格子に復号する。 */
+export function decodeDemPixels(pixels: ArrayLike<number>): Float32Array {
+  const out = new Float32Array(SIZE * SIZE);
+  for (let i = 0; i < SIZE * SIZE; i++) {
+    const h = decodeGsiDemPixel(pixels[i * 4] ?? 0, pixels[i * 4 + 1] ?? 0, pixels[i * 4 + 2] ?? 0);
+    out[i] = h ?? Number.NaN;
+  }
+  return out;
+}
+
+/**
+ * タイル内の小数画素位置 (px, py)（0〜256）で双線形補間した標高。周囲に無効値があれば NaN。
+ */
+export function sampleDem(tile: DemTile, px: number, py: number): number {
+  const fx = Math.min(Math.max(px - 0.5, 0), SIZE - 1);
+  const fy = Math.min(Math.max(py - 0.5, 0), SIZE - 1);
+  const x0 = Math.floor(fx);
+  const y0 = Math.floor(fy);
+  const x1 = Math.min(x0 + 1, SIZE - 1);
+  const y1 = Math.min(y0 + 1, SIZE - 1);
+  const tx = fx - x0;
+  const ty = fy - y0;
+  const h = tile.heights;
+  const a = h[y0 * SIZE + x0] ?? Number.NaN;
+  const b = h[y0 * SIZE + x1] ?? Number.NaN;
+  const c = h[y1 * SIZE + x0] ?? Number.NaN;
+  const d = h[y1 * SIZE + x1] ?? Number.NaN;
+  return (a * (1 - tx) + b * tx) * (1 - ty) + (c * (1 - tx) + d * tx) * ty;
+}
+
+/** 緯度経度で DEM タイルを参照する。タイル外・無効値なら NaN。 */
+export function sampleDemAt(tile: DemTile, lat: number, lon: number): number {
+  const px = (lonToTileX(lon, tile.z) - tile.x) * SIZE;
+  const py = (latToTileY(lat, tile.z) - tile.y) * SIZE;
+  if (px < 0 || py < 0 || px > SIZE || py > SIZE) return Number.NaN;
+  return sampleDem(tile, px, py);
+}
+
+/** 格子の部分範囲（画素単位の矩形）に有効値が 1 つでもあるか。 */
+export function hasValidHeights(tile: DemTile, x0: number, y0: number, x1: number, y1: number): boolean {
+  for (let y = y0; y < y1; y++) {
+    for (let x = x0; x < x1; x++) {
+      if (!Number.isNaN(tile.heights[y * SIZE + x] ?? Number.NaN)) return true;
+    }
+  }
+  return false;
+}
+
+/** 標高タイルの取得とキャッシュ。 */
+export class GsiElevationSource {
+  private readonly cache = new Map<string, Promise<DemTile | null>>();
+
+  /** 標高タイルを取得する（同じタイルは 1 回だけ取得）。存在しなければ null。 */
+  getTile(kind: DemKind, z: number, x: number, y: number): Promise<DemTile | null> {
+    const key = `${kind}/${z}/${x}/${y}`;
+    let p = this.cache.get(key);
+    if (!p) {
+      p = fetchImagePixels(demUrl(kind, z, x, y)).then((img) => {
+        if (!img) return null;
+        img.bitmap.close();
+        return { kind, z, x, y, heights: decodeDemPixels(img.pixels) };
+      });
+      p.catch(() => this.cache.delete(key));
+      this.cache.set(key, p);
+    }
+    return p;
+  }
+
+  /**
+   * 指定地点の標高(m)。5m メッシュ → 10m メッシュの順に参照し、どちらも無効なら 0。
+   * 海上などタイルが存在しない場所ではブラウザが 404 をコンソールに記録する点に注意。
+   */
+  async elevationAt(lat: number, lon: number): Promise<number> {
+    const z5 = GSI_DEM5A_ZOOM;
+    const t5 = await this.getTile('dem5a', z5, Math.floor(lonToTileX(lon, z5)), Math.floor(latToTileY(lat, z5)));
+    const h5 = t5 ? sampleDemAt(t5, lat, lon) : Number.NaN;
+    if (!Number.isNaN(h5)) return h5;
+    const z10 = GSI_DEM10_MAX_ZOOM;
+    const t10 = await this.getTile('dem10', z10, Math.floor(lonToTileX(lon, z10)), Math.floor(latToTileY(lat, z10)));
+    const h10 = t10 ? sampleDemAt(t10, lat, lon) : Number.NaN;
+    return Number.isNaN(h10) ? 0 : h10;
+  }
+}

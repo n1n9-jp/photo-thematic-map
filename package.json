@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "test": "vitest run",
-    "test:e2e": "npm run build && playwright test"
+    "test:e2e": "npm run build && playwright test",
+    "data:plateau": "node --use-env-proxy scripts/plateau/build-catalog.ts"
   },
   "dependencies": {
     "3d-tiles-renderer": "0.5.4",
