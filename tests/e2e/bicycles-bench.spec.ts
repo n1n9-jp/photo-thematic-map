@@ -37,3 +37,15 @@ test('自転車の大量描画を計測する', async ({ page }) => {
     );
   }
 });
+
+test('187,262台を登録した状態で、表示台数の切り替えと転送量を計測する', async ({ page }) => {
+  const rows: Record<string, unknown>[] = [];
+  for (const q of ['view=heap', 'view=heapdetail', 'view=heap&far=1']) {
+    await page.goto(`/demos/bicycles.html?${q}&count=187262&bench=reveal`);
+    await page.waitForFunction(() => window.__BENCH__ !== undefined, undefined, { timeout: 900_000, polling: 1000 });
+    const r = await page.evaluate(() => window.__BENCH__!);
+    rows.push({ query: q, ...r });
+    console.log(JSON.stringify(rows[rows.length - 1]));
+  }
+  writeFileSync('screenshots/bicycle-reveal-bench.json', JSON.stringify(rows, null, 2));
+});
