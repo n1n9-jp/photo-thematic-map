@@ -16,13 +16,13 @@ import { assetUrl } from '../paths';
 import type { HeightGrid } from '../sim/heightGrid';
 
 /** 出力済みの地区。 */
-export const GRID_NAMES = ['akihabara', 'marunouchi', 'gaien'] as const;
+export const GRID_NAMES = ['akihabara', 'marunouchi', 'shinjuku'] as const;
 export type GridName = (typeof GRID_NAMES)[number];
 
 /** 堆積計算の試し（確認ページの `?pile=1` と `npm run data:grids:pile`）。安息角 35°。 */
 export const GRID_PILE_TRIALS: Partial<Record<GridName, { label: string; lat: number; lon: number; volume: number }>> = {
   marunouchi: { label: '東京駅丸の内駅前広場', lat: 35.6814, lon: 139.766, volume: 66_000 },
-  gaien: { label: '皇居外苑（皇居前広場）の中央', lat: 35.68, lon: 139.758, volume: 2_030_000 },
+  shinjuku: { label: '新宿中央公園', lat: 35.69, lon: 139.6895, volume: 2_030_000 },
 };
 export const GRID_PILE_ANGLE = 35;
 

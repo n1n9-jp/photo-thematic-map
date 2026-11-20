@@ -346,6 +346,8 @@ async function bakeDistrict(d: District, tilesets: TilesetChoice[]): Promise<voi
       gridHeight: round(roof - g, 2),
       measuredHeight: feat.measuredHeight,
       modelHeight: round(feat.topY - feat.baseY, 2),
+      modelTopY: round(feat.topY, 2),
+      published: lm.published ?? null,
     }];
   });
 

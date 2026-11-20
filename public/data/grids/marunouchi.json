@@ -261,7 +261,12 @@
       "groundY": 2.91,
       "gridHeight": 182.12,
       "measuredHeight": 180.1,
-      "modelHeight": 182.6
+      "modelHeight": 182.6,
+      "modelTopY": 185.03,
+      "published": {
+        "height": 179,
+        "source": "https://office.mec.co.jp/en/search/detail/011401/"
+      }
     },
     {
       "query": "新丸の内ビルディング",
@@ -275,7 +280,12 @@
       "groundY": 2.92,
       "gridHeight": 202.59,
       "measuredHeight": 199.9,
-      "modelHeight": 202.74
+      "modelHeight": 202.74,
+      "modelTopY": 205.51,
+      "published": {
+        "height": 197.6,
+        "source": "https://office.mec.co.jp/en/search/detail/011402/"
+      }
     },
     {
       "query": "JPタワー",
@@ -289,7 +299,12 @@
       "groundY": 3.2,
       "gridHeight": 199.49,
       "measuredHeight": 205.2,
-      "modelHeight": 203.95
+      "modelHeight": 203.95,
+      "modelTopY": 202.69,
+      "published": {
+        "height": 200,
+        "source": "https://office.mec.co.jp/en/search/detail/011611/"
+      }
     },
     {
       "query": "東京駅丸の内駅舎（中央部）",
@@ -303,7 +318,9 @@
       "groundY": 3.5,
       "gridHeight": 23.59,
       "measuredHeight": 20.3,
-      "modelHeight": 23.73
+      "modelHeight": 23.73,
+      "modelTopY": 27.09,
+      "published": null
     },
     {
       "query": "丸の内パークビルディング",
@@ -317,7 +334,12 @@
       "groundY": 2.94,
       "gridHeight": 174.34,
       "measuredHeight": 172.1,
-      "modelHeight": 174.71
+      "modelHeight": 174.71,
+      "modelTopY": 177.27,
+      "published": {
+        "height": 170,
+        "source": "https://office.mec.co.jp/en/search/detail/011418/"
+      }
     },
     {
       "query": "東京ビルTOKIA",
@@ -331,7 +353,12 @@
       "groundY": 3,
       "gridHeight": 164.29,
       "measuredHeight": 173,
-      "modelHeight": 170.16
+      "modelHeight": 170.16,
+      "modelTopY": 167.29,
+      "published": {
+        "height": 164,
+        "source": "https://office.mec.co.jp/en/search/detail/011417/"
+      }
     },
     {
       "query": "ノースタワー",
@@ -345,7 +372,12 @@
       "groundY": 3.41,
       "gridHeight": 204.96,
       "measuredHeight": 202.3,
-      "modelHeight": 205.36
+      "modelHeight": 205.36,
+      "modelTopY": 208.36,
+      "published": {
+        "height": 205,
+        "source": "https://www.nikken.co.jp/ja/projects/transit_oriented_development/tokyo_station_yaesu_development_granroof_grantokyo_north_tower.html"
+      }
     }
   ]
 }

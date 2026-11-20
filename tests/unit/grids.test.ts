@@ -102,15 +102,25 @@ describe.each(GRID_NAMES)('格子 %s', (name) => {
       max = Math.max(max, v);
     }
     expect(min).toBeGreaterThan(-6);
-    expect(max).toBeLessThan(40);
+    expect(max).toBeLessThan(60);
   });
 
-  test('既知の建物の格子の高さが PLATEAU の計測高さと 6% 以内', () => {
-    const lms = (meta.landmarks ?? []) as { found: boolean; gridHeight?: number; measuredHeight?: number | null }[];
-    const checked = lms.filter((l) => l.found && typeof l.measuredHeight === 'number' && (l.measuredHeight as number) > 50);
-    expect(checked.length).toBeGreaterThanOrEqual(3);
-    for (const l of checked) {
-      expect(Math.abs((l.gridHeight as number) / (l.measuredHeight as number) - 1)).toBeLessThan(0.06);
+  test('既知の建物: 格子の屋上がモデルの最高点と合い、公表されている高さと 6% 以内', () => {
+    interface Lm {
+      found: boolean;
+      gridHeight?: number;
+      roofY?: number;
+      modelTopY?: number;
+      published?: { height: number } | null;
+    }
+    const lms = ((meta.landmarks ?? []) as Lm[]).filter((l) => l.found);
+    expect(lms.length).toBeGreaterThanOrEqual(3);
+    for (const l of lms) {
+      // セルの中心に掛からない細い塔屋・アンテナのぶん、格子の屋上は低くなりうる。
+      const d = (l.modelTopY as number) - (l.roofY as number);
+      expect(d).toBeGreaterThanOrEqual(-0.05);
+      expect(d).toBeLessThan(8);
+      if (l.published) expect(Math.abs((l.gridHeight as number) / l.published.height - 1)).toBeLessThan(0.06);
     }
   });
 });

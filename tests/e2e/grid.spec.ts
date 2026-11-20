@@ -3,12 +3,14 @@ import { expect, test } from '@playwright/test';
 const CASES = [
   { name: 'akihabara', query: 'name=akihabara', shot: 'grid-akihabara' },
   { name: 'marunouchi', query: 'name=marunouchi', shot: 'grid-marunouchi' },
-  { name: 'gaien', query: 'name=gaien', shot: 'grid-gaien' },
+  { name: 'shinjuku', query: 'name=shinjuku', shot: 'grid-shinjuku' },
   { name: 'akihabara', query: 'name=akihabara&view=top', shot: 'grid-akihabara-top' },
   { name: 'marunouchi', query: 'name=marunouchi&view=top', shot: 'grid-marunouchi-top' },
-  { name: 'gaien', query: 'name=gaien&view=top', shot: 'grid-gaien-top' },
+  { name: 'shinjuku', query: 'name=shinjuku&view=top', shot: 'grid-shinjuku-top' },
   { name: 'marunouchi', query: 'name=marunouchi&pile=1', shot: 'grid-marunouchi-pile' },
-  { name: 'gaien', query: 'name=gaien&pile=1', shot: 'grid-gaien-pile' },
+  { name: 'shinjuku', query: 'name=shinjuku&pile=1', shot: 'grid-shinjuku-pile' },
+  { name: 'shinjuku', query: 'name=shinjuku&pile=1&view=close', shot: 'grid-shinjuku-pile-close' },
+  { name: 'shinjuku', query: 'name=shinjuku&pile=1&view=closetop', shot: 'grid-shinjuku-pile-closetop' },
 ] as const;
 
 for (const c of CASES) {

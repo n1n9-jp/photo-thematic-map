@@ -1,8 +1,8 @@
 /**
  * 確認ページ: 焼き込んだ街の高さ格子（public/data/grids/）を陰影つきの立体で表示する。
  * URL パラメータ:
- * - `name` 地区（akihabara / marunouchi / gaien）。既定 marunouchi。
- * - `view` `top` で真上から、既定は南からの斜め見下ろし。
+ * - `name` 地区（akihabara / marunouchi / shinjuku）。既定 marunouchi。
+ * - `view` `top` で真上から、既定は南からの斜め見下ろし。`pile=1` のとき `close`（南東から山に寄る）・`closetop`（山の真上から寄る）。
  * - `pile` `1` で GRID_PILE_TRIALS の地点に堆積計算の山を積んで表示する（安息角 35°）。
  *
  * 色: 建物=明るい灰、橋梁・高架=青、地面=灰緑、標高データなし（主に水面: お濠・川）=水色。
@@ -58,7 +58,8 @@ declare global {
 const params = new URLSearchParams(location.search);
 const nameParam = params.get('name') ?? 'marunouchi';
 const name: GridName = (GRID_NAMES as readonly string[]).includes(nameParam) ? (nameParam as GridName) : 'marunouchi';
-const topView = params.get('view') === 'top';
+const view = params.get('view');
+const topView = view === 'top';
 const withPile = params.get('pile') === '1';
 
 /** 描画する頂点の一辺の最大数（大きな格子は間引く。間引くときはブロック内の最大を採る）。 */
@@ -173,6 +174,7 @@ async function main(): Promise<void> {
   ctx.scene.add(createCityMesh(g));
 
   let pileText = '';
+  let pileFocus: { x: number; z: number; y: number; r: number } | null = null;
   const trial = GRID_PILE_TRIALS[name];
   if (withPile && trial) {
     const p = latLonToLocal({ lat: trial.lat, lon: trial.lon });
@@ -184,6 +186,14 @@ async function main(): Promise<void> {
     const pile = r.piles[0];
     if (!pile) throw new Error('山の結果がありません');
     ctx.scene.add(createPileMesh(g.surface, r.thickness).mesh);
+    let maxR = 0;
+    for (let i = 0; i < r.thickness.length; i++) {
+      if (!((r.thickness[i] as number) > 0)) continue;
+      const x = originX + ((i % W) + 0.5) * cs;
+      const z = originZ + (Math.floor(i / W) + 0.5) * cs;
+      maxR = Math.max(maxR, Math.hypot(x - open.x, z - open.z));
+    }
+    pileFocus = { x: open.x, z: open.z, y: g.surface.data[open.row * W + open.col] as number, r: maxR };
     window.__GRID__.pile = {
       volume: trial.volume,
       totalVolume: r.totalVolume,
@@ -206,9 +216,16 @@ async function main(): Promise<void> {
   const cz = originZ + (H * cs) / 2;
   const gy = median(g.ground.data);
   const size = Math.max(W, H) * cs;
-  ctx.controls.target.set(cx, gy, cz);
-  if (topView) ctx.camera.position.set(cx, gy + size * 1.08, cz + 0.01);
-  else ctx.camera.position.set(cx, gy + size * 0.62, cz + size * 0.82);
+  if (pileFocus && (view === 'close' || view === 'closetop')) {
+    const d = Math.max(150, pileFocus.r * 2.6);
+    ctx.controls.target.set(pileFocus.x, pileFocus.y, pileFocus.z);
+    if (view === 'closetop') ctx.camera.position.set(pileFocus.x, pileFocus.y + d * 1.3, pileFocus.z + 0.01);
+    else ctx.camera.position.set(pileFocus.x + d * 0.75, pileFocus.y + d * 0.6, pileFocus.z + d * 0.75);
+  } else {
+    ctx.controls.target.set(cx, gy, cz);
+    if (topView) ctx.camera.position.set(cx, gy + size * 1.08, cz + 0.01);
+    else ctx.camera.position.set(cx, gy + size * 0.62, cz + size * 0.82);
+  }
   ctx.controls.update();
 
   const info = document.getElementById('info');

@@ -287,7 +287,9 @@
       "groundY": 3.3,
       "gridHeight": 106.52,
       "measuredHeight": 103.3,
-      "modelHeight": 106.53
+      "modelHeight": 106.53,
+      "modelTopY": 109.82,
+      "published": null
     },
     {
       "query": "秋葉原ダイビル",
@@ -301,7 +303,9 @@
       "groundY": 3.42,
       "gridHeight": 147.46,
       "measuredHeight": 145.5,
-      "modelHeight": 148.14
+      "modelHeight": 148.14,
+      "modelTopY": 150.88,
+      "published": null
     },
     {
       "query": "富士ソフト秋葉原ビル",
@@ -315,7 +319,9 @@
       "groundY": 3.24,
       "gridHeight": 147.96,
       "measuredHeight": 145.2,
-      "modelHeight": 148.18
+      "modelHeight": 148.18,
+      "modelTopY": 151.19,
+      "published": null
     }
   ]
 }
