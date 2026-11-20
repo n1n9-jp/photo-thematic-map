@@ -1,17 +1,9 @@
 /**
  * 開発・確認用の合成街区: 格子状の道路と、高さの違う箱型の建物。
  */
-import { createHeightGrid, type HeightGrid } from './heightGrid';
+import { createHeightGrid, type BoxBuilding, type HeightGrid } from './heightGrid';
 
-/** 箱型の建物（ローカル座標, m）。x0<x1, z0<z1。 */
-export interface BoxBuilding {
-  x0: number;
-  z0: number;
-  x1: number;
-  z1: number;
-  /** 屋上の高さ（ローカル Y, m）。 */
-  top: number;
-}
+export type { BoxBuilding };
 
 export interface SyntheticCityOptions {
   /** 格子の一辺のセル数（既定 320）。 */

@@ -1,6 +1,7 @@
 /**
  * 堆積の厚さ格子から山の表面のメッシュを作る（描画用）。
  * 頂点はセルの中心（HeightGrid の座標規約に従う）。
+ * 地表の欠損（NaN）のセルは堆積がない扱いで、隣の山の表面の高さ（なければ 0）に置く。
  */
 import {
   BoxGeometry,
@@ -12,8 +13,7 @@ import {
   Mesh,
   MeshStandardMaterial,
 } from 'three';
-import type { HeightGrid } from '../sim/heightGrid';
-import type { BoxBuilding } from '../sim/syntheticCity';
+import type { BoxBuilding, HeightGrid } from '../sim/heightGrid';
 
 /** 堆積のない頂点を地表より少し下げる量(m)。地面とのちらつきを防ぐ。 */
 const SINK = 0.05;
@@ -87,7 +87,8 @@ export function createPileMesh(grid: HeightGrid, extent: Float32Array, color = 0
               if ((thickness[n] as number) > 0) nb = Math.max(nb, (g[n] as number) + (thickness[n] as number));
             }
           }
-          y = nb === -Infinity ? -SINK : Math.min(gk, nb) - SINK;
+          if (nb === -Infinity) y = -SINK;
+          else y = (Number.isNaN(gk) ? nb : Math.min(gk, nb)) - SINK;
         }
         positions[k * 3 + 1] = y;
       }
