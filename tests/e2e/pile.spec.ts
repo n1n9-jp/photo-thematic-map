@@ -21,6 +21,9 @@ for (const c of CASES) {
     const pile = await page.evaluate(() => window.__PILE__);
     expect(pile).toBeDefined();
     expect(Math.abs(pile!.totalVolume / c.volume - 1)).toBeLessThan(0.005);
+    // 厚さの合計から求めた体積とも一致する（Float32 の丸めぶんを許容）。
+    expect(Math.abs(pile!.thicknessVolume / pile!.totalVolume - 1)).toBeLessThan(1e-4);
+    expect(typeof pile!.reachedEdge).toBe('boolean');
 
     await page.waitForTimeout(500);
     await page.screenshot({ path: `screenshots/pile-${c.name}.png` });

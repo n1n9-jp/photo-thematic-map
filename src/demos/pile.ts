@@ -14,7 +14,16 @@ declare global {
   interface Window {
     __APP_READY__?: boolean;
     /** E2E・手動確認用の結果。 */
-    __PILE__?: { volume: number; totalVolume: number; apexY: number[]; ms: number };
+    __PILE__?: {
+      volume: number;
+      totalVolume: number;
+      /** 厚さの合計 × セルの面積から求めた体積(m³)。 */
+      thicknessVolume: number;
+      apexY: number[];
+      reachedEdge: boolean;
+      warnings: number;
+      ms: number;
+    };
   }
 }
 
@@ -50,10 +59,17 @@ if (tParam === null) {
   thickness = growth.thicknessAt(tParam);
 }
 const ms = performance.now() - t0;
+let thicknessSum = 0;
+// totalVolume と照合するため、最終状態の厚さで求める。
+for (let i = 0; i < result.thickness.length; i++) thicknessSum += result.thickness[i] as number;
+const thicknessVolume = thicknessSum * city.grid.cellSize * city.grid.cellSize;
 window.__PILE__ = {
   volume,
   totalVolume: result.totalVolume,
+  thicknessVolume,
   apexY: result.piles.map((p) => p.apexY),
+  reachedEdge: result.reachedEdge,
+  warnings: result.warnings.length,
   ms,
 };
 
@@ -74,9 +90,12 @@ if (info) {
   const apex = Math.max(0, ...result.piles.map((p) => (Number.isFinite(p.apexY) ? p.apexY : 0)));
   info.textContent =
     `体積 ${Math.round(volume).toLocaleString()} m³ / 積んだ体積 ${Math.round(result.totalVolume).toLocaleString()} m³` +
+    `（厚さの合計 ${Math.round(thicknessVolume).toLocaleString()} m³）` +
     ` / 頂上 ${apex.toFixed(1)} m / 安息角 ${angle}°` +
     (tParam === null ? '' : ` / 進捗 t=${tParam}`) +
-    ` / 計算 ${ms.toFixed(0)} ms`;
+    ` / 計算 ${ms.toFixed(0)} ms` +
+    (result.reachedEdge ? ' / ⚠ 格子の端に達しています（山が切れています）' : '') +
+    (result.warnings.length > 0 ? ` / 警告 ${result.warnings.map((w) => `${w.kind}#${w.source}`).join(', ')}` : '');
 }
 
 ctx.renderer.setAnimationLoop(ctx.render);

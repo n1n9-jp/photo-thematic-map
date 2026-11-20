@@ -11,15 +11,27 @@
  * 近傍は 16 方向（上下左右・斜め・桂馬）を使い、格子距離の異方性を小さくしている。
  *
  * 体積は A_i を調整して合わせる。各セルを P を与えた投入点（owner）に割り当て、
- * 投入点ごとの体積が目標に近づくよう A_i を更新し（体積 ∝ 高さ³ を使った反復）、
- * 最後に全体の高さを共通倍率で補正して総体積を合わせる。
+ * 堆積のつながった山（連結成分）ごとに、属する投入点の地表からの高さに共通の倍率を掛け、
+ * その山の体積が属する投入点の目標の合計になるよう倍率を解く（括弧付きの割線法）。
+ * 独立した山はそれぞれ別の倍率を持つので、互いの体積に影響しない。
+ * 山が屋上を越えるところで体積は倍率について不連続に跳ぶので、反復で合わない山は
+ * 足りない状態と多すぎる状態の合成（blend）で体積を合わせる。
  *
  * 性質:
  * - 隣接する（ともに堆積のある）セル間の表面の差は tanθ × セル中心間距離 以下
  *   （上下左右・斜めとも Dijkstra の辺として直接つながっているので離散的に厳密）。
  * - 複数の投入点の山は max で合成されるので、接すれば一つの連続した表面になる。
+ * - 格子の外と欠損（NaN）のセルは通れず、積もらない。
+ *
+ * 既知の制約:
+ * - 屋上を越えるときの合成（blend）は、屋上に積もらないまま建物の向こう側や中庭に
+ *   堆積ができる近似である（多すぎる状態の表面を一様に下げて足りない状態と max を取るため）。
+ * - 極小の山（円錐の半径が数セル未満）は形も体積の配分も格子の離散化に支配される。
+ *   台数から直接配置する用途（数台〜数百台）には使わないこと。
+ * - 格子の外は通れないので、山が格子の端に達すると切れたぶん頂上が上がる。
+ *   結果の `reachedEdge` で検出し、格子を広げて計算し直すこと。
  */
-import type { HeightGrid } from './heightGrid';
+import { localRelief, type HeightGrid } from './heightGrid';
 
 /** 投入点。座標は three.js ローカル座標（X=東, Z=南, m）。 */
 export interface PileSource {
@@ -41,6 +53,21 @@ export interface PileStats {
   volume: number;
   /** 堆積のあるセルの連結成分の番号。同じ番号の投入点は一つの山としてつながっている。-1 は堆積なし。 */
   group: number;
+  /** この投入点の属する山（連結成分）が格子の端のセルに達したか。達していれば山は格子で切れている。 */
+  reachedEdge: boolean;
+}
+
+/**
+ * 計算の挙動は変えずに知らせる注意。
+ * - `elevatedSource`: 投入点のセルの地表が、周囲の最低の地表より `elevatedThreshold` 以上高い
+ *   （建物の上や急斜面に投入している可能性）。`value` はその高さの差(m)。
+ * - `negativeApex`: 投入点の地表からの頂上の高さ（apexHeight）が負。`value` は apexHeight(m)。
+ */
+export interface PileWarning {
+  kind: 'elevatedSource' | 'negativeApex';
+  /** 対象の投入点の番号（入力の順）。 */
+  source: number;
+  value: number;
 }
 
 export interface PileResult {
@@ -48,19 +75,27 @@ export interface PileResult {
   thickness: Float32Array;
   /** 投入点ごとの結果（入力と同じ順）。 */
   piles: PileStats[];
-  /** 実際に積んだ体積の合計(m³)。 */
+  /** 実際に積んだ体積の合計(m³)。厚さの合計 × セルの面積に等しい。 */
   totalVolume: number;
   /** 各投入点の頂上の高さ（ローカル Y, m）。成長計算に使う。 */
   apex: Float64Array;
+  /** 堆積が格子の端のセルに達したか（どれかの山が格子で切れている）。 */
+  reachedEdge: boolean;
+  /** 注意（{@link PileWarning}）。 */
+  warnings: PileWarning[];
 }
 
 export interface DepositOptions {
-  /** 投入点ごとの体積の相対誤差の目標（既定 0.002）。 */
+  /** 山ごとの体積の相対誤差の目標（既定 0.002）。 */
   perPileTolerance?: number;
-  /** 総体積の相対誤差の目標（既定 0.001）。 */
+  /** 総体積の相対誤差の目標（成長の段階の計算に使う。既定 0.001）。 */
   totalTolerance?: number;
-  /** 山ごとの体積の調整の反復回数の上限（既定 4）。 */
+  /** 山ごとの体積の調整で表面を計算する回数の上限（既定 6）。 */
   maxIterations?: number;
+  /** `elevatedSource` の警告を出す高さの差(m)（既定 3）。 */
+  elevatedThreshold?: number;
+  /** `elevatedSource` の判定で周囲とみなす半径（セル数, 既定 4）。 */
+  elevatedRadiusCells?: number;
 }
 
 /** 個数から山のかさ体積(m³)を求める。count × unitVolume ÷ packingFraction。 */
@@ -205,21 +240,37 @@ class Flood {
   readonly labels: Int32Array;
   private readonly stack: Int32Array;
   private readonly aux: Float64Array;
+  private readonly aux2: Float64Array;
   touchedCount = 0;
   private readonly heap = new MaxHeap();
   private readonly offsets: Int32Array;
+  /** 地表。欠損（NaN）は +Infinity に置き換えてある（通れず、積もらない）。 */
+  readonly g: Float32Array;
 
   constructor(
     readonly grid: HeightGrid,
     readonly tanTheta: number,
   ) {
     this.n = grid.width * grid.height;
+    let hasNaN = false;
+    for (let i = 0; i < this.n; i++) {
+      if (Number.isNaN(grid.data[i] as number)) {
+        hasNaN = true;
+        break;
+      }
+    }
+    if (hasNaN) {
+      this.g = Float32Array.from(grid.data, (v) => (Number.isNaN(v) ? Infinity : v));
+    } else {
+      this.g = grid.data;
+    }
     this.level = new Float64Array(this.n).fill(-Infinity);
     this.owner = new Int32Array(this.n).fill(-1);
     this.done = new Uint8Array(this.n);
     this.touched = new Int32Array(this.n);
     this.labels = new Int32Array(this.n).fill(-1);
     this.aux = new Float64Array(this.n).fill(-Infinity);
+    this.aux2 = new Float64Array(this.n).fill(-Infinity);
     this.stack = new Int32Array(this.n);
     this.offsets = new Int32Array(STEPS.length * 3);
     STEPS.forEach((s, k) => {
@@ -252,8 +303,7 @@ class Flood {
   /** 頂上の高さ apex[i] から表面 level を求める。apex が -Infinity の投入点は無視する。 */
   run(sources: SourceCell[], apex: Float64Array): void {
     this.reset();
-    const { grid, tanTheta, level, owner, done, offsets } = this;
-    const g = grid.data;
+    const { grid, tanTheta, level, owner, done, offsets, g } = this;
     const w = grid.width;
     const h = grid.height;
     const cs = grid.cellSize;
@@ -334,8 +384,7 @@ class Flood {
    * 戻り値は成分ごとの体積(m³)。
    */
   label(): { volume: Float64Array } {
-    const { labels, touched, level, grid } = this;
-    const g = grid.data;
+    const { labels, touched, level, grid, g } = this;
     const w = grid.width;
     const h = grid.height;
     const area = grid.cellSize * grid.cellSize;
@@ -410,20 +459,30 @@ class Flood {
 
   /**
    * 二つの状態 lo（体積が足りない）と hi（体積が多すぎる）を
-   * 表面 = max(lo の表面, hi の表面 − δ) で合成し、総体積が target になる δ を二分法で求めて
-   * 現在の状態にする。hi の表面を一様に下げても勾配は変わらず、max を取っても
+   * 表面 = max(lo の表面, hi の表面 − δ) で合成し、体積が target になる δ を二分法で求めて
+   * 合成した状態（堆積のあるセルだけ）と、その体積を返す。現在の状態は変えない。
+   * hi の表面を一様に下げても勾配は変わらず、max を取っても
    * 隣接セル間の勾配は tanθ を超えない（屋上を越えた先の山を部分的に満たすのに相当）。
    */
-  blend(lo: FloodState, hi: FloodState, target: number): number {
-    const g = this.grid.data;
+  blendStates(lo: FloodState, hi: FloodState, target: number): { state: FloodState; volume: number } {
+    const g = this.g;
     const area = this.grid.cellSize * this.grid.cellSize;
-    const aux = this.aux;
+    const { aux, aux2 } = this;
     for (let k = 0; k < lo.cells.length; k++) aux[lo.cells[k] as number] = lo.level[k] as number;
+    for (let k = 0; k < hi.cells.length; k++) aux2[hi.cells[k] as number] = hi.level[k] as number;
+    // 対象のセル: hi のセルと、hi にない lo のセル。
+    const cellList: number[] = [];
+    for (let k = 0; k < hi.cells.length; k++) cellList.push(hi.cells[k] as number);
+    for (let k = 0; k < lo.cells.length; k++) {
+      const c = lo.cells[k] as number;
+      if ((aux2[c] as number) === -Infinity) cellList.push(c);
+    }
+    const cells = Int32Array.from(cellList);
     const volumeAt = (delta: number): number => {
       let v = 0;
-      for (let k = 0; k < hi.cells.length; k++) {
-        const c = hi.cells[k] as number;
-        const s = Math.max(aux[c] as number, (hi.level[k] as number) - delta);
+      for (let k = 0; k < cells.length; k++) {
+        const c = cells[k] as number;
+        const s = Math.max(aux[c] as number, (aux2[c] as number) - delta);
         const t = s - (g[c] as number);
         if (t > 0) v += t;
       }
@@ -439,31 +498,77 @@ class Flood {
       if (dHi - dLo < 1e-6) break;
     }
     const delta = (dLo + dHi) / 2;
+    // aux を戻す前に体積を求める。
+    const volume = volumeAt(delta);
 
-    this.reset();
     const loOwner = new Map<number, number>();
     for (let k = 0; k < lo.cells.length; k++) loOwner.set(lo.cells[k] as number, lo.owner[k] as number);
-    for (let k = 0; k < hi.cells.length; k++) {
-      const c = hi.cells[k] as number;
+    const hiOwner = new Map<number, number>();
+    for (let k = 0; k < hi.cells.length; k++) hiOwner.set(hi.cells[k] as number, hi.owner[k] as number);
+    const outLevel = new Float64Array(cells.length);
+    const outOwner = new Int32Array(cells.length);
+    for (let k = 0; k < cells.length; k++) {
+      const c = cells[k] as number;
       const a = aux[c] as number;
-      const b = (hi.level[k] as number) - delta;
-      this.touched[this.touchedCount++] = c;
+      const b = (aux2[c] as number) - delta;
       if (a >= b) {
-        this.level[c] = a;
-        this.owner[c] = loOwner.get(c) ?? (hi.owner[k] as number);
+        outLevel[k] = a;
+        outOwner[k] = loOwner.get(c) ?? (hiOwner.get(c) as number);
       } else {
-        this.level[c] = b;
-        this.owner[c] = hi.owner[k] as number;
+        outLevel[k] = b;
+        outOwner[k] = hiOwner.get(c) as number;
       }
     }
     for (let k = 0; k < lo.cells.length; k++) aux[lo.cells[k] as number] = -Infinity;
-    return volumeAt(delta);
+    for (let k = 0; k < hi.cells.length; k++) aux2[hi.cells[k] as number] = -Infinity;
+    return { state: { cells, level: outLevel, owner: outOwner }, volume };
+  }
+
+  /** lo と hi を合成した状態（{@link blendStates}）を現在の状態にし、その体積を返す。 */
+  blend(lo: FloodState, hi: FloodState, target: number): number {
+    const { state, volume } = this.blendStates(lo, hi, target);
+    this.reset();
+    this.overlay(state);
+    return volume;
+  }
+
+  /** 状態 state を現在の状態に max で重ねる。 */
+  overlay(state: FloodState): void {
+    const { level, owner, touched } = this;
+    for (let k = 0; k < state.cells.length; k++) {
+      const c = state.cells[k] as number;
+      const v = state.level[k] as number;
+      if ((level[c] as number) === -Infinity) touched[this.touchedCount++] = c;
+      if (v > (level[c] as number)) {
+        level[c] = v;
+        owner[c] = state.owner[k] as number;
+      }
+    }
+  }
+
+  /** 堆積のあるセルのうち、受け持ちの投入点が pick を満たすものを状態として取り出す。 */
+  extract(pick: (owner: number) => boolean): FloodState {
+    const g = this.g;
+    const cells: number[] = [];
+    const lv: number[] = [];
+    const ow: number[] = [];
+    for (let k = 0; k < this.touchedCount; k++) {
+      const c = this.touched[k] as number;
+      const l = this.level[c] as number;
+      if (!(l > (g[c] as number))) continue;
+      const o = this.owner[c] as number;
+      if (!pick(o)) continue;
+      cells.push(c);
+      lv.push(l);
+      ow.push(o);
+    }
+    return { cells: Int32Array.from(cells), level: Float64Array.from(lv), owner: Int32Array.from(ow) };
   }
 
   /** 投入点ごとの体積（受け持ちセルの厚さ × 面積）を out に書く。 */
   volumes(out: Float64Array): number {
     out.fill(0);
-    const g = this.grid.data;
+    const g = this.g;
     const area = this.grid.cellSize * this.grid.cellSize;
     let total = 0;
     for (let k = 0; k < this.touchedCount; k++) {
@@ -481,7 +586,7 @@ class Flood {
 
   /** 現在の表面から厚さを書き出す（Float32）。 */
   writeThickness(out: Float32Array): void {
-    const g = this.grid.data;
+    const g = this.g;
     for (let k = 0; k < this.touchedCount; k++) {
       const c = this.touched[k] as number;
       const t = (this.level[c] as number) - (g[c] as number);
@@ -490,14 +595,17 @@ class Flood {
   }
 }
 
+/** 投入点をセルに対応づける。格子の外、または欠損（NaN）のセルにある投入点は例外。 */
 function prepareSources(grid: HeightGrid, sources: readonly PileSource[]): SourceCell[] {
-  return sources.map((s) => {
+  return sources.map((s, i) => {
     const u = (s.x - grid.originX) / grid.cellSize;
     const v = (s.z - grid.originZ) / grid.cellSize;
     const col = Math.floor(u);
     const row = Math.floor(v);
     const inside = col >= 0 && row >= 0 && col < grid.width && row < grid.height;
-    const base = inside ? (grid.data[row * grid.width + col] as number) : 0;
+    if (!inside) throw new RangeError(`投入点 ${i} (x=${s.x}, z=${s.z}) が格子の外にあります`);
+    const base = grid.data[row * grid.width + col] as number;
+    if (Number.isNaN(base)) throw new RangeError(`投入点 ${i} (x=${s.x}, z=${s.z}) が欠損のセルにあります`);
     return { u, v, base, inside };
   });
 }
@@ -568,12 +676,36 @@ function solveScale(
   return { lambda: hi, total };
 }
 
+/** 山（連結成分）ごとの体積合わせの状態。 */
+interface GroupSolve {
+  /** 属する投入点（目標の体積が正のもの）。 */
+  members: number[];
+  /** 目標の体積の合計。 */
+  target: number;
+  /** 倍率 1 のときの投入点の地表からの高さ。 */
+  ref: Float64Array;
+  /** 現在の倍率と、括弧（lo: 体積が足りない, hi: 多すぎる）。 */
+  m: number;
+  lo: number;
+  hi: number;
+  loState: FloodState | null;
+  hiState: FloodState | null;
+  prevM: number;
+  prevV: number;
+  ok: boolean;
+}
+
 /**
  * 地表の高さ格子に、複数の投入点から山を積む。
  *
- * @param ground 地表（建物の屋上を含む）の高さ格子
- * @param sources 投入点（位置と体積）。格子の外の投入点は体積 0 として扱う。
+ * @param ground 地表（建物の屋上を含む）の高さ格子。欠損（NaN）のセルは通れず、積もらない。
+ * @param sources 投入点（位置と体積）。格子の外、または欠損のセルにある投入点は例外（RangeError）。
  * @param angleDeg 安息角(度)。0 より大きく 90 未満。
+ *
+ * 体積は山（つながった堆積）ごとに合わせる。一つの山に属する投入点の頂上の高さには
+ * 共通の倍率を掛けるので、つながった山の中での投入点ごとの体積の配分は目標と一致しない
+ * ことがある（山全体の体積は目標の合計に合う）。
+ * 既知の制約はモジュールの説明を参照（屋上を越えるときの近似、極小の山、格子の端）。
  */
 export function depositPiles(
   ground: HeightGrid,
@@ -583,19 +715,18 @@ export function depositPiles(
 ): PileResult {
   if (!(angleDeg > 0 && angleDeg < 90)) throw new RangeError('angleDeg は 0〜90 度の範囲で指定してください');
   const perTol = options.perPileTolerance ?? 0.002;
-  const totalTol = options.totalTolerance ?? 0.001;
-  const maxIter = options.maxIterations ?? 4;
+  const maxIter = Math.max(1, options.maxIterations ?? 6);
+  const regroupIterations = 2;
+  const BLEND_BRACKET = 0.05;
   const tanTheta = Math.tan((angleDeg * Math.PI) / 180);
-  const flood = new Flood(ground, tanTheta);
   const src = prepareSources(ground, sources);
+  const flood = new Flood(ground, tanTheta);
   const n = sources.length;
 
   const targets = new Float64Array(n);
-  let targetTotal = 0;
-  src.forEach((s, i) => {
+  src.forEach((_s, i) => {
     const v = (sources[i] as PileSource).volume;
-    targets[i] = s.inside && v > 0 ? v : 0;
-    targetTotal += targets[i] as number;
+    targets[i] = v > 0 ? v : 0;
   });
 
   // 地表からの頂上の高さ。初期値は平地の円錐。
@@ -604,59 +735,154 @@ export function depositPiles(
 
   const owned = new Float64Array(n);
   const apex = new Float64Array(n);
-  // 山ごと（連結成分ごと）に体積を合わせる。つながった山は投入点の目標の合計に合わせ、
-  // その成分に属する投入点の高さを共通の比で伸縮する（体積 ∝ 高さ³）。
-  let total = 0;
-  let converged = false;
-  const srcGroup = new Int32Array(n);
-  for (let it = 0; it < maxIter; it++) {
+  const setApex = (): void => {
     for (let i = 0; i < n; i++) {
       const hgt = heights[i] as number;
       apex[i] = hgt > 0 ? (src[i] as SourceCell).base + hgt : -Infinity;
     }
+  };
+
+  // 山ごとに、属する投入点の高さの共通の倍率 m を解く。山の顔ぶれが変わったら（合流・分離したら）
+  // その時点の高さを基準に解き直す。
+  let groups = new Map<string, GroupSolve>();
+  for (let it = 0; it < maxIter; it++) {
+    setApex();
     flood.run(src, apex);
-    const groups = flood.label();
-    const gVol = groups.volume;
-    const gTarget = new Float64Array(gVol.length + n);
-    total = 0;
-    for (let k = 0; k < gVol.length; k++) total += gVol[k] as number;
-    for (let i = 0; i < n; i++) {
-      const g = flood.groupAt(src[i] as SourceCell);
-      // 堆積のない投入点は専用の番号（gVol.length + i, 体積 0）。
-      const id = g >= 0 ? g : gVol.length + i;
-      srcGroup[i] = id;
-      gTarget[id] = (gTarget[id] as number) + (targets[i] as number);
+    flood.label();
+    flood.volumes(owned);
+
+    // 連結成分ごとに投入点をまとめる。山の顔ぶれは最初の数回だけ決め直し、その後は固定する
+    // （倍率を変えるたびに山が合流・分離して解き直しになるのを避ける）。固定した後の山の体積は、
+    // 属する投入点が受け持つセルの体積の合計。
+    if (it < regroupIterations) {
+      const byComp = new Map<number, number[]>();
+      for (let i = 0; i < n; i++) {
+        if ((targets[i] as number) <= 0) continue;
+        const comp = flood.groupAt(src[i] as SourceCell);
+        const key = comp >= 0 ? comp : -1 - i; // 堆積のない投入点は単独の山
+        let list = byComp.get(key);
+        if (!list) byComp.set(key, (list = []));
+        list.push(i);
+      }
+      const nextGroups = new Map<string, GroupSolve>();
+      for (const members of byComp.values()) {
+        const key = members.join(',');
+        let gs = groups.get(key);
+        if (!gs) {
+          gs = {
+            members,
+            target: members.reduce((a, i) => a + (targets[i] as number), 0),
+            ref: Float64Array.from(members, (i) => heights[i] as number),
+            m: 1,
+            lo: 0,
+            hi: Infinity,
+            loState: null,
+            hiState: null,
+            prevM: 0,
+            prevV: 0,
+            ok: false,
+          };
+        }
+        nextGroups.set(key, gs);
+      }
+      groups = nextGroups;
     }
-    let worst = 0;
-    for (let id = 0; id < gTarget.length; id++) {
-      const t = gTarget[id] as number;
-      if (t > 0) worst = Math.max(worst, Math.abs((id < gVol.length ? (gVol[id] as number) : 0) - t) / t);
+
+    let allOk = true;
+    const capture: GroupSolve[] = [];
+    const captureSide: boolean[] = [];
+    for (const gs of groups.values()) {
+      const v = gs.members.reduce((a, i) => a + (owned[i] as number), 0);
+      gs.ok = Math.abs(v - gs.target) <= perTol * gs.target;
+      if (gs.ok) continue;
+      // 括弧が十分狭い（体積が倍率について不連続に跳ぶところ）なら、反復をやめて合成に回す。
+      if (gs.hiState && gs.hi - gs.lo <= BLEND_BRACKET * gs.hi && it >= regroupIterations) continue;
+      allOk = false;
+      const m = gs.m;
+      if (v < gs.target) {
+        gs.lo = m;
+        capture.push(gs);
+        captureSide.push(false);
+      } else {
+        gs.hi = m;
+        capture.push(gs);
+        captureSide.push(true);
+      }
+      // 体積 ∝ m^e として、e を直前の 2 点から推定する（初回は円錐の e = 3）。括弧の外に出たら二分法。
+      let e = 3;
+      if (gs.prevM > 0 && gs.prevV > 0 && v > 0 && gs.prevM !== m) {
+        const est = Math.log(v / gs.prevV) / Math.log(m / gs.prevM);
+        if (Number.isFinite(est)) e = Math.min(8, Math.max(0.5, est));
+      }
+      gs.prevM = m;
+      gs.prevV = v;
+      let next = v > 0 ? m * Math.min(4, Math.max(0.25, Math.pow(gs.target / v, 1 / e))) : m * 2;
+      if (!(next > gs.lo && next < gs.hi)) next = gs.hi === Infinity ? Math.max(m * 2, gs.lo * 2) : (gs.lo + gs.hi) / 2;
+      gs.m = next;
     }
-    if (worst <= perTol) {
-      converged = true;
-      break;
+    // 括弧の端になった山の状態を保存する（合成に使う）。
+    if (capture.length > 0) {
+      const states = capture.map((gs) => gs.members);
+      const which = new Int32Array(n).fill(-1);
+      states.forEach((members, j) => {
+        for (const i of members) which[i] = j;
+      });
+      const parts = capture.map(() => ({ cells: [] as number[], level: [] as number[], owner: [] as number[] }));
+      const all = flood.extract((o) => (which[o] as number) >= 0);
+      for (let k = 0; k < all.cells.length; k++) {
+        const part = parts[which[all.owner[k] as number] as number]!;
+        part.cells.push(all.cells[k] as number);
+        part.level.push(all.level[k] as number);
+        part.owner.push(all.owner[k] as number);
+      }
+      capture.forEach((gs, j) => {
+        const p = parts[j]!;
+        const st: FloodState = {
+          cells: Int32Array.from(p.cells),
+          level: Float64Array.from(p.level),
+          owner: Int32Array.from(p.owner),
+        };
+        if (captureSide[j]) gs.hiState = st;
+        else gs.loState = st;
+      });
     }
-    for (let i = 0; i < n; i++) {
-      if ((targets[i] as number) <= 0) continue;
-      const id = srcGroup[i] as number;
-      const o = id < gVol.length ? (gVol[id] as number) : 0;
-      const t = gTarget[id] as number;
-      const ratio = o > 0 ? Math.min(8, Math.max(0.125, t / o)) : 8;
-      heights[i] = (heights[i] as number) * Math.cbrt(ratio);
+    if (allOk) break;
+    if (it === maxIter - 1) break;
+    for (const gs of groups.values()) {
+      if (gs.ok) continue;
+      gs.members.forEach((i, j) => {
+        heights[i] = (gs.ref[j] as number) * gs.m;
+      });
     }
   }
 
-  // 収束しなかった場合は総体積を共通倍率で合わせる。
-  if (!converged || Math.abs(total - targetTotal) > totalTol * targetTotal) {
-    const res = solveScale(flood, src, heights, targetTotal, totalTol, 1, owned);
-    total = res.total;
-    for (let i = 0; i < n; i++) {
-      const hgt = (heights[i] as number) * res.lambda;
-      heights[i] = hgt;
-      apex[i] = hgt > 0 ? (src[i] as SourceCell).base + hgt : -Infinity;
+  {
+    // 反復で合わなかった山: 多すぎる側の状態があれば合成（blend）で体積を合わせる。
+    // 合成する山を除いて表面を計算し直し、その上に合成した山を重ねる。
+    const blendGroups: GroupSolve[] = [];
+    for (const gs of groups.values()) {
+      if (gs.ok || !gs.hiState) continue;
+      // 足りない側の状態がなければ、倍率 0（体積 0）の状態を使う。
+      gs.loState ??= { cells: new Int32Array(0), level: new Float64Array(0), owner: new Int32Array(0) };
+      blendGroups.push(gs);
     }
-    flood.label();
+    if (blendGroups.length > 0) {
+      for (const gs of blendGroups) for (const i of gs.members) heights[i] = 0;
+      setApex();
+      flood.run(src, apex);
+      for (const gs of blendGroups) {
+        const { state } = flood.blendStates(gs.loState as FloodState, gs.hiState as FloodState, gs.target);
+        flood.overlay(state);
+        // 頂上は多すぎる側（合成した表面はこれを超えない）。成長の計算に使う。
+        gs.members.forEach((i, j) => {
+          heights[i] = (gs.ref[j] as number) * gs.hi;
+        });
+      }
+      setApex();
+    }
   }
+  flood.label();
+  const total = flood.volumes(owned);
 
   const thickness = new Float32Array(flood.n);
   flood.writeThickness(thickness);
@@ -668,7 +894,11 @@ export function depositPiles(
     area: 0,
     volume: 0,
     group: -1,
+    reachedEdge: false,
   }));
+  const w = ground.width;
+  const h = ground.height;
+  const edgeGroups = new Set<number>();
   for (let k = 0; k < flood.touchedCount; k++) {
     const c = flood.touched[k] as number;
     const t = thickness[c] as number;
@@ -678,15 +908,25 @@ export function depositPiles(
     if (!(p.apexY >= y)) p.apexY = y;
     p.area += cellArea;
     p.volume += t * cellArea;
+    const row = (c / w) | 0;
+    const col = c - row * w;
+    if (row === 0 || col === 0 || row === h - 1 || col === w - 1) edgeGroups.add(flood.labels[c] as number);
   }
+  const warnings: PileWarning[] = [];
+  const elevTh = options.elevatedThreshold ?? 3;
+  const elevR = options.elevatedRadiusCells ?? 4;
   piles.forEach((p, i) => {
     const s = src[i] as SourceCell;
     if (p.area > 0) p.apexHeight = p.apexY - s.base;
     // 他の投入点の山に埋もれた投入点も、その位置の山の番号を持つ。
     p.group = flood.groupAt(s);
+    p.reachedEdge = p.group >= 0 && edgeGroups.has(p.group);
+    const relief = localRelief(ground, Math.floor(s.u), Math.floor(s.v), elevR);
+    if (relief >= elevTh) warnings.push({ kind: 'elevatedSource', source: i, value: relief });
+    if (p.apexHeight < 0) warnings.push({ kind: 'negativeApex', source: i, value: p.apexHeight });
   });
 
-  return { thickness, piles, totalVolume: total, apex };
+  return { thickness, piles, totalVolume: total, apex, reachedEdge: edgeGroups.size > 0, warnings };
 }
 
 // ---------------------------------------------------------------------------
@@ -769,6 +1009,7 @@ export function computePileGrowth(
   const scratch = new Float64Array(sources.length);
 
   const fractions = new Float64Array(stages + 1);
+  const finalLayer = crop(final.thickness);
   const layers: Float32Array[] = [new Float32Array(bw * bh)];
   const full = new Float32Array(flood.n);
   for (let k = 1; k < stages; k++) {
@@ -778,13 +1019,17 @@ export function computePileGrowth(
     full.fill(0);
     flood.writeThickness(full);
     const layer = crop(full);
-    // 数値誤差で前段より薄くならないようにする。
+    // 前段より薄くならず、最終状態より厚くならないようにする（数値誤差と、
+    // 最終状態が合成（blend）の場合に途中の段が局所的に最終状態を超えるのを防ぐ）。
     const prev = layers[k - 1] as Float32Array;
-    for (let j = 0; j < layer.length; j++) if ((layer[j] as number) < (prev[j] as number)) layer[j] = prev[j] as number;
+    for (let j = 0; j < layer.length; j++) {
+      const v = Math.min(layer[j] as number, finalLayer[j] as number);
+      layer[j] = v < (prev[j] as number) ? (prev[j] as number) : v;
+    }
     layers.push(layer);
   }
   fractions[stages] = 1;
-  layers.push(crop(final.thickness));
+  layers.push(finalLayer);
 
   const thicknessAt = (tIn: number, out?: Float32Array): Float32Array => {
     const t = Math.min(1, Math.max(0, Number.isFinite(tIn) ? tIn : 0));

@@ -41,11 +41,11 @@ describe('円錐の理論値', () => {
         const r = depositPiles(grid, [{ x: 0.5, z: 0.5, volume }], angle);
         const p = r.piles[0]!;
         const h = coneHeight(volume, angle);
-        expect(Math.abs(p.apexHeight / h - 1)).toBeLessThan(0.03);
+        expect(Math.abs(p.apexHeight / h - 1)).toBeLessThan(0.02);
         expect(Math.abs(sumVolume(grid, r.thickness) / volume - 1)).toBeLessThan(0.005);
         // 底面積も円錐（半径 H/tanθ）に近い
         const area = Math.PI * (h / TAN(angle)) ** 2;
-        expect(Math.abs(p.area / area - 1)).toBeLessThan(0.06);
+        expect(Math.abs(p.area / area - 1)).toBeLessThan(0.03);
       });
     }
   }
@@ -192,9 +192,8 @@ describe('複数の投入点', () => {
     expect(Math.abs(sumVolume(grid, r.thickness) / target - 1)).toBeLessThan(0.005);
   });
 
-  test('格子の外の投入点は体積 0 として扱う', () => {
-    const r = depositPiles(grid, [{ x: 1000, z: 0, volume: 1000 }], angle);
-    expect(r.totalVolume).toBe(0);
-    expect(r.piles[0]!.group).toBe(-1);
+  test('格子の外の投入点は例外', () => {
+    expect(() => depositPiles(grid, [{ x: 1000, z: 0, volume: 1000 }], angle)).toThrow(RangeError);
+    expect(() => depositPiles(grid, [{ x: 0, z: -150.5, volume: 0 }], angle)).toThrow(RangeError);
   });
 });
