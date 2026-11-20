@@ -1,7 +1,7 @@
 import { clamp01 } from './cameraPath';
 
-/** 段階内の進捗がこの値に達した時点で数え上がりを終える。カメラが止まっている区間（DEFAULT_HOLD）の中に収める。 */
-export const COUNT_END = 0.25;
+/** 数値の要素が画面に入ってから、最終値まで数え上がるのにかける時間(ms)。 */
+export const COUNT_DURATION_MS = 1200;
 
 const formatter = new Intl.NumberFormat('ja-JP', { maximumFractionDigits: 0 });
 
@@ -16,16 +16,11 @@ function easeOutCubic(t: number): number {
 }
 
 /**
- * 段階内の進捗 progress(0〜1) のときに表示する数値。0 から target まで数え上がる。
- * progress が countEnd 以上なら target ちょうど。instant が true なら常に target。
+ * 数え上げの経過 fraction(0〜1。経過時間 ÷ `COUNT_DURATION_MS`) のときに表示する数値。0 から target まで数え上がる。
+ * fraction が 1 以上なら target ちょうど。instant が true なら常に target。
  */
-export function countValue(
-  target: number,
-  progress: number,
-  options: { countEnd?: number; instant?: boolean } = {},
-): number {
+export function countValue(target: number, fraction: number, options: { instant?: boolean } = {}): number {
   if (options.instant) return target;
-  const end = options.countEnd ?? COUNT_END;
-  const t = end <= 0 ? 1 : clamp01(progress / end);
+  const t = clamp01(fraction);
   return t >= 1 ? target : Math.round(target * easeOutCubic(t));
 }
