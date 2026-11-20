@@ -31,6 +31,16 @@ E2E は `/opt/pw-browsers/chromium` を使う。別の場所の Chrome を使う
 - `tests/unit/` vitest、`tests/e2e/` Playwright
 - `public/` 静的アセット
 
+## 機能ごとの確認ページ（demos）
+
+機能は本編（`index.html`・`src/main.ts`）に組み込む前に、単独で動く確認ページとして作る。本編への統合はオーケストレータが行う。
+
+- ページ: `demos/<機能名>.html`（`<script type="module" src="/src/demos/<機能名>.ts">` を読み込む）
+- エントリ: `src/demos/<機能名>.ts`
+- E2E: `tests/e2e/<機能名>.spec.ts`（`/demos/<機能名>.html` を開き、`__APP_READY__` とコンソールエラー0件を確認し、`test-results/<機能名>.png` を保存する）
+- `vite.config.ts` が `demos/*.html` を自動でビルド対象に含めるので、設定の変更は不要。
+- 機能の本体は `src/scene/` `src/sim/` `src/story/` に再利用できるモジュールとして置き、確認ページからはそれを呼ぶだけにする。
+
 ## 座標規約
 
 - three.js ワールド座標: **X=東、Y=上、Z=南（−Z が北）、1単位=1m**。
