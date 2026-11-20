@@ -6,6 +6,18 @@
   z-index: 0;
 }
 
+/* アドレスバーの出入りで高さが変わらないよう、大きい方のビューポートの高さに固定する。 */
+.story-backdrop--stable {
+  inset: 0 0 auto 0;
+  height: 100vh;
+  height: 100lvh;
+}
+
+.story-backdrop--stable canvas {
+  width: 100% !important;
+  height: 100% !important;
+}
+
 .story {
   --story-ink: #1d1d1b;
   --story-ink-soft: #55534e;
@@ -27,8 +39,11 @@
 .story-step {
   box-sizing: border-box;
   min-height: 130vh;
-  /* 上端が画面中央に来たとき、カードの上端もそこに来る（段階の進捗 0）。 */
-  padding: 0 16px;
+  /*
+   * 上端が画面中央に来たとき、カードの上端もそこに来る（段階の進捗 0）。
+   * カードが画面より高くても、カードを読み終えてからカメラが移る区間が残るよう、下に余白を取る。
+   */
+  padding: 0 16px 60vh;
   display: flex;
   align-items: flex-start;
 }
@@ -42,10 +57,12 @@
 
 .story-step--last {
   min-height: 100vh;
+  padding-bottom: 0;
 }
 
 .story-card {
   pointer-events: auto;
+  transition: opacity 0.25s ease;
   box-sizing: border-box;
   width: 100%;
   max-width: 28rem;
@@ -118,6 +135,46 @@
   color: var(--story-ink-soft);
 }
 
+/* 自由操作の間は、カードを薄くして地図を見せ、ドラッグを canvas へ通す。 */
+.story--free .story-card {
+  opacity: 0.35;
+  pointer-events: none;
+}
+
+.story-free-toggle {
+  position: fixed;
+  right: max(16px, env(safe-area-inset-right));
+  bottom: max(16px, env(safe-area-inset-bottom));
+  z-index: 2;
+  min-height: 44px;
+  padding: 10px 18px;
+  font-family: var(--story-sans, sans-serif);
+  font-size: 0.9rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: #fff;
+  background: #1d1d1b;
+  border: 2px solid #fff;
+  border-radius: 999px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+.story-free-toggle[aria-pressed='true'] {
+  background: #b8321f;
+}
+
+.story-free-toggle:focus-visible {
+  outline: 3px solid #f2c94c;
+  outline-offset: 2px;
+}
+
+.story-free-toggle[hidden] {
+  display: none;
+}
+
 .story-visually-hidden {
   position: absolute;
   width: 1px;
@@ -151,6 +208,7 @@
 
 @media (prefers-reduced-motion: reduce) {
   .story-card {
+    transition: none;
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
   }

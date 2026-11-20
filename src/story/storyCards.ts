@@ -1,5 +1,10 @@
-/** 本文カードの DOM を作り、段階内の進捗に合わせて大きな数値を数え上げる。 */
-import { countValue, formatCount } from './countUp';
+/**
+ * 本文カードの DOM を作り、大きな数値を数え上げる。
+ *
+ * 数え上げは、数値の要素が画面に入ったときに始め、`COUNT_DURATION_MS` かけて最終値まで上がる。
+ * 通り過ぎた段階は最終値、まだの段階で画面の外にあるものは 0 に戻す（もう一度入ったら数え直す）。
+ */
+import { COUNT_DURATION_MS, countValue, formatCount } from './countUp';
 import { prefersReducedMotion } from './motion';
 import type { StoryStage, StoryState } from './types';
 
@@ -8,6 +13,7 @@ export interface StoryCards {
   sections: HTMLElement[];
   /** 現在の状態を表示へ反映する。 */
   update(state: StoryState): void;
+  dispose(): void;
 }
 
 function el<K extends keyof HTMLElementTagNameMap>(
@@ -21,6 +27,18 @@ function el<K extends keyof HTMLElementTagNameMap>(
   return node;
 }
 
+interface StatSlot {
+  node: HTMLElement;
+  value: number;
+  /** idle: 0 のまま / running: 数え上げ中 / done: 最終値。 */
+  phase: 'idle' | 'running' | 'done';
+  startedAt: number;
+  visible: boolean;
+  shown: string;
+}
+
+let idSeq = 0;
+
 export function renderStoryCards(
   root: HTMLElement,
   stages: readonly StoryStage[],
@@ -29,8 +47,9 @@ export function renderStoryCards(
   const reduced = options.reducedMotion ?? prefersReducedMotion;
   root.classList.add('story');
   root.replaceChildren();
+  const prefix = `story-${++idSeq}`;
 
-  const statValues: (HTMLElement | null)[] = [];
+  const slots: (StatSlot | null)[] = [];
   const sections = stages.map((stage, i) => {
     const section = el('section', 'story-step');
     section.dataset.stageId = stage.id;
@@ -38,8 +57,12 @@ export function renderStoryCards(
     if (i === stages.length - 1) section.classList.add('story-step--last');
 
     const card = el('article', 'story-card');
+    const headingId = `${prefix}-heading-${i}`;
+    card.setAttribute('aria-labelledby', headingId);
     card.append(el('p', 'story-card__index', `${String(i + 1).padStart(2, '0')} / ${String(stages.length).padStart(2, '0')}`));
-    card.append(el('h2', 'story-card__heading', stage.text.heading));
+    const heading = el('h2', 'story-card__heading', stage.text.heading);
+    heading.id = headingId;
+    card.append(heading);
     for (const paragraph of stage.text.paragraphs) {
       card.append(el('p', 'story-card__body', paragraph));
     }
@@ -59,9 +82,9 @@ export function renderStoryCards(
       }
       if (stat.label) box.append(el('span', 'story-stat__label', stat.label));
       card.append(box);
-      statValues.push(value);
+      slots.push({ node: value, value: stat.value, phase: 'idle', startedAt: 0, visible: false, shown: formatCount(0) });
     } else {
-      statValues.push(null);
+      slots.push(null);
     }
 
     section.append(card);
@@ -69,24 +92,94 @@ export function renderStoryCards(
     return section;
   });
 
-  const shown: string[] = statValues.map((v) => v?.textContent ?? '');
+  let current: StoryState = { stage: 0, progress: 0, position: 0 };
+  let raf = 0;
+  let disposed = false;
+
+  function show(slot: StatSlot, value: number): void {
+    const text = formatCount(value);
+    if (slot.shown !== text) {
+      slot.shown = text;
+      slot.node.textContent = text;
+    }
+  }
+
+  function tick(): void {
+    raf = 0;
+    if (disposed) return;
+    const now = performance.now();
+    let running = false;
+    for (const slot of slots) {
+      if (!slot || slot.phase !== 'running') continue;
+      const f = (now - slot.startedAt) / COUNT_DURATION_MS;
+      if (f >= 1) slot.phase = 'done';
+      else running = true;
+      show(slot, countValue(slot.value, f));
+    }
+    if (running) raf = requestAnimationFrame(tick);
+  }
+
+  function start(slot: StatSlot): void {
+    if (slot.phase !== 'idle') return;
+    if (reduced()) {
+      slot.phase = 'done';
+      show(slot, slot.value);
+      return;
+    }
+    slot.phase = 'running';
+    slot.startedAt = performance.now();
+    if (!raf) raf = requestAnimationFrame(tick);
+  }
+
+  function sync(): void {
+    const instant = reduced();
+    slots.forEach((slot, i) => {
+      if (!slot) return;
+      if (i < current.stage || (instant && i <= current.stage)) {
+        // 通り過ぎた段階は最終値。
+        slot.phase = 'done';
+        show(slot, slot.value);
+      } else if (i > current.stage && !slot.visible) {
+        // まだの段階で画面の外にあれば 0 に戻し、次に入ったときに数え直す。
+        slot.phase = 'idle';
+        show(slot, 0);
+      } else if (slot.visible) {
+        start(slot);
+      }
+    });
+  }
+
+  const observer =
+    typeof IntersectionObserver === 'function'
+      ? new IntersectionObserver((entries) => {
+          for (const entry of entries) {
+            const slot = slots.find((s) => s?.node === entry.target);
+            if (slot) slot.visible = entry.isIntersecting;
+          }
+          sync();
+        })
+      : null;
+  for (const slot of slots) {
+    if (!slot) continue;
+    if (observer) observer.observe(slot.node);
+    else slot.visible = true; // 判定できない環境では、段階に入ったら数え上げる。
+  }
 
   return {
     sections,
     update(state) {
-      const instant = reduced();
-      stages.forEach((stage, i) => {
-        const node = statValues[i];
-        const stat = stage.text.stat;
-        if (!node || !stat) return;
-        // 通り過ぎた段階は最終値、まだの段階は 0。
-        const progress = i < state.stage ? 1 : i > state.stage ? 0 : state.progress;
-        const text = formatCount(countValue(stat.value, progress, { instant: instant && i <= state.stage }));
-        if (shown[i] !== text) {
-          shown[i] = text;
-          node.textContent = text;
-        }
-      });
+      current = state;
+      if (!observer) {
+        slots.forEach((slot, i) => {
+          if (slot) slot.visible = i <= state.stage;
+        });
+      }
+      sync();
+    },
+    dispose() {
+      disposed = true;
+      observer?.disconnect();
+      if (raf) cancelAnimationFrame(raf);
     },
   };
 }

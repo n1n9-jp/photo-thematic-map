@@ -1,4 +1,7 @@
-/** スクロール連動の語りの確認ページ。仮の本文で4段階（箱の接写 → 100m → 1km → 10km 上空）を定義する。 */
+/**
+ * スクロール連動の語りの確認ページ。仮の本文で4段階（箱の接写 → 100m → 1km → 10km 上空）を定義する。
+ * `?long=1` を付けると、2番目の段階の本文を長くする（狭い画面でカードが画面より高くなる場合の確認用）。
+ */
 import {
   BoxGeometry,
   DataTexture,
@@ -27,7 +30,13 @@ declare global {
       getState(): { stage: number; progress: number; position: number };
       getCameraPosition(): { x: number; y: number; z: number };
       isFree(): boolean;
+      scrollYFor(stage: number, progress: number): number;
+      getHolds(): readonly number[];
+      /** 描画したフレームの数。 */
+      renderCount(): number;
     };
+    /** 段階の id ごとに、最後に `onProgress` へ渡された進捗。 */
+    __STORY_PROGRESS__?: Record<string, number>;
   }
 }
 
@@ -37,10 +46,7 @@ if (!container || !storyRoot) throw new Error('#app / #story が見つかりま�
 
 const ctx = createScene(container);
 
-// 土台の最小シーンは 1km 四方なので、10km の俯瞰に耐えるよう奥行きと地面を広げる。
-ctx.camera.near = 2;
-ctx.camera.far = 120_000;
-ctx.camera.updateProjectionMatrix();
+// 土台の最小シーンは 1km 四方なので、10km の俯瞰に耐えるよう地面を広げる（near / far はカメラリグが設定する）。
 ctx.scene.fog = new Fog(0x9ec9ee, 12_000, 80_000);
 
 const checker = new DataTexture(
@@ -134,7 +140,29 @@ const stages: StoryStage[] = [
   },
 ];
 
+const LONG_PARAGRAPHS = [
+  'これは仮の長い本文です。狭い画面では、本文カードが画面の高さを超えることがあります。そのときも、数値はカードの下の方にあり、読み進めて画面に入ってから数え上がります。',
+  'カメラは、本文を読んでいる間は止まっています。カードの下端が画面の中央より上に来て、カード全体が画面の上へ抜けはじめてから、次の場面へ動き出します。',
+  'ここには、記事の本文が何段落も続くことを想定した文章を置いています。駅前の自転車の台数、撤去の回数、保管所までの距離など、数字の背景を説明する文章です。',
+  'さらにもう一段落。スマートフォンで読む人が多いので、幅320pxの画面でも読みやすい行の長さと文字の大きさを保ちます。',
+  '最後の段落です。この下に、大きな数値があります。',
+];
+if (new URLSearchParams(location.search).get('long') === '1') {
+  const s = stages[1];
+  if (s) s.text = { ...s.text, paragraphs: LONG_PARAGRAPHS };
+}
+
+// E2E 用に、各段階の onProgress に最後に渡された進捗を記録する。
+const progressLog: Record<string, number> = {};
+window.__STORY_PROGRESS__ = progressLog;
+for (const s of stages) {
+  s.onProgress = (p) => {
+    progressLog[s.id] = p;
+  };
+}
+
 const story = createStory({ scene: ctx, stages, root: storyRoot });
+let renders = 0;
 
 window.__STORY__ = {
   getState: () => story.scroll.getState(),
@@ -143,13 +171,19 @@ window.__STORY__ = {
     return { x, y, z };
   },
   isFree: () => story.rig.isFree,
+  scrollYFor: (stage, progress) => story.scroll.scrollYFor(stage, progress),
+  getHolds: () => story.scroll.getHolds(),
+  renderCount: () => renders,
 };
 
 let last = performance.now();
 ctx.renderer.setAnimationLoop((now: number) => {
-  story.update(Math.min((now - last) / 1000, 1));
+  // カメラも語りの状態も変わっていないフレームは描画しない。
+  if (story.update(Math.min((now - last) / 1000, 1))) {
+    ctx.render();
+    renders++;
+  }
   last = now;
-  ctx.render();
 });
 
 story.scroll.refresh();
