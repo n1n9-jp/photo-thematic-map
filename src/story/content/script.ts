@@ -2,7 +2,7 @@
  * 本編の台本（8場面）。本文の数値は facts.ts の定数から組み立てる。
  *
  * カメラは `StoryCameraKeyframe`（注視点・距離・方位・仰角）。高さと水平距離で考えた値は
- * `cameraFrom()` で距離・仰角に直す。`place` は場面の街並み（テクスチャ付きの建物を読む中心と半径）。
+ * `cameraFrom()` で距離・仰角に直す。`place` は場面の街並み（建物を読む区を選ぶ中心と半径）。
  * 俯瞰の場面は null（建物を読まず、航空写真の地面だけを見せる）。
  */
 import { distanceForHeight } from '../cameraPath';
@@ -24,10 +24,8 @@ import { formatDecimal, formatJaCount } from './format';
 export interface ScriptPlace {
   lat: number;
   lon: number;
-  /** この半径(m)はテクスチャ付きの建物を最も細かいタイルまで読む。 */
-  detailRadiusM: number;
-  /** この半径(m)に掛かる区のテクスチャなしの建物を、視点からの距離に応じて読む。 */
-  outerRadiusM: number;
+  /** この半径(m)に掛かる区の建物（白、テクスチャなし）を、画面上の見え方に応じた詳細度で読む。 */
+  radiusM: number;
 }
 
 export interface ScriptScene {
@@ -109,7 +107,7 @@ export const SCRIPT: readonly ScriptScene[] = [
       stat: { value: 1, unit: '台' },
     },
     camera: cameraFrom(P.akihabaraSidewalk, { heightM: 1.8, horizontalM: 7, azimuthDeg: 105, targetAltM: 0.6 }),
-    place: { ...P.akihabaraSidewalk, detailRadiusM: 250, outerRadiusM: 1500 },
+    place: { ...P.akihabaraSidewalk, radiusM: 1500 },
   },
   {
     id: 'akihabara-462',
@@ -123,7 +121,7 @@ export const SCRIPT: readonly ScriptScene[] = [
       stat: stat(F.akihabaraParked, `${SURVEY.year}年${SURVEY.month}月、秋葉原駅周辺の放置自転車`),
     },
     camera: cameraFrom(P.akihabaraSidewalk, { heightM: 110, horizontalM: 200, azimuthDeg: 60, targetAltM: 0 }),
-    place: { ...P.akihabaraSidewalk, detailRadiusM: 300, outerRadiusM: 1500 },
+    place: { ...P.akihabaraSidewalk, radiusM: 1500 },
   },
   {
     id: 'tokyo-13394',
@@ -175,7 +173,7 @@ export const SCRIPT: readonly ScriptScene[] = [
       stat: stat(F.removedFY2024, `${FISCAL_YEAR}年度に撤去された自転車`),
     },
     camera: cameraFrom(P.tokyoPlaza, { heightM: 90, horizontalM: 320, azimuthDeg: 112, targetAltM: pile5.heightM * 0.4 }),
-    place: { ...P.tokyoPlaza, detailRadiusM: 350, outerRadiusM: 1800 },
+    place: { ...P.tokyoPlaza, radiusM: 1800 },
   },
   {
     id: 'removed-15years',
@@ -189,8 +187,7 @@ export const SCRIPT: readonly ScriptScene[] = [
       stat: stat(F.removed15Years, `${FIRST_FISCAL_YEAR}〜${FISCAL_YEAR}年度に撤去された自転車の累計`),
     },
     camera: cameraFrom(P.shinjukuPark, { heightM: 200, horizontalM: 750, azimuthDeg: 80, targetAltM: pile6.heightM * 0.5 }),
-    // テクスチャ付きの範囲に都庁第一本庁舎（山の中心から東へ約 240m）が入るようにする
-    place: { ...P.shinjukuPark, detailRadiusM: 450, outerRadiusM: 2000 },
+    place: { ...P.shinjukuPark, radiusM: 2000 },
   },
   {
     id: 'after-removal',
@@ -204,7 +201,7 @@ export const SCRIPT: readonly ScriptScene[] = [
       stat: stat(F.returnRate, `返還率（${FISCAL_YEAR}年度、自転車と原付）`),
     },
     camera: cameraFrom(P.tokyoPlaza, { heightM: 95, horizontalM: 150, azimuthDeg: 75, targetAltM: pile5.heightM * 0.4 }),
-    place: { ...P.tokyoPlaza, detailRadiusM: 350, outerRadiusM: 1800 },
+    place: { ...P.tokyoPlaza, radiusM: 1800 },
   },
   {
     id: 'since-1990',
@@ -222,6 +219,6 @@ export const SCRIPT: readonly ScriptScene[] = [
     },
     camera: cameraFrom(P.akihabaraSidewalk, { heightM: 1.8, horizontalM: 7, azimuthDeg: 105, targetAltM: 0.6 }),
     freeOrbit: true,
-    place: { ...P.akihabaraSidewalk, detailRadiusM: 250, outerRadiusM: 1500 },
+    place: { ...P.akihabaraSidewalk, radiusM: 1500 },
   },
 ];

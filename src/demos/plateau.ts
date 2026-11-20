@@ -42,13 +42,13 @@ function viewFromQuery(): { x: number; y: number; z: number } | undefined {
   return { x, y, z };
 }
 
-// ?detail=（テクスチャ付きの半径 m）と ?outerError=（外側の許容誤差 px）は読み込み量の調整用
+// ?radius=（建物を読む区を選ぶ半径 m）と ?error=（画面上の許容誤差 px）は読み込み量の調整用
 const stage = await createPlateauStage({
   container,
   center: centerFromQuery(),
   cameraOffset: viewFromQuery(),
-  detailRadiusM: numberParam('detail'),
-  outerErrorTarget: numberParam('outerError'),
+  radiusM: numberParam('radius'),
+  errorTarget: numberParam('error'),
 });
 stage.renderer.setAnimationLoop(stage.render);
 (window as unknown as { __PTM_STAGE__: unknown }).__PTM_STAGE__ = stage;

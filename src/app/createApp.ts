@@ -30,6 +30,8 @@ export interface CreateAppOptions {
   modules?: Record<string, SceneModuleFactory>;
   /** 深度バッファの方式。既定 'logarithmic'。 */
   depth?: DepthMode;
+  /** 建物の画面上の許容誤差(px)。既定は PlateauCity の既定値。 */
+  buildingErrorTarget?: number;
 }
 
 export interface AppStatus {
@@ -104,7 +106,7 @@ export async function createApp(options: CreateAppOptions): Promise<App> {
   const catalog = await loadPlateauCatalog();
   const firstPlace = script.find((s) => s.place)?.place;
   if (!firstPlace) throw new Error('台本に場所がありません');
-  const city = new PlateauCity({ scene, camera, renderer, catalog, focus: firstPlace });
+  const city = new PlateauCity({ scene, camera, renderer, catalog, focus: firstPlace, errorTarget: options.buildingErrorTarget });
   const elevation = new ElevationCache(city.ground.elevation);
 
   // 場面の注視点と（低い場面は）カメラの位置の標高を先に読む。キーフレームはこの標高で決まる。
@@ -193,7 +195,7 @@ export async function createApp(options: CreateAppOptions): Promise<App> {
       const t = controls.target;
       const f = city.focus;
       const c = latLonToLocal({ lat: f.lat, lon: f.lon });
-      if (Math.hypot(t.x - c.x, t.z - c.z) > place.detailRadiusM * 0.5) {
+      if (Math.hypot(t.x - c.x, t.z - c.z) > place.radiusM * 0.25) {
         const ll = localToLatLon({ x: t.x, y: 0, z: t.z });
         city.setFocus({ ...place, lat: ll.lat, lon: ll.lon });
       }

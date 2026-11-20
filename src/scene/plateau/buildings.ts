@@ -8,8 +8,8 @@
  *   緯度経度・高さを latLonToLocal で写した点へ、その地点の東・上・南を X・Y・Z に合わせて置き直す。
  *   航空写真の地面も latLonToLocal で置いているので、どこでも建物の足元と地面が一致する。
  */
-import { Box3, Group, Matrix4, MeshBasicMaterial, Vector3 } from 'three';
-import type { Camera, Material, Mesh, MeshStandardMaterial, Object3D, Texture, WebGLRenderer } from 'three';
+import { Box3, Group, Matrix4, MeshLambertMaterial, Vector3 } from 'three';
+import type { Camera, Material, Mesh, MeshStandardMaterial, Object3D, WebGLRenderer } from 'three';
 import { DRACO_GLTF_CONFIG, DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
 import { TilesRenderer } from '3d-tiles-renderer/three';
 import { GLTFExtensionsPlugin } from '3d-tiles-renderer/three/plugins';
@@ -26,22 +26,29 @@ export interface PlateauBuildingsOptions {
   /** 画面上の許容誤差(px)。小さいほど細かいタイルまで読む。既定 16。 */
   errorTarget?: number;
   /**
-   * 表示する範囲を、ローカル座標の鉛直な円柱の内側か外側に限る。
-   * - inside: 円に掛かるタイルだけを読み、カメラの位置によらず最も細かいタイルまで読む。円の外の部分は描かない。
-   * - outside: 円にすっぽり入るタイルは読まない。円の内の部分は描かない。
-   * 同じ円で inside（テクスチャ付き）と outside（テクスチャなし）の 2 層を重ねると、境界で建物が二重にならない。
+   * 建物に貼るマテリアル。タイルのマテリアル（テクスチャを含む）は捨ててこれに置き換える。
+   * 既定は `whiteBuildingMaterial()`（面の向きで陰影の付く白）。
    */
-  area?: { x: number; z: number; radiusM: number; side: 'inside' | 'outside' };
+  material?: Material;
   /**
-   * テクスチャの長辺の上限(px)。PLATEAU のテクスチャは 1 タイルで最大 4096px 四方あり、そのままでは
-   * GPU メモリを使い切るので、読み込み時に縮小する。既定 1024。
+   * カメラからこの距離(m)より遠いタイルは読まず、描かない（霧で見えなくなる距離に合わせる）。毎フレーム呼ぶ。
+   * 既定は制限なし。区の範囲の矩形は広いことがあり、地平線の近くの粗いタイル（1つ数MB〜10MB）を読んでしまうため。
    */
-  maxTextureSize?: number;
+  maxDistanceM?: () => number;
   /** Draco のデコーダー。複数の層で共有するときに渡す（渡したものは dispose しない）。既定は層ごとに作る。 */
   dracoLoader?: DRACOLoader;
 }
 
-export type BuildingArea = NonNullable<PlateauBuildingsOptions['area']>;
+let sharedWhite: MeshLambertMaterial | null = null;
+
+/**
+ * 白い建物のマテリアル（全層で共有）。面ごとの法線（flatShading）で陰影を付けるので、タイルに法線が無くても
+ * 屋上と壁、壁どうしの向きの違いが明暗で読み取れる。真っ白に飛ばないよう、色は少しだけ灰色に寄せる。
+ */
+export function whiteBuildingMaterial(): MeshLambertMaterial {
+  sharedWhite ??= new MeshLambertMaterial({ color: 0xe9e7e2, flatShading: true });
+  return sharedWhite;
+}
 
 /** 連続でこのフレーム数だけ読み込み待ちがなければ「読み込み完了」とみなす。 */
 const SETTLE_FRAMES = 10;
@@ -81,7 +88,7 @@ class LocalFramePlugin {
 
   constructor(
     groupMatrix: Matrix4,
-    private readonly clip: AreaClip | null,
+    private readonly material: Material,
   ) {
     this.groupInverse = groupMatrix.clone().invert();
   }
@@ -96,151 +103,35 @@ class LocalFramePlugin {
     scene.matrix.premultiply(this.local).premultiply(this.groupInverse);
     scene.matrix.decompose(scene.position, scene.quaternion, scene.scale);
     scene.updateMatrixWorld(true);
-    const clip = this.clip;
     scene.traverse((obj) => {
       const mesh = obj as Mesh;
       if (!mesh.isMesh) return;
-      // 写真テクスチャは撮影時の陰影を含むので、地面の航空写真と同じく照明を当てずに貼る
-      const mat = mesh.material as MeshStandardMaterial;
-      if (!Array.isArray(mesh.material) && mat.map) {
-        const basic = new MeshBasicMaterial({ map: mat.map, side: mat.side, vertexColors: mat.vertexColors });
-        basic.name = mat.name;
-        mat.dispose();
-        mesh.material = basic;
+      // タイルのマテリアル（とテクスチャ）は使わず、共有の白に置き換える
+      for (const m of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) {
+        (m as MeshStandardMaterial).map?.dispose();
+        m.dispose();
       }
-      if (clip) {
-        for (const m of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) clipMaterialToArea(m, clip);
-      }
+      mesh.material = this.material;
     });
   }
 }
 
-interface TileLike {
-  boundingVolume?: { region?: number[] };
-  geometricError?: number;
-  children?: unknown[];
-}
+/** カメラから遠いタイルを読まない・描かないプラグイン（3d-tiles-renderer の calculateTileViewError フック）。 */
+class DistanceLimitPlugin {
+  readonly name = 'PTM_DISTANCE_LIMIT';
+  /** タイルセットの座標系（group の行列の逆）でのカメラの位置。update の前に設定する。 */
+  readonly cameraLocal = new Vector3();
+  maxDistance = Infinity;
 
-/** タイルの範囲（region）をローカル XZ の矩形にする。region でなければ null。 */
-function tileRect(tile: TileLike): { minX: number; maxX: number; minZ: number; maxZ: number } | null {
-  const r = tile.boundingVolume?.region;
-  if (!r || r.length < 4) return null;
-  const [w, s, e, n] = r.map((v) => (v * 180) / Math.PI) as [number, number, number, number];
-  const a = latLonToLocal({ lat: n, lon: w });
-  const b = latLonToLocal({ lat: s, lon: e });
-  return { minX: a.x, maxX: b.x, minZ: a.z, maxZ: b.z };
-}
-
-/** 円柱で読み込むタイルを絞るプラグイン（3d-tiles-renderer の calculateTileViewError フック）。 */
-class AreaPlugin {
-  readonly name = 'PTM_AREA';
-  private cache = new WeakMap<object, { intersects: boolean; contained: boolean }>();
-
-  constructor(private area: BuildingArea) {}
-
-  /** 円を差し替える。タイルごとの判定のキャッシュは捨てる（次の update で判定し直す）。 */
-  setArea(area: BuildingArea): void {
-    this.area = area;
-    this.cache = new WeakMap();
-  }
-
-  calculateTileViewError(tile: TileLike, target: { inView: boolean; error: number; distance: number }): boolean {
-    let hit = this.cache.get(tile);
-    if (!hit) {
-      const rect = tileRect(tile);
-      const { x, z, radiusM } = this.area;
-      if (rect) {
-        const nx = Math.max(rect.minX - x, 0, x - rect.maxX);
-        const nz = Math.max(rect.minZ - z, 0, z - rect.maxZ);
-        const fx = Math.max(Math.abs(rect.minX - x), Math.abs(rect.maxX - x));
-        const fz = Math.max(Math.abs(rect.minZ - z), Math.abs(rect.maxZ - z));
-        hit = { intersects: Math.hypot(nx, nz) <= radiusM, contained: Math.hypot(fx, fz) <= radiusM };
-      } else {
-        hit = { intersects: true, contained: false };
-      }
-      this.cache.set(tile, hit);
-    }
-    if (this.area.side === 'inside') {
-      target.inView = hit.intersects;
-      // 円の中は常に最も細かいタイルまで読む
-      target.error = tile.children && tile.children.length > 0 ? Number.MAX_VALUE : 0;
-      target.distance = 0;
-      return true;
-    }
-    if (hit.contained) {
-      target.inView = false;
-      return true;
-    }
-    return false;
-  }
-}
-
-/** 円柱の切り抜き。uniform は層の全マテリアルで共有し、円を差し替えると全タイルに効く。 */
-interface AreaClip {
-  sign: number;
-  /** (中心 x, 中心 z, 半径)。 */
-  uniform: { value: Vector3 };
-}
-
-function createAreaClip(area: BuildingArea): AreaClip {
-  return { sign: area.side === 'inside' ? 1 : -1, uniform: { value: new Vector3(area.x, area.z, area.radiusM) } };
-}
-
-/** 円柱の内側または外側だけを描くようにマテリアルのシェーダーを書き換える。 */
-function clipMaterialToArea(material: Material, clip: AreaClip): void {
-  const sign = clip.sign;
-  material.onBeforeCompile = (shader) => {
-    shader.uniforms.ptmArea = clip.uniform;
-    shader.uniforms.ptmAreaSign = { value: sign };
-    shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', '#include <common>\nvarying vec3 vPtmWorld;')
-      .replace(
-        '#include <project_vertex>',
-        '#include <project_vertex>\nvPtmWorld = (modelMatrix * vec4(transformed, 1.0)).xyz;',
-      );
-    shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', '#include <common>\nvarying vec3 vPtmWorld;\nuniform vec3 ptmArea;\nuniform float ptmAreaSign;')
-      .replace(
-        '#include <clipping_planes_fragment>',
-        '#include <clipping_planes_fragment>\nif (ptmAreaSign * (length(vPtmWorld.xz - ptmArea.xy) - ptmArea.z) > 0.0) discard;',
-      );
-  };
-  material.customProgramCacheKey = () => `ptm-area-${sign}`;
-  material.needsUpdate = true;
-}
-
-/** 大きすぎるテクスチャを読み込み時に縮小するプラグイン。 */
-class TextureDownscalePlugin {
-  readonly name = 'PTM_TEXTURE_DOWNSCALE';
-
-  constructor(private readonly maxSize: number) {}
-
-  async processTileModel(scene: Object3D): Promise<void> {
-    const textures = new Set<Texture>();
-    scene.traverse((obj) => {
-      const mat = (obj as Mesh).material;
-      if (!mat) return;
-      for (const m of Array.isArray(mat) ? mat : [mat]) {
-        const map = (m as MeshStandardMaterial).map;
-        if (map) textures.add(map);
-      }
-    });
-    await Promise.all([...textures].map((t) => this.downscale(t)));
-  }
-
-  private async downscale(texture: Texture): Promise<void> {
-    const image = texture.image as ImageBitmap | HTMLImageElement | undefined;
-    if (!image || !('width' in image)) return;
-    const scale = this.maxSize / Math.max(image.width, image.height);
-    if (scale >= 1) return;
-    const resized = await createImageBitmap(image, {
-      resizeWidth: Math.max(1, Math.round(image.width * scale)),
-      resizeHeight: Math.max(1, Math.round(image.height * scale)),
-      resizeQuality: 'medium',
-    });
-    if ('close' in image) image.close();
-    texture.image = resized;
-    texture.needsUpdate = true;
+  calculateTileViewError(
+    tile: { engineData?: { boundingVolume?: { distanceToPoint(p: Vector3): number } } },
+    target: { inView: boolean },
+  ): boolean {
+    const bv = tile.engineData?.boundingVolume;
+    if (!bv || !Number.isFinite(this.maxDistance)) return false;
+    if (bv.distanceToPoint(this.cameraLocal) <= this.maxDistance) return false;
+    target.inView = false;
+    return true;
   }
 }
 
@@ -261,9 +152,10 @@ export class PlateauBuildings {
   private readonly renderer: WebGLRenderer;
   private readonly draco: DRACOLoader;
   private readonly ownsDraco: boolean;
-  private readonly areaPlugins: AreaPlugin[] = [];
-  private readonly clip: AreaClip | null;
-  private area: BuildingArea | undefined;
+  private readonly material: Material;
+  private readonly maxDistanceM: (() => number) | undefined;
+  private readonly distancePlugins: DistanceLimitPlugin[] = [];
+  private readonly groupInverse = new Matrix4();
   private resolveReady!: () => void;
   private settledFrames = 0;
 
@@ -272,8 +164,8 @@ export class PlateauBuildings {
     this.renderer = options.renderer;
     this.ownsDraco = !options.dracoLoader;
     this.draco = options.dracoLoader ?? createDracoLoader();
-    this.area = options.area;
-    this.clip = options.area ? createAreaClip(options.area) : null;
+    this.material = options.material ?? whiteBuildingMaterial();
+    this.maxDistanceM = options.maxDistanceM;
     this.group.name = 'plateau-buildings';
     this.ready = new Promise((resolve) => {
       this.resolveReady = resolve;
@@ -290,11 +182,10 @@ export class PlateauBuildings {
       tiles.loadAncestors = false;
       tiles.loadSiblings = false;
       tiles.registerPlugin(new GLTFExtensionsPlugin({ dracoLoader: this.draco, autoDispose: false }));
-      tiles.registerPlugin(new TextureDownscalePlugin(options.maxTextureSize ?? 1024));
-      tiles.registerPlugin(new LocalFramePlugin(groupMatrix, this.clip));
-      if (options.area) {
-        const plugin = new AreaPlugin(options.area);
-        this.areaPlugins.push(plugin);
+      tiles.registerPlugin(new LocalFramePlugin(groupMatrix, this.material));
+      if (this.maxDistanceM) {
+        const plugin = new DistanceLimitPlugin();
+        this.distancePlugins.push(plugin);
         tiles.registerPlugin(plugin);
       }
       tiles.group.matrixAutoUpdate = false;
@@ -318,6 +209,14 @@ export class PlateauBuildings {
   update(): void {
     this.camera.updateMatrixWorld();
     this.group.updateMatrixWorld();
+    if (this.maxDistanceM && this.tiles[0]) {
+      const max = this.maxDistanceM();
+      this.groupInverse.copy(this.tiles[0].group.matrixWorld).invert();
+      for (const p of this.distancePlugins) {
+        p.maxDistance = max;
+        p.cameraLocal.setFromMatrixPosition(this.camera.matrixWorld).applyMatrix4(this.groupInverse);
+      }
+    }
     for (const tiles of this.tiles) {
       tiles.setResolutionFromRenderer(this.camera, this.renderer);
       tiles.update();
@@ -326,18 +225,6 @@ export class PlateauBuildings {
     const busy = this.isLoading || this.tiles.some((t) => t.loadProgress < 1);
     this.settledFrames = busy ? 0 : this.settledFrames + 1;
     if (this.settledFrames >= SETTLE_FRAMES) this.markReady();
-  }
-
-  /**
-   * 表示する円を差し替える（中心と半径。inside / outside は作成時のまま）。作成時に `area` を渡した層だけで使える。
-   * 読み込み済みのタイルは残り、次の `update()` から新しい円で読むタイルを選び直す。
-   */
-  setArea(area: { x: number; z: number; radiusM: number }): void {
-    if (!this.area || !this.clip) throw new Error('area を指定せずに作った層では setArea を使えません');
-    const next: BuildingArea = { ...area, side: this.area.side };
-    this.area = next;
-    this.clip.uniform.value.set(next.x, next.z, next.radiusM);
-    for (const p of this.areaPlugins) p.setArea(next);
   }
 
   /** 読み込み中のタイルがあれば true。 */
