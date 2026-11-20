@@ -67,25 +67,22 @@ describe('enu', () => {
     }
   });
 
-  it('接平面なので、同じ高さでも原点から離れると Y が下がる（20km で約31m）', () => {
-    // 緯度 0.18 度 ≒ 北へ約 20km
-    const v = latLonToLocal({ lat: ORIGIN.lat + 0.18, lon: ORIGIN.lon });
-    const d = Math.hypot(v.x, v.z);
-    expect(d).toBeGreaterThan(19_500);
-    expect(d).toBeLessThan(20_500);
-    const expected = -(d * d) / (2 * 6_371_000);
-    expect(v.y).toBeLessThan(expected + 1);
-    expect(v.y).toBeGreaterThan(expected - 1);
+  it('平らな地図なので、同じ標高なら原点から離れても Y は変わらない', () => {
+    const v = latLonToLocal({ lat: ORIGIN.lat + 0.18, lon: ORIGIN.lon - 0.2, alt: 12.5 });
+    expect(v.y).toBeCloseTo(12.5, 9);
   });
 
-  it('ECEF→ローカルの行列は latLonToLocal と一致する', () => {
+  it('厳密な ENU 行列は、原点の近く（東京タワー、約3.2km）で平らな地図と水平 1m 以内で一致する', () => {
     const m = ecefToLocalMatrix();
-    const p = { lat: 35.65858, lon: 139.74543, alt: 333 };
+    const p = { lat: 35.65858, lon: 139.74543, alt: 0 };
     const [ex, ey, ez] = geodeticToEcef(p);
     const x = m[0]! * ex + m[1]! * ey + m[2]! * ez + m[3]!;
     const y = m[4]! * ex + m[5]! * ey + m[6]! * ez + m[7]!;
     const z = m[8]! * ex + m[9]! * ey + m[10]! * ez + m[11]!;
     const v = latLonToLocal(p);
-    expect(Math.hypot(x - v.x, y - v.y, z - v.z)).toBeLessThan(1e-6);
+    expect(Math.hypot(x - v.x, z - v.z)).toBeLessThan(1);
+    // 厳密な ENU では、丸みのぶんだけ Y が下がる（3.2km で約 0.8m）
+    const d = Math.hypot(v.x, v.z);
+    expect(y).toBeCloseTo(-(d * d) / (2 * 6_371_000), 0);
   });
 });

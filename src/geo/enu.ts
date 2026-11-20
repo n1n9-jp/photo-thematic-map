@@ -1,22 +1,26 @@
 /**
- * ローカル ENU 座標 ⇄ 緯度経度の変換。
+ * 緯度経度 ⇄ ローカル座標の変換。
  *
  * three.js 側の規約: X=東, Y=上, Z=南（-Z が北）, 1単位=1m。
- * ENU（East, North, Up）との対応: x = east, y = up, z = -north。
  *
- * WGS84 の ECEF（地球中心座標）を経由する厳密な変換で、原点 ORIGIN で
- * 地球楕円体に接する平面を基準にする。PLATEAU の 3D Tiles（ECEF 座標）を
- * 同じ原点の ENU 行列でシーンに載せたとき、この関数の結果と位置が一致する。
+ * ローカル座標は「平らな地図」:
+ * - 水平（X・Z）は、原点の曲率半径を使う局所近似（等距離円筒）。
+ * - 高さ（Y）は標高そのもの（`alt - ORIGIN.alt`）。地球の丸みは持たない。
+ * PLATEAU の建物（`src/scene/plateau/buildings.ts`）は、タイルごとにこの変換の位置へ置き直す。
+ * 地面・自転車・カメラなど、緯度経度から位置を決めるものはすべてこの関数を通す。
  *
- * 接平面なので、原点から離れると地表は Y の負の方向へ下がる
- * （10km で約 8m、20km で約 31m）。同じ高さの点でも y は一定にならない。
+ * 水平の近似は、原点から南北に離れるほど東西の縮尺がずれる（南北 20km で約 0.2%）。
+ *
+ * このファイルの後半（`geodeticToEcef`・`ecefToGeodetic`・`ecefToLocalMatrix`）は、
+ * 原点で楕円体に接する厳密な ENU（剛体変換）。原点から数 km 以内の ECEF データを
+ * そのまま載せる補助で、Y は楕円体高になり、離れると丸みのぶん下がる（2km で約 0.3m）。
  */
 import { ORIGIN } from '../config';
 
 export interface LatLonAlt {
   lat: number;
   lon: number;
-  /** 高さ(m)。原点の alt と同じ基準で表す。省略時は 0。 */
+  /** 標高(m)。省略時は 0。（`geodeticToEcef` に渡すときは楕円体高として扱われる） */
   alt?: number;
 }
 
@@ -82,32 +86,36 @@ function enuBasis(origin: LatLonAlt): { east: Triple; north: Triple; up: Triple 
 
 const dot = (a: Triple, b: Triple): number => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 
-/** 緯度経度(度)・高さ(m) → three.js ローカル座標(m)。 */
-export function latLonToLocal(p: LatLonAlt, origin: LatLonAlt = ORIGIN): Vec3 {
-  const o = geodeticToEcef(origin);
-  const q = geodeticToEcef(p);
-  const d: Triple = [q[0] - o[0], q[1] - o[1], q[2] - o[2]];
-  const { east, north, up } = enuBasis(origin);
-  return { x: dot(d, east), y: dot(d, up), z: -dot(d, north) };
+/** 緯度 latDeg における子午線曲率半径 M と卯酉線曲率半径 N。 */
+function curvatureRadii(latDeg: number): { m: number; n: number } {
+  const s = Math.sin(latDeg * DEG2RAD);
+  const w2 = 1 - WGS84_E2 * s * s;
+  const w = Math.sqrt(w2);
+  return { n: WGS84_A / w, m: (WGS84_A * (1 - WGS84_E2)) / (w2 * w) };
 }
 
-/** three.js ローカル座標(m) → 緯度経度(度)・高さ(m)。latLonToLocal の逆変換。 */
+/** 緯度経度(度)・標高(m) → three.js ローカル座標(m)。平らな地図（Y は標高）。 */
+export function latLonToLocal(p: LatLonAlt, origin: LatLonAlt = ORIGIN): Vec3 {
+  const { m, n } = curvatureRadii(origin.lat);
+  const east = (p.lon - origin.lon) * DEG2RAD * n * Math.cos(origin.lat * DEG2RAD);
+  const north = (p.lat - origin.lat) * DEG2RAD * m;
+  const up = (p.alt ?? 0) - (origin.alt ?? 0);
+  return { x: east, y: up, z: -north };
+}
+
+/** three.js ローカル座標(m) → 緯度経度(度)・標高(m)。latLonToLocal の逆変換。 */
 export function localToLatLon(v: Vec3, origin: LatLonAlt = ORIGIN): Required<LatLonAlt> {
-  const o = geodeticToEcef(origin);
-  const { east, north, up } = enuBasis(origin);
-  const e = v.x;
-  const n = -v.z;
-  const u = v.y;
-  return ecefToGeodetic([
-    o[0] + e * east[0] + n * north[0] + u * up[0],
-    o[1] + e * east[1] + n * north[1] + u * up[1],
-    o[2] + e * east[2] + n * north[2] + u * up[2],
-  ]);
+  const { m, n } = curvatureRadii(origin.lat);
+  const lat = origin.lat + -v.z / (m * DEG2RAD);
+  const lon = origin.lon + v.x / (n * Math.cos(origin.lat * DEG2RAD) * DEG2RAD);
+  const alt = (origin.alt ?? 0) + v.y;
+  return { lat, lon, alt };
 }
 
 /**
- * 原点の ENU 行列（ECEF → three.js ローカル座標）。行優先の 4x4。
- * 3D Tiles など ECEF 座標のデータをシーンに載せるときに使う。
+ * 原点の厳密な ENU 行列（ECEF → X=東・Y=上・Z=南）。行優先の 4x4。
+ * 原点から数 km 以内の ECEF データを載せる補助。Y は楕円体高（`origin.alt` を楕円体高とみなす）で、
+ * 離れると丸みのぶん下がる。平らな地図（`latLonToLocal`）とは、原点から 2km で水平 約0.25m・高さ 約0.3m、3km で水平 約0.6m ずれる。
  *
  * 返り値は行優先（row-major）の配列なので、three.js では
  * `new Matrix4().set(...ecefToLocalMatrix())` で使う（`Matrix4.set` は行優先で受け取る）。
