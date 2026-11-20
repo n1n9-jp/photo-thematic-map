@@ -1,0 +1,2470 @@
+{
+ "title": "区市町村別の放置台数（2025年10月）と撤去・返還・処分台数（2024年度）",
+ "sources": [
+  {
+   "document": "駅前放置自転車等の現況と対策 －令和７年度調査－ （4）駅別放置自転車、原動機付自転車及び自動二輪車の状況（Excel）",
+   "url": "https://www.tomin-anzen.metro.tokyo.lg.jp/documents/d/tomin-anzen/07ekibetsuhouchi",
+   "location": "区市町村の「計」行"
+  },
+  {
+   "document": "駅前放置自転車等の現況と対策 －令和７年度調査－（全文）",
+   "url": "https://www.tomin-anzen.metro.tokyo.lg.jp/documents/d/tomin-anzen/202603_jitensyagenkyo",
+   "location": "p.51 (3) 区市町村の撤去・返還・処分状況（令和6年度）"
+  }
+ ],
+ "generatedBy": "scripts/data/build-bicycles.ts",
+ "count": 53,
+ "totals": {
+  "parked": {
+   "bicycle": 13394,
+   "total": 14366
+  },
+  "removalFY2024": {
+   "removed": {
+    "total": 188561,
+    "bicycle": 187262,
+    "moped": 1299
+   },
+   "returned": {
+    "total": 121425,
+    "bicycle": 120509,
+    "moped": 916
+   },
+   "disposed": {
+    "total": 67831,
+    "bicycle": 67113,
+    "moped": 324
+   },
+   "returnRatePercent": 64.4,
+   "notes": [
+    "原本の表で 処分台数の「計」が「自転車＋原付」より 394 台多い（原本どおり収録）"
+   ]
+  }
+ },
+ "municipalities": [
+  {
+   "name": "千代田区",
+   "area": "区部",
+   "stationCount": 19,
+   "stationsWithParkedBicycles": 19,
+   "parked": {
+    "bicycle": 1983,
+    "mopedGeneral": 47,
+    "mopedSpecific": 0,
+    "motorcycle": 49,
+    "total": 2079
+   },
+   "occupancy": {
+    "bicycle": 2282,
+    "moped": 109,
+    "total": 2391
+   },
+   "capacity": {
+    "bicycle": 3316,
+    "moped": 166,
+    "total": 3482
+   },
+   "inflow": {
+    "total": 4470,
+    "bicycle": 4265
+   },
+   "bicycleParkedRatePercent": 46.5,
+   "removalFY2024": {
+    "removed": {
+     "total": 1906,
+     "bicycle": 1894,
+     "moped": 12
+    },
+    "returned": {
+     "total": 1113,
+     "bicycle": 1103,
+     "moped": 10
+    },
+    "disposed": {
+     "total": 842,
+     "bicycle": 838,
+     "moped": 4
+    },
+    "returnRatePercent": 58.4
+   }
+  },
+  {
+   "name": "中央区",
+   "area": "区部",
+   "stationCount": 21,
+   "stationsWithParkedBicycles": 21,
+   "parked": {
+    "bicycle": 677,
+    "mopedGeneral": 9,
+    "mopedSpecific": 5,
+    "motorcycle": 7,
+    "total": 698
+   },
+   "occupancy": {
+    "bicycle": 2068,
+    "moped": 201,
+    "total": 2269
+   },
+   "capacity": {
+    "bicycle": 6085,
+    "moped": 219,
+    "total": 6304
+   },
+   "inflow": {
+    "total": 2967,
+    "bicycle": 2745
+   },
+   "bicycleParkedRatePercent": 24.7,
+   "removalFY2024": {
+    "removed": {
+     "total": 2704,
+     "bicycle": 2704,
+     "moped": 0
+    },
+    "returned": {
+     "total": 1595,
+     "bicycle": 1595,
+     "moped": 0
+    },
+    "disposed": {
+     "total": 1211,
+     "bicycle": 1211,
+     "moped": 0
+    },
+    "returnRatePercent": 59
+   }
+  },
+  {
+   "name": "港区",
+   "area": "区部",
+   "stationCount": 34,
+   "stationsWithParkedBicycles": 30,
+   "parked": {
+    "bicycle": 428,
+    "mopedGeneral": 11,
+    "mopedSpecific": 2,
+    "motorcycle": 17,
+    "total": 458
+   },
+   "occupancy": {
+    "bicycle": 3017,
+    "moped": 111,
+    "total": 3128
+   },
+   "capacity": {
+    "bicycle": 6041,
+    "moped": 272,
+    "total": 6313
+   },
+   "inflow": {
+    "total": 3586,
+    "bicycle": 3445
+   },
+   "bicycleParkedRatePercent": 12.4,
+   "removalFY2024": {
+    "removed": {
+     "total": 6597,
+     "bicycle": 6583,
+     "moped": 14
+    },
+    "returned": {
+     "total": 4789,
+     "bicycle": 4785,
+     "moped": 4
+    },
+    "disposed": {
+     "total": 1440,
+     "bicycle": 1435,
+     "moped": 5
+    },
+    "returnRatePercent": 72.6
+   }
+  },
+  {
+   "name": "新宿区",
+   "area": "区部",
+   "stationCount": 32,
+   "stationsWithParkedBicycles": 32,
+   "parked": {
+    "bicycle": 247,
+    "mopedGeneral": 14,
+    "mopedSpecific": 3,
+    "motorcycle": 13,
+    "total": 277
+   },
+   "occupancy": {
+    "bicycle": 5423,
+    "moped": 186,
+    "total": 5609
+   },
+   "capacity": {
+    "bicycle": 8685,
+    "moped": 421,
+    "total": 9106
+   },
+   "inflow": {
+    "total": 5886,
+    "bicycle": 5670
+   },
+   "bicycleParkedRatePercent": 4.4,
+   "removalFY2024": {
+    "removed": {
+     "total": 15941,
+     "bicycle": 15557,
+     "moped": 384
+    },
+    "returned": {
+     "total": 12237,
+     "bicycle": 11870,
+     "moped": 367
+    },
+    "disposed": {
+     "total": 2199,
+     "bicycle": 2175,
+     "moped": 24
+    },
+    "returnRatePercent": 76.8
+   }
+  },
+  {
+   "name": "文京区",
+   "area": "区部",
+   "stationCount": 19,
+   "stationsWithParkedBicycles": 18,
+   "parked": {
+    "bicycle": 438,
+    "mopedGeneral": 14,
+    "mopedSpecific": 0,
+    "motorcycle": 14,
+    "total": 466
+   },
+   "occupancy": {
+    "bicycle": 1824,
+    "moped": 87,
+    "total": 1911
+   },
+   "capacity": {
+    "bicycle": 4397,
+    "moped": 161,
+    "total": 4558
+   },
+   "inflow": {
+    "total": 2377,
+    "bicycle": 2262
+   },
+   "bicycleParkedRatePercent": 19.4,
+   "removalFY2024": {
+    "removed": {
+     "total": 3599,
+     "bicycle": 3599,
+     "moped": 0
+    },
+    "returned": {
+     "total": 2827,
+     "bicycle": 2827,
+     "moped": 0
+    },
+    "disposed": {
+     "total": 904,
+     "bicycle": 904,
+     "moped": 0
+    },
+    "returnRatePercent": 78.5
+   }
+  },
+  {
+   "name": "台東区",
+   "area": "区部",
+   "stationCount": 13,
+   "stationsWithParkedBicycles": 13,
+   "parked": {
+    "bicycle": 1009,
+    "mopedGeneral": 25,
+    "mopedSpecific": 4,
+    "motorcycle": 5,
+    "total": 1043
+   },
+   "occupancy": {
+    "bicycle": 4272,
+    "moped": 33,
+    "total": 4305
+   },
+   "capacity": {
+    "bicycle": 7531,
+    "moped": 120,
+    "total": 7651
+   },
+   "inflow": {
+    "total": 5348,
+    "bicycle": 5281
+   },
+   "bicycleParkedRatePercent": 19.1,
+   "removalFY2024": {
+    "removed": {
+     "total": 7434,
+     "bicycle": 7434,
+     "moped": 0
+    },
+    "returned": {
+     "total": 3878,
+     "bicycle": 3878,
+     "moped": 0
+    },
+    "disposed": {
+     "total": 3130,
+     "bicycle": 3130,
+     "moped": 0
+    },
+    "returnRatePercent": 52.2
+   }
+  },
+  {
+   "name": "墨田区",
+   "area": "区部",
+   "stationCount": 14,
+   "stationsWithParkedBicycles": 12,
+   "parked": {
+    "bicycle": 188,
+    "mopedGeneral": 10,
+    "mopedSpecific": 2,
+    "motorcycle": 19,
+    "total": 219
+   },
+   "occupancy": {
+    "bicycle": 7234,
+    "moped": 24,
+    "total": 7258
+   },
+   "capacity": {
+    "bicycle": 13604,
+    "moped": 117,
+    "total": 13721
+   },
+   "inflow": {
+    "total": 7477,
+    "bicycle": 7422
+   },
+   "bicycleParkedRatePercent": 2.5,
+   "removalFY2024": {
+    "removed": {
+     "total": 5873,
+     "bicycle": 5868,
+     "moped": 5
+    },
+    "returned": {
+     "total": 3517,
+     "bicycle": 3517,
+     "moped": 0
+    },
+    "disposed": {
+     "total": 2712,
+     "bicycle": 2712,
+     "moped": 0
+    },
+    "returnRatePercent": 59.9
+   }
+  },
+  {
+   "name": "江東区",
+   "area": "区部",
+   "stationCount": 27,
+   "stationsWithParkedBicycles": 23,
+   "parked": {
+    "bicycle": 467,
+    "mopedGeneral": 27,
+    "mopedSpecific": 0,
+    "motorcycle": 12,
+    "total": 506
+   },
+   "occupancy": {
+    "bicycle": 12923,
+    "moped": 256,
+    "total": 13179
+   },
+   "capacity": {
+    "bicycle": 21780,
+    "moped": 526,
+    "total": 22306
+   },
+   "inflow": {
+    "total": 13685,
+    "bicycle": 13390
+   },
+   "bicycleParkedRatePercent": 3.5,
+   "removalFY2024": {
+    "removed": {
+     "total": 5664,
+     "bicycle": 5638,
+     "moped": 26
+    },
+    "returned": {
+     "total": 3161,
+     "bicycle": 3146,
+     "moped": 15
+    },
+    "disposed": {
+     "total": 2474,
+     "bicycle": 2461,
+     "moped": 13
+    },
+    "returnRatePercent": 55.8
+   }
+  },
+  {
+   "name": "品川区",
+   "area": "区部",
+   "stationCount": 27,
+   "stationsWithParkedBicycles": 27,
+   "parked": {
+    "bicycle": 725,
+    "mopedGeneral": 19,
+    "mopedSpecific": 8,
+    "motorcycle": 5,
+    "total": 757
+   },
+   "occupancy": {
+    "bicycle": 8719,
+    "moped": 953,
+    "total": 9672
+   },
+   "capacity": {
+    "bicycle": 11065,
+    "moped": 1212,
+    "total": 12277
+   },
+   "inflow": {
+    "total": 10429,
+    "bicycle": 9444
+   },
+   "bicycleParkedRatePercent": 7.7,
+   "removalFY2024": {
+    "removed": {
+     "total": 8217,
+     "bicycle": 8167,
+     "moped": 50
+    },
+    "returned": {
+     "total": 6361,
+     "bicycle": 6337,
+     "moped": 24
+    },
+    "disposed": {
+     "total": 1658,
+     "bicycle": 1658,
+     "moped": 0
+    },
+    "returnRatePercent": 77.4
+   }
+  },
+  {
+   "name": "目黒区",
+   "area": "区部",
+   "stationCount": 14,
+   "stationsWithParkedBicycles": 12,
+   "parked": {
+    "bicycle": 463,
+    "mopedGeneral": 22,
+    "mopedSpecific": 5,
+    "motorcycle": 15,
+    "total": 505
+   },
+   "occupancy": {
+    "bicycle": 6388,
+    "moped": 110,
+    "total": 6498
+   },
+   "capacity": {
+    "bicycle": 9128,
+    "moped": 246,
+    "total": 9374
+   },
+   "inflow": {
+    "total": 7003,
+    "bicycle": 6851
+   },
+   "bicycleParkedRatePercent": 6.8,
+   "removalFY2024": {
+    "removed": {
+     "total": 7741,
+     "bicycle": 7714,
+     "moped": 27
+    },
+    "returned": {
+     "total": 6167,
+     "bicycle": 6149,
+     "moped": 18
+    },
+    "disposed": {
+     "total": 1879,
+     "bicycle": 1873,
+     "moped": 6
+    },
+    "returnRatePercent": 79.7
+   }
+  },
+  {
+   "name": "大田区",
+   "area": "区部",
+   "stationCount": 36,
+   "stationsWithParkedBicycles": 28,
+   "parked": {
+    "bicycle": 323,
+    "mopedGeneral": 5,
+    "mopedSpecific": 0,
+    "motorcycle": 11,
+    "total": 339
+   },
+   "occupancy": {
+    "bicycle": 25771,
+    "moped": 291,
+    "total": 26062
+   },
+   "capacity": {
+    "bicycle": 39590,
+    "moped": 625,
+    "total": 40215
+   },
+   "inflow": {
+    "total": 26401,
+    "bicycle": 26094
+   },
+   "bicycleParkedRatePercent": 1.2,
+   "removalFY2024": {
+    "removed": {
+     "total": 13360,
+     "bicycle": 13304,
+     "moped": 56
+    },
+    "returned": {
+     "total": 8736,
+     "bicycle": 8709,
+     "moped": 27
+    },
+    "disposed": {
+     "total": 4906,
+     "bicycle": 4886,
+     "moped": 20
+    },
+    "returnRatePercent": 65.4
+   }
+  },
+  {
+   "name": "世田谷区",
+   "area": "区部",
+   "stationCount": 40,
+   "stationsWithParkedBicycles": 35,
+   "parked": {
+    "bicycle": 736,
+    "mopedGeneral": 29,
+    "mopedSpecific": 3,
+    "motorcycle": 67,
+    "total": 835
+   },
+   "occupancy": {
+    "bicycle": 38844,
+    "moped": 933,
+    "total": 39777
+   },
+   "capacity": {
+    "bicycle": 51500,
+    "moped": 1546,
+    "total": 53046
+   },
+   "inflow": {
+    "total": 40612,
+    "bicycle": 39580
+   },
+   "bicycleParkedRatePercent": 1.9,
+   "removalFY2024": {
+    "removed": {
+     "total": 13399,
+     "bicycle": 13250,
+     "moped": 149
+    },
+    "returned": {
+     "total": 9712,
+     "bicycle": 9610,
+     "moped": 102
+    },
+    "disposed": {
+     "total": 3796,
+     "bicycle": 3750,
+     "moped": 46
+    },
+    "returnRatePercent": 72.5
+   }
+  },
+  {
+   "name": "渋谷区",
+   "area": "区部",
+   "stationCount": 18,
+   "stationsWithParkedBicycles": 18,
+   "parked": {
+    "bicycle": 1364,
+    "mopedGeneral": 27,
+    "mopedSpecific": 1,
+    "motorcycle": 49,
+    "total": 1441
+   },
+   "occupancy": {
+    "bicycle": 4532,
+    "moped": 574,
+    "total": 5106
+   },
+   "capacity": {
+    "bicycle": 6136,
+    "moped": 1020,
+    "total": 7156
+   },
+   "inflow": {
+    "total": 6547,
+    "bicycle": 5896
+   },
+   "bicycleParkedRatePercent": 23.1,
+   "removalFY2024": {
+    "removed": {
+     "total": 4801,
+     "bicycle": 4772,
+     "moped": 29
+    },
+    "returned": {
+     "total": 3301,
+     "bicycle": 3286,
+     "moped": 15
+    },
+    "disposed": {
+     "total": 2153,
+     "bicycle": 2142,
+     "moped": 11
+    },
+    "returnRatePercent": 68.8
+   }
+  },
+  {
+   "name": "中野区",
+   "area": "区部",
+   "stationCount": 14,
+   "stationsWithParkedBicycles": 13,
+   "parked": {
+    "bicycle": 331,
+    "mopedGeneral": 14,
+    "mopedSpecific": 8,
+    "motorcycle": 12,
+    "total": 365
+   },
+   "occupancy": {
+    "bicycle": 7265,
+    "moped": 44,
+    "total": 7309
+   },
+   "capacity": {
+    "bicycle": 13795,
+    "moped": 148,
+    "total": 13943
+   },
+   "inflow": {
+    "total": 7674,
+    "bicycle": 7596
+   },
+   "bicycleParkedRatePercent": 4.4,
+   "removalFY2024": {
+    "removed": {
+     "total": 6130,
+     "bicycle": 6127,
+     "moped": 3
+    },
+    "returned": {
+     "total": 3825,
+     "bicycle": 3825,
+     "moped": 0
+    },
+    "disposed": {
+     "total": 2365,
+     "bicycle": 2365,
+     "moped": 0
+    },
+    "returnRatePercent": 62.4
+   }
+  },
+  {
+   "name": "杉並区",
+   "area": "区部",
+   "stationCount": 26,
+   "stationsWithParkedBicycles": 21,
+   "parked": {
+    "bicycle": 813,
+    "mopedGeneral": 22,
+    "mopedSpecific": 0,
+    "motorcycle": 16,
+    "total": 851
+   },
+   "occupancy": {
+    "bicycle": 25925,
+    "moped": 211,
+    "total": 26136
+   },
+   "capacity": {
+    "bicycle": 35386,
+    "moped": 492,
+    "total": 35878
+   },
+   "inflow": {
+    "total": 26987,
+    "bicycle": 26738
+   },
+   "bicycleParkedRatePercent": 3,
+   "removalFY2024": {
+    "removed": {
+     "total": 8139,
+     "bicycle": 8123,
+     "moped": 16
+    },
+    "returned": {
+     "total": 4924,
+     "bicycle": 4924,
+     "moped": 0
+    },
+    "disposed": {
+     "total": 3214,
+     "bicycle": 3196,
+     "moped": 18
+    },
+    "returnRatePercent": 60.5
+   }
+  },
+  {
+   "name": "豊島区",
+   "area": "区部",
+   "stationCount": 18,
+   "stationsWithParkedBicycles": 18,
+   "parked": {
+    "bicycle": 513,
+    "mopedGeneral": 10,
+    "mopedSpecific": 2,
+    "motorcycle": 14,
+    "total": 539
+   },
+   "occupancy": {
+    "bicycle": 9854,
+    "moped": 122,
+    "total": 9976
+   },
+   "capacity": {
+    "bicycle": 15810,
+    "moped": 194,
+    "total": 16004
+   },
+   "inflow": {
+    "total": 10515,
+    "bicycle": 10367
+   },
+   "bicycleParkedRatePercent": 4.9,
+   "removalFY2024": {
+    "removed": {
+     "total": 11497,
+     "bicycle": 11462,
+     "moped": 35
+    },
+    "returned": {
+     "total": 8417,
+     "bicycle": 8394,
+     "moped": 23
+    },
+    "disposed": {
+     "total": 3076,
+     "bicycle": 3068,
+     "moped": 8
+    },
+    "returnRatePercent": 73.2
+   }
+  },
+  {
+   "name": "北区",
+   "area": "区部",
+   "stationCount": 16,
+   "stationsWithParkedBicycles": 15,
+   "parked": {
+    "bicycle": 275,
+    "mopedGeneral": 26,
+    "mopedSpecific": 0,
+    "motorcycle": 10,
+    "total": 311
+   },
+   "occupancy": {
+    "bicycle": 13669,
+    "moped": 260,
+    "total": 13929
+   },
+   "capacity": {
+    "bicycle": 24982,
+    "moped": 656,
+    "total": 25638
+   },
+   "inflow": {
+    "total": 14240,
+    "bicycle": 13944
+   },
+   "bicycleParkedRatePercent": 2,
+   "removalFY2024": {
+    "removed": {
+     "total": 9253,
+     "bicycle": 9253,
+     "moped": 0
+    },
+    "returned": {
+     "total": 5967,
+     "bicycle": 5967,
+     "moped": 0
+    },
+    "disposed": {
+     "total": 2807,
+     "bicycle": 2807,
+     "moped": 0
+    },
+    "returnRatePercent": 64.5
+   }
+  },
+  {
+   "name": "荒川区",
+   "area": "区部",
+   "stationCount": 11,
+   "stationsWithParkedBicycles": 11,
+   "parked": {
+    "bicycle": 192,
+    "mopedGeneral": 3,
+    "mopedSpecific": 0,
+    "motorcycle": 3,
+    "total": 198
+   },
+   "occupancy": {
+    "bicycle": 7977,
+    "moped": 32,
+    "total": 8009
+   },
+   "capacity": {
+    "bicycle": 11338,
+    "moped": 92,
+    "total": 11430
+   },
+   "inflow": {
+    "total": 8207,
+    "bicycle": 8169
+   },
+   "bicycleParkedRatePercent": 2.4,
+   "removalFY2024": {
+    "removed": {
+     "total": 2351,
+     "bicycle": 2347,
+     "moped": 4
+    },
+    "returned": {
+     "total": 906,
+     "bicycle": 901,
+     "moped": 5
+    },
+    "disposed": {
+     "total": 1554,
+     "bicycle": 1551,
+     "moped": 3
+    },
+    "returnRatePercent": 38.5
+   }
+  },
+  {
+   "name": "板橋区",
+   "area": "区部",
+   "stationCount": 22,
+   "stationsWithParkedBicycles": 19,
+   "parked": {
+    "bicycle": 263,
+    "mopedGeneral": 33,
+    "mopedSpecific": 3,
+    "motorcycle": 8,
+    "total": 307
+   },
+   "occupancy": {
+    "bicycle": 17866,
+    "moped": 802,
+    "total": 18668
+   },
+   "capacity": {
+    "bicycle": 29296,
+    "moped": 1483,
+    "total": 30779
+   },
+   "inflow": {
+    "total": 18975,
+    "bicycle": 18129
+   },
+   "bicycleParkedRatePercent": 1.5,
+   "removalFY2024": {
+    "removed": {
+     "total": 4823,
+     "bicycle": 4763,
+     "moped": 60
+    },
+    "returned": {
+     "total": 2390,
+     "bicycle": 2355,
+     "moped": 35
+    },
+    "disposed": {
+     "total": 2502,
+     "bicycle": 2463,
+     "moped": 39
+    },
+    "returnRatePercent": 49.6
+   }
+  },
+  {
+   "name": "練馬区",
+   "area": "区部",
+   "stationCount": 22,
+   "stationsWithParkedBicycles": 19,
+   "parked": {
+    "bicycle": 216,
+    "mopedGeneral": 6,
+    "mopedSpecific": 0,
+    "motorcycle": 0,
+    "total": 222
+   },
+   "occupancy": {
+    "bicycle": 36442,
+    "moped": 470,
+    "total": 36912
+   },
+   "capacity": {
+    "bicycle": 52333,
+    "moped": 983,
+    "total": 53316
+   },
+   "inflow": {
+    "total": 37134,
+    "bicycle": 36658
+   },
+   "bicycleParkedRatePercent": 0.6,
+   "removalFY2024": {
+    "removed": {
+     "total": 3914,
+     "bicycle": 3873,
+     "moped": 41
+    },
+    "returned": {
+     "total": 2202,
+     "bicycle": 2181,
+     "moped": 21
+    },
+    "disposed": {
+     "total": 1948,
+     "bicycle": 1930,
+     "moped": 18
+    },
+    "returnRatePercent": 56.3
+   }
+  },
+  {
+   "name": "足立区",
+   "area": "区部",
+   "stationCount": 23,
+   "stationsWithParkedBicycles": 21,
+   "parked": {
+    "bicycle": 156,
+    "mopedGeneral": 19,
+    "mopedSpecific": 4,
+    "motorcycle": 2,
+    "total": 181
+   },
+   "occupancy": {
+    "bicycle": 34091,
+    "moped": 357,
+    "total": 34448
+   },
+   "capacity": {
+    "bicycle": 58877,
+    "moped": 886,
+    "total": 59763
+   },
+   "inflow": {
+    "total": 34629,
+    "bicycle": 34247
+   },
+   "bicycleParkedRatePercent": 0.5,
+   "removalFY2024": {
+    "removed": {
+     "total": 6226,
+     "bicycle": 6204,
+     "moped": 22
+    },
+    "returned": {
+     "total": 3028,
+     "bicycle": 3028,
+     "moped": 0
+    },
+    "disposed": {
+     "total": 2867,
+     "bicycle": 2849,
+     "moped": 18
+    },
+    "returnRatePercent": 48.6
+   }
+  },
+  {
+   "name": "葛飾区",
+   "area": "区部",
+   "stationCount": 12,
+   "stationsWithParkedBicycles": 12,
+   "parked": {
+    "bicycle": 647,
+    "mopedGeneral": 86,
+    "mopedSpecific": 0,
+    "motorcycle": 7,
+    "total": 740
+   },
+   "occupancy": {
+    "bicycle": 26491,
+    "moped": 343,
+    "total": 26834
+   },
+   "capacity": {
+    "bicycle": 43497,
+    "moped": 654,
+    "total": 44151
+   },
+   "inflow": {
+    "total": 27574,
+    "bicycle": 27138
+   },
+   "bicycleParkedRatePercent": 2.4,
+   "removalFY2024": {
+    "removed": {
+     "total": 6756,
+     "bicycle": 6756,
+     "moped": 0
+    },
+    "returned": {
+     "total": 4650,
+     "bicycle": 4650,
+     "moped": 0
+    },
+    "disposed": {
+     "total": 3390,
+     "bicycle": 3390,
+     "moped": 0
+    },
+    "returnRatePercent": 68.8
+   }
+  },
+  {
+   "name": "江戸川区",
+   "area": "区部",
+   "stationCount": 12,
+   "stationsWithParkedBicycles": 9,
+   "parked": {
+    "bicycle": 134,
+    "mopedGeneral": 9,
+    "mopedSpecific": 0,
+    "motorcycle": 1,
+    "total": 144
+   },
+   "occupancy": {
+    "bicycle": 28687,
+    "moped": 383,
+    "total": 29070
+   },
+   "capacity": {
+    "bicycle": 51770,
+    "moped": 542,
+    "total": 52312
+   },
+   "inflow": {
+    "total": 29214,
+    "bicycle": 28821
+   },
+   "bicycleParkedRatePercent": 0.5,
+   "removalFY2024": {
+    "removed": {
+     "total": 10321,
+     "bicycle": 10310,
+     "moped": 11
+    },
+    "returned": {
+     "total": 5774,
+     "bicycle": 5772,
+     "moped": 2
+    },
+    "disposed": {
+     "total": 4936,
+     "bicycle": 4540,
+     "moped": 2
+    },
+    "returnRatePercent": 55.9,
+    "notes": [
+     "原本の表で 処分台数の「計」が「自転車＋原付」より 394 台多い（原本どおり収録）"
+    ]
+   }
+  },
+  {
+   "name": "八王子市",
+   "area": "市部",
+   "stationCount": 20,
+   "stationsWithParkedBicycles": 13,
+   "parked": {
+    "bicycle": 263,
+    "mopedGeneral": 22,
+    "mopedSpecific": 5,
+    "motorcycle": 10,
+    "total": 300
+   },
+   "occupancy": {
+    "bicycle": 17271,
+    "moped": 1967,
+    "total": 19238
+   },
+   "capacity": {
+    "bicycle": 27486,
+    "moped": 3740,
+    "total": 31226
+   },
+   "inflow": {
+    "total": 19538,
+    "bicycle": 17534
+   },
+   "bicycleParkedRatePercent": 1.5,
+   "removalFY2024": {
+    "removed": {
+     "total": 1641,
+     "bicycle": 1585,
+     "moped": 56
+    },
+    "returned": {
+     "total": 872,
+     "bicycle": 835,
+     "moped": 37
+    },
+    "disposed": {
+     "total": 1129,
+     "bicycle": 1110,
+     "moped": 19
+    },
+    "returnRatePercent": 53.1
+   }
+  },
+  {
+   "name": "立川市",
+   "area": "市部",
+   "stationCount": 11,
+   "stationsWithParkedBicycles": 4,
+   "parked": {
+    "bicycle": 40,
+    "mopedGeneral": 1,
+    "mopedSpecific": 0,
+    "motorcycle": 1,
+    "total": 42
+   },
+   "occupancy": {
+    "bicycle": 13438,
+    "moped": 266,
+    "total": 13704
+   },
+   "capacity": {
+    "bicycle": 24297,
+    "moped": 451,
+    "total": 24748
+   },
+   "inflow": {
+    "total": 13746,
+    "bicycle": 13478
+   },
+   "bicycleParkedRatePercent": 0.3,
+   "removalFY2024": {
+    "removed": {
+     "total": 1624,
+     "bicycle": 1595,
+     "moped": 29
+    },
+    "returned": {
+     "total": 821,
+     "bicycle": 800,
+     "moped": 21
+    },
+    "disposed": {
+     "total": 786,
+     "bicycle": 785,
+     "moped": 1
+    },
+    "returnRatePercent": 50.6
+   }
+  },
+  {
+   "name": "武蔵野市",
+   "area": "市部",
+   "stationCount": 3,
+   "stationsWithParkedBicycles": 3,
+   "parked": {
+    "bicycle": 66,
+    "mopedGeneral": 0,
+    "mopedSpecific": 0,
+    "motorcycle": 0,
+    "total": 66
+   },
+   "occupancy": {
+    "bicycle": 18865,
+    "moped": 324,
+    "total": 19189
+   },
+   "capacity": {
+    "bicycle": 32702,
+    "moped": 702,
+    "total": 33404
+   },
+   "inflow": {
+    "total": 19255,
+    "bicycle": 18931
+   },
+   "bicycleParkedRatePercent": 0.3,
+   "removalFY2024": {
+    "removed": {
+     "total": 1469,
+     "bicycle": 1451,
+     "moped": 18
+    },
+    "returned": {
+     "total": 913,
+     "bicycle": 897,
+     "moped": 16
+    },
+    "disposed": {
+     "total": 542,
+     "bicycle": 542,
+     "moped": 0
+    },
+    "returnRatePercent": 62.2
+   }
+  },
+  {
+   "name": "三鷹市",
+   "area": "市部",
+   "stationCount": 4,
+   "stationsWithParkedBicycles": 4,
+   "parked": {
+    "bicycle": 56,
+    "mopedGeneral": 6,
+    "mopedSpecific": 0,
+    "motorcycle": 6,
+    "total": 68
+   },
+   "occupancy": {
+    "bicycle": 4804,
+    "moped": 51,
+    "total": 4855
+   },
+   "capacity": {
+    "bicycle": 9417,
+    "moped": 149,
+    "total": 9566
+   },
+   "inflow": {
+    "total": 4923,
+    "bicycle": 4860
+   },
+   "bicycleParkedRatePercent": 1.2,
+   "removalFY2024": {
+    "removed": {
+     "total": 787,
+     "bicycle": 778,
+     "moped": 9
+    },
+    "returned": {
+     "total": 378,
+     "bicycle": 373,
+     "moped": 5
+    },
+    "disposed": {
+     "total": 409,
+     "bicycle": 406,
+     "moped": 3
+    },
+    "returnRatePercent": 48
+   }
+  },
+  {
+   "name": "青梅市",
+   "area": "市部",
+   "stationCount": 11,
+   "stationsWithParkedBicycles": 3,
+   "parked": {
+    "bicycle": 7,
+    "mopedGeneral": 1,
+    "mopedSpecific": 0,
+    "motorcycle": 1,
+    "total": 9
+   },
+   "occupancy": {
+    "bicycle": 3255,
+    "moped": 312,
+    "total": 3567
+   },
+   "capacity": {
+    "bicycle": 7062,
+    "moped": 817,
+    "total": 7879
+   },
+   "inflow": {
+    "total": 3576,
+    "bicycle": 3262
+   },
+   "bicycleParkedRatePercent": 0.2,
+   "removalFY2024": {
+    "removed": {
+     "total": 175,
+     "bicycle": 174,
+     "moped": 1
+    },
+    "returned": {
+     "total": 56,
+     "bicycle": 56,
+     "moped": 0
+    },
+    "disposed": {
+     "total": 310,
+     "bicycle": 310,
+     "moped": 0
+    },
+    "returnRatePercent": 32
+   }
+  },
+  {
+   "name": "府中市",
+   "area": "市部",
+   "stationCount": 14,
+   "stationsWithParkedBicycles": 8,
+   "parked": {
+    "bicycle": 34,
+    "mopedGeneral": 6,
+    "mopedSpecific": 0,
+    "motorcycle": 0,
+    "total": 40
+   },
+   "occupancy": {
+    "bicycle": 13331,
+    "moped": 440,
+    "total": 13771
+   },
+   "capacity": {
+    "bicycle": 21380,
+    "moped": 698,
+    "total": 22078
+   },
+   "inflow": {
+    "total": 13811,
+    "bicycle": 13365
+   },
+   "bicycleParkedRatePercent": 0.3,
+   "removalFY2024": {
+    "removed": {
+     "total": 1666,
+     "bicycle": 1666,
+     "moped": 0
+    },
+    "returned": {
+     "total": 872,
+     "bicycle": 872,
+     "moped": 0
+    },
+    "disposed": {
+     "total": 390,
+     "bicycle": 390,
+     "moped": 0
+    },
+    "returnRatePercent": 52.3
+   }
+  },
+  {
+   "name": "昭島市",
+   "area": "市部",
+   "stationCount": 6,
+   "stationsWithParkedBicycles": 2,
+   "parked": {
+    "bicycle": 4,
+    "mopedGeneral": 0,
+    "mopedSpecific": 0,
+    "motorcycle": 0,
+    "total": 4
+   },
+   "occupancy": {
+    "bicycle": 4499,
+    "moped": 67,
+    "total": 4566
+   },
+   "capacity": {
+    "bicycle": 11670,
+    "moped": 306,
+    "total": 11976
+   },
+   "inflow": {
+    "total": 4570,
+    "bicycle": 4503
+   },
+   "bicycleParkedRatePercent": 0.1,
+   "removalFY2024": {
+    "removed": {
+     "total": 793,
+     "bicycle": 785,
+     "moped": 8
+    },
+    "returned": {
+     "total": 355,
+     "bicycle": 350,
+     "moped": 5
+    },
+    "disposed": {
+     "total": 432,
+     "bicycle": 429,
+     "moped": 3
+    },
+    "returnRatePercent": 44.8
+   }
+  },
+  {
+   "name": "調布市",
+   "area": "市部",
+   "stationCount": 9,
+   "stationsWithParkedBicycles": 9,
+   "parked": {
+    "bicycle": 97,
+    "mopedGeneral": 5,
+    "mopedSpecific": 0,
+    "motorcycle": 3,
+    "total": 105
+   },
+   "occupancy": {
+    "bicycle": 11217,
+    "moped": 246,
+    "total": 11463
+   },
+   "capacity": {
+    "bicycle": 22176,
+    "moped": 674,
+    "total": 22850
+   },
+   "inflow": {
+    "total": 11568,
+    "bicycle": 11314
+   },
+   "bicycleParkedRatePercent": 0.9,
+   "removalFY2024": {
+    "removed": {
+     "total": 2027,
+     "bicycle": 2009,
+     "moped": 18
+    },
+    "returned": {
+     "total": 1351,
+     "bicycle": 1334,
+     "moped": 17
+    },
+    "disposed": {
+     "total": 625,
+     "bicycle": 621,
+     "moped": 4
+    },
+    "returnRatePercent": 66.7
+   }
+  },
+  {
+   "name": "町田市",
+   "area": "市部",
+   "stationCount": 9,
+   "stationsWithParkedBicycles": 4,
+   "parked": {
+    "bicycle": 20,
+    "mopedGeneral": 2,
+    "mopedSpecific": 0,
+    "motorcycle": 1,
+    "total": 23
+   },
+   "occupancy": {
+    "bicycle": 16813,
+    "moped": 2702,
+    "total": 19515
+   },
+   "capacity": {
+    "bicycle": 19139,
+    "moped": 3985,
+    "total": 23124
+   },
+   "inflow": {
+    "total": 19538,
+    "bicycle": 16833
+   },
+   "bicycleParkedRatePercent": 0.1,
+   "removalFY2024": {
+    "removed": {
+     "total": 1355,
+     "bicycle": 1279,
+     "moped": 76
+    },
+    "returned": {
+     "total": 690,
+     "bicycle": 634,
+     "moped": 56
+    },
+    "disposed": {
+     "total": 652,
+     "bicycle": 628,
+     "moped": 24
+    },
+    "returnRatePercent": 50.9
+   }
+  },
+  {
+   "name": "小金井市",
+   "area": "市部",
+   "stationCount": 3,
+   "stationsWithParkedBicycles": 2,
+   "parked": {
+    "bicycle": 20,
+    "mopedGeneral": 0,
+    "mopedSpecific": 0,
+    "motorcycle": 0,
+    "total": 20
+   },
+   "occupancy": {
+    "bicycle": 6973,
+    "moped": 146,
+    "total": 7119
+   },
+   "capacity": {
+    "bicycle": 9932,
+    "moped": 290,
+    "total": 10222
+   },
+   "inflow": {
+    "total": 7139,
+    "bicycle": 6993
+   },
+   "bicycleParkedRatePercent": 0.3,
+   "removalFY2024": {
+    "removed": {
+     "total": 689,
+     "bicycle": 687,
+     "moped": 2
+    },
+    "returned": {
+     "total": 423,
+     "bicycle": 421,
+     "moped": 2
+    },
+    "disposed": {
+     "total": 274,
+     "bicycle": 273,
+     "moped": 1
+    },
+    "returnRatePercent": 61.4
+   }
+  },
+  {
+   "name": "小平市",
+   "area": "市部",
+   "stationCount": 8,
+   "stationsWithParkedBicycles": 4,
+   "parked": {
+    "bicycle": 19,
+    "mopedGeneral": 0,
+    "mopedSpecific": 0,
+    "motorcycle": 0,
+    "total": 19
+   },
+   "occupancy": {
+    "bicycle": 13212,
+    "moped": 299,
+    "total": 13511
+   },
+   "capacity": {
+    "bicycle": 22800.877,
+    "moped": 818.123,
+    "total": 23619
+   },
+   "inflow": {
+    "total": 13530,
+    "bicycle": 13231
+   },
+   "bicycleParkedRatePercent": 0.1,
+   "removalFY2024": {
+    "removed": {
+     "total": 1133,
+     "bicycle": 1122,
+     "moped": 11
+    },
+    "returned": {
+     "total": 537,
+     "bicycle": 531,
+     "moped": 6
+    },
+    "disposed": {
+     "total": 603,
+     "bicycle": 601,
+     "moped": 2
+    },
+    "returnRatePercent": 47.4
+   }
+  },
+  {
+   "name": "日野市",
+   "area": "市部",
+   "stationCount": 10,
+   "stationsWithParkedBicycles": 7,
+   "parked": {
+    "bicycle": 72,
+    "mopedGeneral": 3,
+    "mopedSpecific": 0,
+    "motorcycle": 1,
+    "total": 76
+   },
+   "occupancy": {
+    "bicycle": 7942,
+    "moped": 620,
+    "total": 8562
+   },
+   "capacity": {
+    "bicycle": 15025,
+    "moped": 1201,
+    "total": 16226
+   },
+   "inflow": {
+    "total": 8638,
+    "bicycle": 8014
+   },
+   "bicycleParkedRatePercent": 0.9,
+   "removalFY2024": {
+    "removed": {
+     "total": 984,
+     "bicycle": 959,
+     "moped": 25
+    },
+    "returned": {
+     "total": 576,
+     "bicycle": 565,
+     "moped": 11
+    },
+    "disposed": {
+     "total": 388,
+     "bicycle": 373,
+     "moped": 15
+    },
+    "returnRatePercent": 58.5
+   }
+  },
+  {
+   "name": "東村山市",
+   "area": "市部",
+   "stationCount": 9,
+   "stationsWithParkedBicycles": 0,
+   "parked": {
+    "bicycle": 0,
+    "mopedGeneral": 0,
+    "mopedSpecific": 0,
+    "motorcycle": 0,
+    "total": 0
+   },
+   "occupancy": {
+    "bicycle": 6280,
+    "moped": 145,
+    "total": 6425
+   },
+   "capacity": {
+    "bicycle": 10239,
+    "moped": 329,
+    "total": 10568
+   },
+   "inflow": {
+    "total": 6425,
+    "bicycle": 6280
+   },
+   "bicycleParkedRatePercent": 0,
+   "removalFY2024": {
+    "removed": {
+     "total": 561,
+     "bicycle": 556,
+     "moped": 5
+    },
+    "returned": {
+     "total": 195,
+     "bicycle": 192,
+     "moped": 3
+    },
+    "disposed": {
+     "total": 441,
+     "bicycle": 439,
+     "moped": 2
+    },
+    "returnRatePercent": 34.8
+   }
+  },
+  {
+   "name": "国分寺市",
+   "area": "市部",
+   "stationCount": 4,
+   "stationsWithParkedBicycles": 1,
+   "parked": {
+    "bicycle": 2,
+    "mopedGeneral": 0,
+    "mopedSpecific": 0,
+    "motorcycle": 0,
+    "total": 2
+   },
+   "occupancy": {
+    "bicycle": 6002,
+    "moped": 91,
+    "total": 6093
+   },
+   "capacity": {
+    "bicycle": 15141,
+    "moped": 482,
+    "total": 15623
+   },
+   "inflow": {
+    "total": 6095,
+    "bicycle": 6004
+   },
+   "bicycleParkedRatePercent": 0,
+   "removalFY2024": {
+    "removed": {
+     "total": 846,
+     "bicycle": 838,
+     "moped": 8
+    },
+    "returned": {
+     "total": 481,
+     "bicycle": 475,
+     "moped": 6
+    },
+    "disposed": {
+     "total": 349,
+     "bicycle": 349,
+     "moped": 0
+    },
+    "returnRatePercent": 56.9
+   }
+  },
+  {
+   "name": "国立市",
+   "area": "市部",
+   "stationCount": 3,
+   "stationsWithParkedBicycles": 3,
+   "parked": {
+    "bicycle": 8,
+    "mopedGeneral": 0,
+    "mopedSpecific": 0,
+    "motorcycle": 0,
+    "total": 8
+   },
+   "occupancy": {
+    "bicycle": 5251,
+    "moped": 76,
+    "total": 5327
+   },
+   "capacity": {
+    "bicycle": 9344,
+    "moped": 138,
+    "total": 9482
+   },
+   "inflow": {
+    "total": 5335,
+    "bicycle": 5259
+   },
+   "bicycleParkedRatePercent": 0.2,
+   "removalFY2024": {
+    "removed": {
+     "total": 782,
+     "bicycle": 782,
+     "moped": 0
+    },
+    "returned": {
+     "total": 434,
+     "bicycle": 434,
+     "moped": 0
+    },
+    "disposed": {
+     "total": 323,
+     "bicycle": 323,
+     "moped": 0
+    },
+    "returnRatePercent": 55.5
+   }
+  },
+  {
+   "name": "福生市",
+   "area": "市部",
+   "stationCount": 5,
+   "stationsWithParkedBicycles": 1,
+   "parked": {
+    "bicycle": 1,
+    "mopedGeneral": 0,
+    "mopedSpecific": 0,
+    "motorcycle": 0,
+    "total": 1
+   },
+   "occupancy": {
+    "bicycle": 1740,
+    "moped": 108,
+    "total": 1848
+   },
+   "capacity": {
+    "bicycle": 5216,
+    "moped": 394,
+    "total": 5610
+   },
+   "inflow": {
+    "total": 1849,
+    "bicycle": 1741
+   },
+   "bicycleParkedRatePercent": 0.1,
+   "removalFY2024": {
+    "removed": {
+     "total": 417,
+     "bicycle": 411,
+     "moped": 6
+    },
+    "returned": {
+     "total": 254,
+     "bicycle": 250,
+     "moped": 4
+    },
+    "disposed": {
+     "total": 113,
+     "bicycle": 113,
+     "moped": 0
+    },
+    "returnRatePercent": 60.9
+   }
+  },
+  {
+   "name": "狛江市",
+   "area": "市部",
+   "stationCount": 3,
+   "stationsWithParkedBicycles": 2,
+   "parked": {
+    "bicycle": 36,
+    "mopedGeneral": 1,
+    "mopedSpecific": 0,
+    "motorcycle": 0,
+    "total": 37
+   },
+   "occupancy": {
+    "bicycle": 5140,
+    "moped": 150,
+    "total": 5290
+   },
+   "capacity": {
+    "bicycle": 5525,
+    "moped": 205,
+    "total": 5730
+   },
+   "inflow": {
+    "total": 5327,
+    "bicycle": 5176
+   },
+   "bicycleParkedRatePercent": 0.7,
+   "removalFY2024": {
+    "removed": {
+     "total": 190,
+     "bicycle": 185,
+     "moped": 5
+    },
+    "returned": {
+     "total": 96,
+     "bicycle": 92,
+     "moped": 4
+    },
+    "disposed": {
+     "total": 106,
+     "bicycle": 106,
+     "moped": 0
+    },
+    "returnRatePercent": 50.5
+   }
+  },
+  {
+   "name": "東大和市",
+   "area": "市部",
+   "stationCount": 5,
+   "stationsWithParkedBicycles": 0,
+   "parked": {
+    "bicycle": 0,
+    "mopedGeneral": 0,
+    "mopedSpecific": 0,
+    "motorcycle": 0,
+    "total": 0
+   },
+   "occupancy": {
+    "bicycle": 4686,
+    "moped": 84,
+    "total": 4770
+   },
+   "capacity": {
+    "bicycle": 7890,
+    "moped": 142,
+    "total": 8032
+   },
+   "inflow": {
+    "total": 4770,
+    "bicycle": 4686
+   },
+   "bicycleParkedRatePercent": 0,
+   "removalFY2024": {
+    "removed": {
+     "total": 134,
+     "bicycle": 134,
+     "moped": 0
+    },
+    "returned": {
+     "total": 58,
+     "bicycle": 58,
+     "moped": 0
+    },
+    "disposed": {
+     "total": 73,
+     "bicycle": 73,
+     "moped": 0
+    },
+    "returnRatePercent": 43.3
+   }
+  },
+  {
+   "name": "清瀬市",
+   "area": "市部",
+   "stationCount": 2,
+   "stationsWithParkedBicycles": 1,
+   "parked": {
+    "bicycle": 5,
+    "mopedGeneral": 0,
+    "mopedSpecific": 0,
+    "motorcycle": 0,
+    "total": 5
+   },
+   "occupancy": {
+    "bicycle": 4380,
+    "moped": 123,
+    "total": 4503
+   },
+   "capacity": {
+    "bicycle": 6820,
+    "moped": 228,
+    "total": 7048
+   },
+   "inflow": {
+    "total": 4508,
+    "bicycle": 4385
+   },
+   "bicycleParkedRatePercent": 0.1,
+   "removalFY2024": {
+    "removed": {
+     "total": 275,
+     "bicycle": 264,
+     "moped": 11
+    },
+    "returned": {
+     "total": 90,
+     "bicycle": 86,
+     "moped": 4
+    },
+    "disposed": {
+     "total": 245,
+     "bicycle": 245,
+     "moped": 0
+    },
+    "returnRatePercent": 32.7
+   }
+  },
+  {
+   "name": "東久留米市",
+   "area": "市部",
+   "stationCount": 1,
+   "stationsWithParkedBicycles": 1,
+   "parked": {
+    "bicycle": 5,
+    "mopedGeneral": 1,
+    "mopedSpecific": 0,
+    "motorcycle": 0,
+    "total": 6
+   },
+   "occupancy": {
+    "bicycle": 3977,
+    "moped": 126,
+    "total": 4103
+   },
+   "capacity": {
+    "bicycle": 4691,
+    "moped": 184,
+    "total": 4875
+   },
+   "inflow": {
+    "total": 4109,
+    "bicycle": 3982
+   },
+   "bicycleParkedRatePercent": 0.1,
+   "removalFY2024": {
+    "removed": {
+     "total": 327,
+     "bicycle": 322,
+     "moped": 5
+    },
+    "returned": {
+     "total": 144,
+     "bicycle": 143,
+     "moped": 1
+    },
+    "disposed": {
+     "total": 117,
+     "bicycle": 117,
+     "moped": 0
+    },
+    "returnRatePercent": 44
+   }
+  },
+  {
+   "name": "武蔵村山市",
+   "area": "市部",
+   "stationCount": 3,
+   "stationsWithParkedBicycles": 0,
+   "parked": {
+    "bicycle": 0,
+    "mopedGeneral": 0,
+    "mopedSpecific": 0,
+    "motorcycle": 0,
+    "total": 0
+   },
+   "occupancy": {
+    "bicycle": 0,
+    "moped": 0,
+    "total": 0
+   },
+   "capacity": {
+    "bicycle": 0,
+    "moped": 0,
+    "total": 0
+   },
+   "inflow": {
+    "total": 0,
+    "bicycle": 0
+   },
+   "bicycleParkedRatePercent": null,
+   "removalFY2024": {
+    "removed": {
+     "total": 117,
+     "bicycle": 117,
+     "moped": 0
+    },
+    "returned": {
+     "total": 0,
+     "bicycle": 0,
+     "moped": 0
+    },
+    "disposed": {
+     "total": 117,
+     "bicycle": 117,
+     "moped": 0
+    },
+    "returnRatePercent": 0
+   }
+  },
+  {
+   "name": "多摩市",
+   "area": "市部",
+   "stationCount": 4,
+   "stationsWithParkedBicycles": 3,
+   "parked": {
+    "bicycle": 30,
+    "mopedGeneral": 3,
+    "mopedSpecific": 0,
+    "motorcycle": 0,
+    "total": 33
+   },
+   "occupancy": {
+    "bicycle": 4188,
+    "moped": 681,
+    "total": 4869
+   },
+   "capacity": {
+    "bicycle": 6987,
+    "moped": 1352,
+    "total": 8339
+   },
+   "inflow": {
+    "total": 4902,
+    "bicycle": 4218
+   },
+   "bicycleParkedRatePercent": 0.7,
+   "removalFY2024": {
+    "removed": {
+     "total": 1682,
+     "bicycle": 1639,
+     "moped": 43
+    },
+    "returned": {
+     "total": 1366,
+     "bicycle": 1326,
+     "moped": 40
+    },
+    "disposed": {
+     "total": 211,
+     "bicycle": 208,
+     "moped": 3
+    },
+    "returnRatePercent": 81.2
+   }
+  },
+  {
+   "name": "稲城市",
+   "area": "市部",
+   "stationCount": 6,
+   "stationsWithParkedBicycles": 2,
+   "parked": {
+    "bicycle": 2,
+    "mopedGeneral": 0,
+    "mopedSpecific": 0,
+    "motorcycle": 0,
+    "total": 2
+   },
+   "occupancy": {
+    "bicycle": 4392,
+    "moped": 391,
+    "total": 4783
+   },
+   "capacity": {
+    "bicycle": 5564,
+    "moped": 649,
+    "total": 6213
+   },
+   "inflow": {
+    "total": 4785,
+    "bicycle": 4394
+   },
+   "bicycleParkedRatePercent": 0,
+   "removalFY2024": {
+    "removed": {
+     "total": 152,
+     "bicycle": 147,
+     "moped": 5
+    },
+    "returned": {
+     "total": 48,
+     "bicycle": 47,
+     "moped": 1
+    },
+    "disposed": {
+     "total": 101,
+     "bicycle": 98,
+     "moped": 3
+    },
+    "returnRatePercent": 31.6
+   }
+  },
+  {
+   "name": "羽村市",
+   "area": "市部",
+   "stationCount": 2,
+   "stationsWithParkedBicycles": 2,
+   "parked": {
+    "bicycle": 2,
+    "mopedGeneral": 0,
+    "mopedSpecific": 0,
+    "motorcycle": 0,
+    "total": 2
+   },
+   "occupancy": {
+    "bicycle": 3590,
+    "moped": 115,
+    "total": 3705
+   },
+   "capacity": {
+    "bicycle": 5817,
+    "moped": 190,
+    "total": 6007
+   },
+   "inflow": {
+    "total": 3707,
+    "bicycle": 3592
+   },
+   "bicycleParkedRatePercent": 0.1,
+   "removalFY2024": {
+    "removed": {
+     "total": 744,
+     "bicycle": 744,
+     "moped": 0
+    },
+    "returned": {
+     "total": 338,
+     "bicycle": 338,
+     "moped": 0
+    },
+    "disposed": {
+     "total": 414,
+     "bicycle": 414,
+     "moped": 0
+    },
+    "returnRatePercent": 45.4
+   }
+  },
+  {
+   "name": "あきる野市",
+   "area": "市部",
+   "stationCount": 5,
+   "stationsWithParkedBicycles": 1,
+   "parked": {
+    "bicycle": 11,
+    "mopedGeneral": 0,
+    "mopedSpecific": 0,
+    "motorcycle": 0,
+    "total": 11
+   },
+   "occupancy": {
+    "bicycle": 3516,
+    "moped": 173,
+    "total": 3689
+   },
+   "capacity": {
+    "bicycle": 4690,
+    "moped": 298,
+    "total": 4988
+   },
+   "inflow": {
+    "total": 3700,
+    "bicycle": 3527
+   },
+   "bicycleParkedRatePercent": 0.3,
+   "removalFY2024": {
+    "removed": {
+     "total": 213,
+     "bicycle": 210,
+     "moped": 3
+    },
+    "returned": {
+     "total": 84,
+     "bicycle": 81,
+     "moped": 3
+    },
+    "disposed": {
+     "total": 122,
+     "bicycle": 122,
+     "moped": 0
+    },
+    "returnRatePercent": 39.4
+   }
+  },
+  {
+   "name": "西東京市",
+   "area": "市部",
+   "stationCount": 5,
+   "stationsWithParkedBicycles": 3,
+   "parked": {
+    "bicycle": 3,
+    "mopedGeneral": 0,
+    "mopedSpecific": 0,
+    "motorcycle": 0,
+    "total": 3
+   },
+   "occupancy": {
+    "bicycle": 15532,
+    "moped": 241,
+    "total": 15773
+   },
+   "capacity": {
+    "bicycle": 26998,
+    "moped": 603,
+    "total": 27601
+   },
+   "inflow": {
+    "total": 15776,
+    "bicycle": 15535
+   },
+   "bicycleParkedRatePercent": 0,
+   "removalFY2024": {
+    "removed": {
+     "total": 1008,
+     "bicycle": 1000,
+     "moped": 8
+    },
+    "returned": {
+     "total": 479,
+     "bicycle": 473,
+     "moped": 6
+    },
+    "disposed": {
+     "total": 498,
+     "bicycle": 493,
+     "moped": 5
+    },
+    "returnRatePercent": 47.5
+   }
+  },
+  {
+   "name": "瑞穂町",
+   "area": "町村部",
+   "stationCount": 1,
+   "stationsWithParkedBicycles": 1,
+   "parked": {
+    "bicycle": 3,
+    "mopedGeneral": 0,
+    "mopedSpecific": 0,
+    "motorcycle": 0,
+    "total": 3
+   },
+   "occupancy": {
+    "bicycle": 718,
+    "moped": 33,
+    "total": 751
+   },
+   "capacity": {
+    "bicycle": 1360,
+    "moped": 90,
+    "total": 1450
+   },
+   "inflow": {
+    "total": 754,
+    "bicycle": 721
+   },
+   "bicycleParkedRatePercent": 0.4,
+   "removalFY2024": {
+    "removed": {
+     "total": 118,
+     "bicycle": 115,
+     "moped": 3
+    },
+    "returned": {
+     "total": 37,
+     "bicycle": 37,
+     "moped": 0
+    },
+    "disposed": {
+     "total": 92,
+     "bicycle": 88,
+     "moped": 4
+    },
+    "returnRatePercent": 31.4
+   }
+  },
+  {
+   "name": "日の出町",
+   "area": "町村部",
+   "stationCount": 2,
+   "stationsWithParkedBicycles": 0,
+   "parked": {
+    "bicycle": 0,
+    "mopedGeneral": 0,
+    "mopedSpecific": 0,
+    "motorcycle": 0,
+    "total": 0
+   },
+   "occupancy": {
+    "bicycle": 0,
+    "moped": 0,
+    "total": 0
+   },
+   "capacity": {
+    "bicycle": 0,
+    "moped": 0,
+    "total": 0
+   },
+   "inflow": {
+    "total": 0,
+    "bicycle": 0
+   },
+   "bicycleParkedRatePercent": null,
+   "removalFY2024": {
+    "removed": {
+     "total": 6,
+     "bicycle": 6,
+     "moped": 0
+    },
+    "returned": {
+     "total": 0,
+     "bicycle": 0,
+     "moped": 0
+    },
+    "disposed": {
+     "total": 6,
+     "bicycle": 6,
+     "moped": 0
+    },
+    "returnRatePercent": 0
+   }
+  },
+  {
+   "name": "檜原村",
+   "area": "町村部",
+   "stationCount": 0,
+   "stationsWithParkedBicycles": 0,
+   "parked": null,
+   "occupancy": null,
+   "capacity": null,
+   "inflow": null,
+   "bicycleParkedRatePercent": null,
+   "removalFY2024": {
+    "removed": {
+     "total": 0,
+     "bicycle": 0,
+     "moped": 0
+    },
+    "returned": {
+     "total": 0,
+     "bicycle": 0,
+     "moped": 0
+    },
+    "disposed": {
+     "total": 0,
+     "bicycle": 0,
+     "moped": 0
+    },
+    "returnRatePercent": null
+   }
+  },
+  {
+   "name": "奥多摩町",
+   "area": "町村部",
+   "stationCount": 5,
+   "stationsWithParkedBicycles": 0,
+   "parked": {
+    "bicycle": 0,
+    "mopedGeneral": 0,
+    "mopedSpecific": 0,
+    "motorcycle": 0,
+    "total": 0
+   },
+   "occupancy": {
+    "bicycle": 13,
+    "moped": 33,
+    "total": 46
+   },
+   "capacity": {
+    "bicycle": 113,
+    "moped": 141,
+    "total": 254
+   },
+   "inflow": {
+    "total": 46,
+    "bicycle": 13
+   },
+   "bicycleParkedRatePercent": 0,
+   "removalFY2024": {
+    "removed": {
+     "total": 0,
+     "bicycle": 0,
+     "moped": 0
+    },
+    "returned": {
+     "total": 0,
+     "bicycle": 0,
+     "moped": 0
+    },
+    "disposed": {
+     "total": 0,
+     "bicycle": 0,
+     "moped": 0
+    },
+    "returnRatePercent": null
+   }
+  }
+ ]
+}

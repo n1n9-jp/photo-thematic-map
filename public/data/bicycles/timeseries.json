@@ -1,0 +1,872 @@
+{
+ "title": "東京都全体の推移",
+ "sources": [],
+ "generatedBy": "scripts/data/build-bicycles.ts",
+ "parking": {
+  "description": "駅周辺の乗入台数・実収容台数・放置台数（各年の調査日1日の値、島しょを除く都全体）",
+  "source": {
+   "document": "駅前放置自転車等の現況と対策 －令和７年度調査－（全文）",
+   "url": "https://www.tomin-anzen.metro.tokyo.lg.jp/documents/d/tomin-anzen/202603_jitensyagenkyo",
+   "location": "p.26-27 第1-1-(8) 乗入台数・実収容台数・放置台数の推移「都」の行"
+  },
+  "series": [
+   {
+    "surveyYear": 1999,
+    "label": "平成11年",
+    "countingMethod": "threshold",
+    "parked": {
+     "total": 201240,
+     "mopedMotorcycle": 15727,
+     "bicycle": 185513
+    },
+    "occupancy": {
+     "total": 540754,
+     "mopedMotorcycle": 22161
+    },
+    "inflow": {
+     "total": 741994,
+     "mopedMotorcycle": 37888
+    }
+   },
+   {
+    "surveyYear": 2000,
+    "label": "平成12年",
+    "countingMethod": "threshold",
+    "parked": {
+     "total": 200317,
+     "mopedMotorcycle": 15835,
+     "bicycle": 184482
+    },
+    "occupancy": {
+     "total": 537850,
+     "mopedMotorcycle": 22471
+    },
+    "inflow": {
+     "total": 738167,
+     "mopedMotorcycle": 38306
+    }
+   },
+   {
+    "surveyYear": 2001,
+    "label": "平成13年",
+    "countingMethod": "threshold",
+    "parked": {
+     "total": 197957,
+     "mopedMotorcycle": 17798,
+     "bicycle": 180159
+    },
+    "occupancy": {
+     "total": 553541,
+     "mopedMotorcycle": 21770
+    },
+    "inflow": {
+     "total": 751498,
+     "mopedMotorcycle": 39568
+    }
+   },
+   {
+    "surveyYear": 2002,
+    "label": "平成14年",
+    "countingMethod": "threshold",
+    "parked": {
+     "total": 170698,
+     "mopedMotorcycle": 16365,
+     "bicycle": 154333
+    },
+    "occupancy": {
+     "total": 554908,
+     "mopedMotorcycle": 22883
+    },
+    "inflow": {
+     "total": 725606,
+     "mopedMotorcycle": 39248
+    }
+   },
+   {
+    "surveyYear": 2003,
+    "label": "平成15年",
+    "countingMethod": "threshold",
+    "parked": {
+     "total": 150120,
+     "mopedMotorcycle": 14831,
+     "bicycle": 135289
+    },
+    "occupancy": {
+     "total": 577267,
+     "mopedMotorcycle": 23840
+    },
+    "inflow": {
+     "total": 727387,
+     "mopedMotorcycle": null
+    }
+   },
+   {
+    "surveyYear": 2004,
+    "label": "平成16年",
+    "countingMethod": "threshold",
+    "parked": {
+     "total": 133533,
+     "mopedMotorcycle": 13287,
+     "bicycle": 120246
+    },
+    "occupancy": {
+     "total": 577576,
+     "mopedMotorcycle": 22705
+    },
+    "inflow": {
+     "total": 711109,
+     "mopedMotorcycle": 35992
+    }
+   },
+   {
+    "surveyYear": 2005,
+    "label": "平成17年",
+    "countingMethod": "threshold",
+    "parked": {
+     "total": 113773,
+     "mopedMotorcycle": 10013,
+     "bicycle": 103760
+    },
+    "occupancy": {
+     "total": 606815,
+     "mopedMotorcycle": 19361
+    },
+    "inflow": {
+     "total": 720588,
+     "mopedMotorcycle": null
+    }
+   },
+   {
+    "surveyYear": 2006,
+    "label": "平成18年",
+    "countingMethod": "threshold",
+    "parked": {
+     "total": 99963,
+     "mopedMotorcycle": 6727,
+     "bicycle": 93236
+    },
+    "occupancy": {
+     "total": 607732,
+     "mopedMotorcycle": 26622
+    },
+    "inflow": {
+     "total": 707695,
+     "mopedMotorcycle": 33349
+    }
+   },
+   {
+    "surveyYear": 2007,
+    "label": "平成19年",
+    "countingMethod": "threshold",
+    "parked": {
+     "total": 85082,
+     "mopedMotorcycle": 4027,
+     "bicycle": 81055
+    },
+    "occupancy": {
+     "total": 618791,
+     "mopedMotorcycle": null
+    },
+    "inflow": {
+     "total": 703873,
+     "mopedMotorcycle": null
+    }
+   },
+   {
+    "surveyYear": 2008,
+    "label": "平成20年",
+    "countingMethod": "threshold",
+    "parked": {
+     "total": 63506,
+     "mopedMotorcycle": 1748,
+     "bicycle": 61758
+    },
+    "occupancy": {
+     "total": 621505,
+     "mopedMotorcycle": 26050
+    },
+    "inflow": {
+     "total": 685011,
+     "mopedMotorcycle": 27798
+    }
+   },
+   {
+    "surveyYear": 2009,
+    "label": "平成21年",
+    "countingMethod": "threshold",
+    "parked": {
+     "total": 52907,
+     "mopedMotorcycle": 1284,
+     "bicycle": 51623
+    },
+    "occupancy": {
+     "total": 617888,
+     "mopedMotorcycle": 24942
+    },
+    "inflow": {
+     "total": 670795,
+     "mopedMotorcycle": 26226
+    }
+   },
+   {
+    "surveyYear": 2010,
+    "label": "平成22年",
+    "countingMethod": "threshold",
+    "parked": {
+     "total": 48090,
+     "mopedMotorcycle": 1180,
+     "bicycle": 46910
+    },
+    "occupancy": {
+     "total": 638418,
+     "mopedMotorcycle": 25529
+    },
+    "inflow": {
+     "total": 686508,
+     "mopedMotorcycle": 26709
+    }
+   },
+   {
+    "surveyYear": 2011,
+    "label": "平成23年",
+    "countingMethod": "threshold",
+    "parked": {
+     "total": 42311,
+     "mopedMotorcycle": 787,
+     "bicycle": 41524
+    },
+    "occupancy": {
+     "total": 638668,
+     "mopedMotorcycle": 23961
+    },
+    "inflow": {
+     "total": 680979,
+     "mopedMotorcycle": 24748
+    }
+   },
+   {
+    "surveyYear": 2012,
+    "label": "平成24年",
+    "countingMethod": "all",
+    "parked": {
+     "total": 52712,
+     "mopedMotorcycle": 4599,
+     "bicycle": 48113
+    },
+    "occupancy": {
+     "total": 620691,
+     "mopedMotorcycle": 20681
+    },
+    "inflow": {
+     "total": 673403,
+     "mopedMotorcycle": 25280
+    }
+   },
+   {
+    "surveyYear": 2013,
+    "label": "平成25年",
+    "countingMethod": "all",
+    "parked": {
+     "total": 46752,
+     "mopedMotorcycle": 3768,
+     "bicycle": 42984
+    },
+    "occupancy": {
+     "total": 626694,
+     "mopedMotorcycle": 19854
+    },
+    "inflow": {
+     "total": 673446,
+     "mopedMotorcycle": 23622
+    }
+   },
+   {
+    "surveyYear": 2014,
+    "label": "平成26年",
+    "countingMethod": "all",
+    "parked": {
+     "total": 42170,
+     "mopedMotorcycle": 3613,
+     "bicycle": 38557
+    },
+    "occupancy": {
+     "total": 628850,
+     "mopedMotorcycle": 19457
+    },
+    "inflow": {
+     "total": 671020,
+     "mopedMotorcycle": 23070
+    }
+   },
+   {
+    "surveyYear": 2015,
+    "label": "平成27年",
+    "countingMethod": "all",
+    "parked": {
+     "total": 37004,
+     "mopedMotorcycle": 3174,
+     "bicycle": 33830
+    },
+    "occupancy": {
+     "total": 625298,
+     "mopedMotorcycle": 18812
+    },
+    "inflow": {
+     "total": 662302,
+     "mopedMotorcycle": 21986
+    }
+   },
+   {
+    "surveyYear": 2016,
+    "label": "平成28年",
+    "countingMethod": "all",
+    "parked": {
+     "total": 34247,
+     "mopedMotorcycle": 2750,
+     "bicycle": 31497
+    },
+    "occupancy": {
+     "total": 628774,
+     "mopedMotorcycle": 19021
+    },
+    "inflow": {
+     "total": 663021,
+     "mopedMotorcycle": 21771
+    }
+   },
+   {
+    "surveyYear": 2017,
+    "label": "平成29年",
+    "countingMethod": "all",
+    "parked": {
+     "total": 31326,
+     "mopedMotorcycle": 2370,
+     "bicycle": 28956
+    },
+    "occupancy": {
+     "total": 612513,
+     "mopedMotorcycle": 18916
+    },
+    "inflow": {
+     "total": 643839,
+     "mopedMotorcycle": 21286
+    }
+   },
+   {
+    "surveyYear": 2018,
+    "label": "平成30年",
+    "countingMethod": "all",
+    "parked": {
+     "total": 27332,
+     "mopedMotorcycle": 2041,
+     "bicycle": 25291
+    },
+    "occupancy": {
+     "total": 617695,
+     "mopedMotorcycle": 18308
+    },
+    "inflow": {
+     "total": 645027,
+     "mopedMotorcycle": 20349
+    }
+   },
+   {
+    "surveyYear": 2019,
+    "label": "令和元年",
+    "countingMethod": "all",
+    "parked": {
+     "total": 25008,
+     "mopedMotorcycle": 1686,
+     "bicycle": 23322
+    },
+    "occupancy": {
+     "total": 618817,
+     "mopedMotorcycle": 17063
+    },
+    "inflow": {
+     "total": 643825,
+     "mopedMotorcycle": 18749
+    }
+   },
+   {
+    "surveyYear": 2020,
+    "label": "令和２年",
+    "countingMethod": "all",
+    "parked": {
+     "total": 21035,
+     "mopedMotorcycle": 1548,
+     "bicycle": 19487
+    },
+    "occupancy": {
+     "total": 518963,
+     "mopedMotorcycle": 16041
+    },
+    "inflow": {
+     "total": 539998,
+     "mopedMotorcycle": 17589
+    }
+   },
+   {
+    "surveyYear": 2021,
+    "label": "令和３年",
+    "countingMethod": "all",
+    "parked": {
+     "total": 19430,
+     "mopedMotorcycle": 1513,
+     "bicycle": 17917
+    },
+    "occupancy": {
+     "total": 508264,
+     "mopedMotorcycle": 15146
+    },
+    "inflow": {
+     "total": 527694,
+     "mopedMotorcycle": 16659
+    }
+   },
+   {
+    "surveyYear": 2022,
+    "label": "令和４年",
+    "countingMethod": "all",
+    "parked": {
+     "total": 17559,
+     "mopedMotorcycle": 1236,
+     "bicycle": 16323
+    },
+    "occupancy": {
+     "total": 523174,
+     "mopedMotorcycle": 14504
+    },
+    "inflow": {
+     "total": 540733,
+     "mopedMotorcycle": 15740
+    }
+   },
+   {
+    "surveyYear": 2023,
+    "label": "令和５年",
+    "countingMethod": "all",
+    "parked": {
+     "total": 16679,
+     "mopedMotorcycle": 1205,
+     "bicycle": 15474
+    },
+    "occupancy": {
+     "total": 541449,
+     "mopedMotorcycle": 14583
+    },
+    "inflow": {
+     "total": 558128,
+     "mopedMotorcycle": 15788
+    }
+   },
+   {
+    "surveyYear": 2024,
+    "label": "令和６年",
+    "countingMethod": "all",
+    "parked": {
+     "total": 16042,
+     "mopedMotorcycle": 1166,
+     "bicycle": 14876
+    },
+    "occupancy": {
+     "total": 542207,
+     "mopedMotorcycle": 14632
+    },
+    "inflow": {
+     "total": 558249,
+     "mopedMotorcycle": 15798
+    }
+   },
+   {
+    "surveyYear": 2025,
+    "label": "令和７年",
+    "countingMethod": "all",
+    "parked": {
+     "total": 14366,
+     "mopedMotorcycle": 972,
+     "bicycle": 13394
+    },
+    "occupancy": {
+     "total": 549491,
+     "mopedMotorcycle": 16902
+    },
+    "inflow": {
+     "total": 563857,
+     "mopedMotorcycle": 17874
+    }
+   }
+  ]
+ },
+ "removal": {
+  "description": "区市町村が撤去・返還・処分した放置自転車等（自転車と原付）の年度合計",
+  "series": [
+   {
+    "fiscalYear": 2010,
+    "removed": {
+     "total": 690880,
+     "bicycle": 683292,
+     "moped": 7588
+    },
+    "returned": {
+     "total": 412199,
+     "bicycle": 406095,
+     "moped": 6104
+    },
+    "disposed": {
+     "total": 301673,
+     "bicycle": 300259,
+     "moped": 1414
+    },
+    "returnRatePercent": 59.7,
+    "source": {
+     "document": "駅前放置自転車等の現況と対策 －平成23年度調査－（全文）区市町村の撤去・返還・処分状況 総数行",
+     "url": "https://www.tomin-anzen.metro.tokyo.lg.jp/documents/d/tomin-anzen/07_jitensyagenkyo2",
+     "page": "PDF物理ページ48"
+    }
+   },
+   {
+    "fiscalYear": 2011,
+    "removed": {
+     "total": 652867,
+     "bicycle": 646726,
+     "moped": 6141
+    },
+    "returned": {
+     "total": 373272,
+     "bicycle": 368502,
+     "moped": 4770
+    },
+    "disposed": {
+     "total": 278712,
+     "bicycle": 277003,
+     "moped": 1709
+    },
+    "returnRatePercent": 57.2,
+    "source": {
+     "document": "駅前放置自転車等の現況と対策 －平成24年度調査－（全文）区市町村の撤去・返還・処分状況 総数行",
+     "url": "https://www.tomin-anzen.metro.tokyo.lg.jp/documents/d/tomin-anzen/07_jitensyagenkyo242",
+     "page": "PDF物理ページ46"
+    }
+   },
+   {
+    "fiscalYear": 2012,
+    "removed": {
+     "total": 596121,
+     "bicycle": 590381,
+     "moped": 5740
+    },
+    "returned": {
+     "total": 344056,
+     "bicycle": 339582,
+     "moped": 4474
+    },
+    "disposed": {
+     "total": 274742,
+     "bicycle": 273325,
+     "moped": 1417
+    },
+    "returnRatePercent": 57.7,
+    "source": {
+     "document": "駅前放置自転車等の現況と対策 －平成25年度調査－（全文）区市町村の撤去・返還・処分状況 総数行",
+     "url": "https://www.tomin-anzen.metro.tokyo.lg.jp/documents/d/tomin-anzen/07_jitensyagenkyo252",
+     "page": "PDF物理ページ52"
+    }
+   },
+   {
+    "fiscalYear": 2013,
+    "removed": {
+     "total": 557163,
+     "bicycle": 552292,
+     "moped": 4871
+    },
+    "returned": {
+     "total": 322038,
+     "bicycle": 318121,
+     "moped": 3917
+    },
+    "disposed": {
+     "total": 244039,
+     "bicycle": 241676,
+     "moped": 2363
+    },
+    "returnRatePercent": 57.8,
+    "source": {
+     "document": "駅前放置自転車等の現況と対策 －平成26年度調査－（全文）区市町村の撤去・返還・処分状況 総数行",
+     "url": "https://www.tomin-anzen.metro.tokyo.lg.jp/documents/d/tomin-anzen/07_jitensyagenkyo263",
+     "page": "PDF物理ページ54"
+    }
+   },
+   {
+    "fiscalYear": 2014,
+    "removed": {
+     "total": 500901,
+     "bicycle": 496691,
+     "moped": 4210
+    },
+    "returned": {
+     "total": 298743,
+     "bicycle": 295381,
+     "moped": 3362
+    },
+    "disposed": {
+     "total": 208321,
+     "bicycle": 207416,
+     "moped": 905
+    },
+    "returnRatePercent": 59.6,
+    "source": {
+     "document": "駅前放置自転車等の現況と対策 －平成27年度調査－（全文）区市町村の撤去・返還・処分状況 総数行",
+     "url": "https://www.tomin-anzen.metro.tokyo.lg.jp/documents/d/tomin-anzen/07_jitensyagenkyo273",
+     "page": "PDF物理ページ54"
+    }
+   },
+   {
+    "fiscalYear": 2015,
+    "removed": {
+     "total": 435561,
+     "bicycle": 432040,
+     "moped": 3521
+    },
+    "returned": {
+     "total": 253326,
+     "bicycle": 250616,
+     "moped": 2710
+    },
+    "disposed": {
+     "total": 189119,
+     "bicycle": 188106,
+     "moped": 1013
+    },
+    "returnRatePercent": 58.2,
+    "source": {
+     "document": "駅前放置自転車等の現況と対策 －平成28年度調査－（全文）区市町村の撤去・返還・処分状況 総数行",
+     "url": "https://www.tomin-anzen.metro.tokyo.lg.jp/documents/d/tomin-anzen/jitenshagenkyo28",
+     "page": "p.50（PDF物理ページ56、画像から目視転記）"
+    }
+   },
+   {
+    "fiscalYear": 2016,
+    "removed": {
+     "total": 401882,
+     "bicycle": 398614,
+     "moped": 3268
+    },
+    "returned": {
+     "total": 241100,
+     "bicycle": 238752,
+     "moped": 2348
+    },
+    "disposed": {
+     "total": 165538,
+     "bicycle": 164759,
+     "moped": 779
+    },
+    "returnRatePercent": 60,
+    "source": {
+     "document": "駅前放置自転車等の現況と対策 －平成29年度調査－（全文）区市町村の撤去・返還・処分状況 総数行",
+     "url": "https://www.tomin-anzen.metro.tokyo.lg.jp/documents/d/tomin-anzen/07_jitensyagenkyo293",
+     "page": "PDF物理ページ56"
+    }
+   },
+   {
+    "fiscalYear": 2017,
+    "removed": {
+     "total": 359826,
+     "bicycle": 357067,
+     "moped": 2664
+    },
+    "returned": {
+     "total": 217764,
+     "bicycle": 215702,
+     "moped": 2062
+    },
+    "disposed": {
+     "total": 161645,
+     "bicycle": 160727,
+     "moped": 918
+    },
+    "returnRatePercent": 60.5,
+    "notes": [
+     "原本の表で撤去台数の「計」が「自転車＋原付」より 95 台多い（原本どおり収録）"
+    ],
+    "source": {
+     "document": "駅前放置自転車等の現況と対策 －平成30年度調査－（全文）区市町村の撤去・返還・処分状況 総数行",
+     "url": "https://www.tomin-anzen.metro.tokyo.lg.jp/documents/d/tomin-anzen/08_jitensyagenkyo293",
+     "page": "PDF物理ページ57"
+    }
+   },
+   {
+    "fiscalYear": 2018,
+    "removed": {
+     "total": 331057,
+     "bicycle": 328916,
+     "moped": 2141
+    },
+    "returned": {
+     "total": 203218,
+     "bicycle": 201596,
+     "moped": 1622
+    },
+    "disposed": {
+     "total": 138504,
+     "bicycle": 137941,
+     "moped": 563
+    },
+    "returnRatePercent": 61.4,
+    "source": {
+     "document": "駅前放置自転車等の現況と対策 －令和元年度調査－（全文）区市町村の撤去・返還・処分状況 総数行",
+     "url": "https://www.tomin-anzen.metro.tokyo.lg.jp/documents/d/tomin-anzen/09_jitensyagenkyo293",
+     "page": "PDF物理ページ57"
+    }
+   },
+   {
+    "fiscalYear": 2019,
+    "removed": {
+     "total": 300090,
+     "bicycle": 298167,
+     "moped": 1923
+    },
+    "returned": {
+     "total": 181859,
+     "bicycle": 180393,
+     "moped": 1466
+    },
+    "disposed": {
+     "total": 124083,
+     "bicycle": 123566,
+     "moped": 517
+    },
+    "returnRatePercent": 60.6,
+    "source": {
+     "document": "駅前放置自転車等の現況と対策 －令和２年度調査－（全文）区市町村の撤去・返還・処分状況 総数行",
+     "url": "https://www.tomin-anzen.metro.tokyo.lg.jp/documents/d/tomin-anzen/10_jitensyagenkyo293",
+     "page": "PDF物理ページ57"
+    }
+   },
+   {
+    "fiscalYear": 2020,
+    "removed": {
+     "total": 215609,
+     "bicycle": 214378,
+     "moped": 1231
+    },
+    "returned": {
+     "total": 132834,
+     "bicycle": 131911,
+     "moped": 923
+    },
+    "disposed": {
+     "total": 90857,
+     "bicycle": 90285,
+     "moped": 572
+    },
+    "returnRatePercent": 61.6,
+    "source": {
+     "document": "駅前放置自転車等の現況と対策 －令和３年度調査－（全文）区市町村の撤去・返還・処分状況 総数行",
+     "url": "https://www.tomin-anzen.metro.tokyo.lg.jp/documents/d/tomin-anzen/11_jitensyagenkyo033",
+     "page": "PDF物理ページ57"
+    }
+   },
+   {
+    "fiscalYear": 2021,
+    "removed": {
+     "total": 205000,
+     "bicycle": 203850,
+     "moped": 1150
+    },
+    "returned": {
+     "total": 126486,
+     "bicycle": 125695,
+     "moped": 791
+    },
+    "disposed": {
+     "total": 82300,
+     "bicycle": 81893,
+     "moped": 407
+    },
+    "returnRatePercent": 61.7,
+    "source": {
+     "document": "駅前放置自転車等の現況と対策 －令和４年度調査－（全文）区市町村の撤去・返還・処分状況 総数行",
+     "url": "https://www.tomin-anzen.metro.tokyo.lg.jp/documents/d/tomin-anzen/202303_jitensyagenkyo02",
+     "page": "PDF物理ページ57"
+    }
+   },
+   {
+    "fiscalYear": 2022,
+    "removed": {
+     "total": 209954,
+     "bicycle": 208846,
+     "moped": 1108
+    },
+    "returned": {
+     "total": 133454,
+     "bicycle": 132698,
+     "moped": 756
+    },
+    "disposed": {
+     "total": 78133,
+     "bicycle": 77745,
+     "moped": 388
+    },
+    "returnRatePercent": 63.6,
+    "source": {
+     "document": "駅前放置自転車等の現況と対策 －令和５年度調査－（全文）区市町村の撤去・返還・処分状況 総数行",
+     "url": "https://www.tomin-anzen.metro.tokyo.lg.jp/documents/d/tomin-anzen/202403_jitensyagenkyo",
+     "page": "PDF物理ページ57"
+    }
+   },
+   {
+    "fiscalYear": 2023,
+    "removed": {
+     "total": 201074,
+     "bicycle": 199955,
+     "moped": 1119
+    },
+    "returned": {
+     "total": 129298,
+     "bicycle": 128545,
+     "moped": 753
+    },
+    "disposed": {
+     "total": 72866,
+     "bicycle": 72480,
+     "moped": 386
+    },
+    "returnRatePercent": 64.3,
+    "source": {
+     "document": "駅前放置自転車等の現況と対策 －令和６年度調査－（全文）区市町村の撤去・返還・処分状況 総数行",
+     "url": "https://www.tomin-anzen.metro.tokyo.lg.jp/documents/d/tomin-anzen/202503_jitensyagenkyo",
+     "page": "PDF物理ページ57"
+    }
+   },
+   {
+    "fiscalYear": 2024,
+    "removed": {
+     "total": 188561,
+     "bicycle": 187262,
+     "moped": 1299
+    },
+    "returned": {
+     "total": 121425,
+     "bicycle": 120509,
+     "moped": 916
+    },
+    "disposed": {
+     "total": 67831,
+     "bicycle": 67113,
+     "moped": 324
+    },
+    "returnRatePercent": 64.4,
+    "notes": [
+     "原本の表で処分台数の「計」が「自転車＋原付」より 394 台多い（原本どおり収録）"
+    ],
+    "source": {
+     "document": "駅前放置自転車等の現況と対策 －令和７年度調査－（全文）区市町村の撤去・返還・処分状況 総数行",
+     "url": "https://www.tomin-anzen.metro.tokyo.lg.jp/documents/d/tomin-anzen/202603_jitensyagenkyo",
+     "page": "p.51（PDF物理ページ57）"
+    }
+   }
+  ]
+ }
+}
