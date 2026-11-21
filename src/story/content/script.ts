@@ -107,16 +107,18 @@ const pile5 = PILES.removedFY2024;
 const pile6 = PILES.removed15Years;
 
 /**
- * 場面5: 行幸通りの地上近くから東南東（駅舎の方）を向き、山を見上げる。山の後ろに丸の内駅舎（高さ約 35m）。
+ * 場面5: 行幸通りの上（高さ約 34m、山の頂上とほぼ同じ高さ）から東南東（駅舎の方）を向く。山の後ろに丸の内駅舎（高さ約 35m）。
+ * 地上近くから見上げる構図も試したが、街並みの建物と地面のタイルを地平線まで読むため描画が重く（建物だけで約 720 万三角形）、
+ * スマートフォンで扱えないので、頂上の高さから水平に近く見る構図にした。
  * 注視点は山の中心から左手（北北東）へずらし、山を画面の右に寄せる。
  */
-const SCENE5_VIEW = { azimuthDeg: 105, heightM: 6, horizontalM: 125, targetAltM: pile5.heightM * 0.5, shiftM: 28 } as const;
+const SCENE5_VIEW = { azimuthDeg: 105, heightM: 34, horizontalM: 165, targetAltM: pile5.heightM * 0.45, shiftM: 32 } as const;
 /** 場面7: 東京駅前の山に寄る（西北西の斜め上から、山の斜面の自転車が1台ずつ見える距離）。 */
 const SCENE7_VIEW = { azimuthDeg: 118, heightM: 24, horizontalM: 62, targetAltM: pile5.heightM * 0.45, shiftM: 12 } as const;
 /**
- * 場面6: 新宿中央公園の西から東南東を向き、山を見上げる。山の右後ろに都庁第一本庁舎（高さ 243m）。
+ * 場面6: 新宿中央公園の西（高さ 110m）から東南東を向く。山の右後ろに都庁第一本庁舎（高さ 243m）。
  */
-const SCENE6_VIEW = { azimuthDeg: 98, heightM: 40, horizontalM: 520, targetAltM: pile6.heightM * 0.9, shiftM: 70 } as const;
+const SCENE6_VIEW = { azimuthDeg: 98, heightM: 110, horizontalM: 560, targetAltM: pile6.heightM * 0.9, shiftM: 80 } as const;
 
 function pileCamera(site: { lat: number; lon: number }, v: { azimuthDeg: number; heightM: number; horizontalM: number; targetAltM: number; shiftM: number }): StoryCameraKeyframe {
   return cameraFrom(offsetLatLon(site, v.azimuthDeg - 90, v.shiftM), v);
