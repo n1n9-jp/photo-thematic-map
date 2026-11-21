@@ -49,8 +49,11 @@ export const PLACES = {
    * `src/app/modules/akihabara/layout.ts` の配置の結果の位置（tests/unit/akihabaraLayout.test.ts が一致を確かめる）。
    */
   akihabaraFirstBike: { lat: 35.698655, lon: 139.772652 },
-  /** 秋葉原駅の周りの 462台の広がりのおよその中心（山手線の線路の上、総武線の高架の北）。場面2 の注視点。 */
-  akihabaraBikesCenter: { lat: 35.698574, lon: 139.77341 },
+  /**
+   * 場面2 の注視点（電気街口の駅前広場の東の端）。462台は駅の西（電気街口）・東（中央改札口・昭和通り口）・南西の通りに
+   * 広がる。PC 幅では本文カードが画面の左に出るので、西の塊がカードの右に、東の塊が画面の右端に入るよう、広がりの中心より西に置く。
+   */
+  akihabaraBikesView: { lat: 35.698845, lon: 139.772803 },
   /**
    * 23区の俯瞰の注視点。23区の中心（35.69, 139.75 付近）より少し西にずらし、PC 幅で左に出る本文カードの右側に
    * 新宿・渋谷・池袋から上野・秋葉原・東京までが入るようにした。
@@ -100,6 +103,11 @@ const pile6 = PILES.removed15Years;
 
 /** 場面1・8 の地上のカメラの方位（度）。駅前の1台の横向きの姿と、その奥に壁沿いに続く列が見える向き。 */
 const AKIHABARA_GROUND_AZIMUTH_DEG = 250;
+/**
+ * 場面1・8 の注視点の地表からの高さ(m)。目の高さ（1.8m）より少し上を見て、自転車（高さ約1.1m）を画面の下寄りに置く。
+ * スマートフォン幅では本文カードが画面の中ほどに出るので、自転車がカードの下に見えるようにするため。
+ */
+const AKIHABARA_GROUND_TARGET_ALT_M = 2.4;
 
 /** 23区の俯瞰の高さ(m)と仰角(度)。 */
 const WARDS_HEIGHT_M = 28_000;
@@ -116,9 +124,9 @@ export const SCRIPT: readonly ScriptScene[] = [
       ],
       stat: { value: 1, unit: '台' },
     },
-    // 駅前の1台を、東北東 7m の人の目の高さから見る。自転車はほぼ南北向き（前輪が南の高架の壁へ）なので、
+    // 駅前の1台を、東北東 7m の人の目の高さ（1.8m）から見る。自転車はほぼ南北向き（前輪が南の高架の壁へ）なので、
     // 西南西を向くと横向きの姿が見える。
-    camera: cameraFrom(P.akihabaraFirstBike, { heightM: 1.8, horizontalM: 7, azimuthDeg: AKIHABARA_GROUND_AZIMUTH_DEG, targetAltM: 0.6 }),
+    camera: cameraFrom(P.akihabaraFirstBike, { heightM: 1.8, horizontalM: 7, azimuthDeg: AKIHABARA_GROUND_AZIMUTH_DEG, targetAltM: AKIHABARA_GROUND_TARGET_ALT_M }),
     place: { ...P.akihabaraSidewalk, radiusM: 1500 },
   },
   {
@@ -132,8 +140,8 @@ export const SCRIPT: readonly ScriptScene[] = [
       ],
       stat: stat(F.akihabaraParked, `${SURVEY.year}年${SURVEY.month}月、秋葉原駅周辺の放置自転車`),
     },
-    // 462台は駅の東西の通りの壁際に並ぶので、斜めから見ると多くが建物に隠れる。南南西の上空から急な角度で見下ろす。
-    camera: cameraFrom(P.akihabaraBikesCenter, { heightM: 260, horizontalM: 120, azimuthDeg: 20, targetAltM: 0 }),
+    // 462台は通りの壁際に並ぶので、低い角度で斜めから見ると多くが建物に隠れる。南の上空から急な角度（約65°）で見下ろす。
+    camera: cameraFrom(P.akihabaraBikesView, { heightM: 260, horizontalM: 120, azimuthDeg: 10, targetAltM: 0 }),
     place: { ...P.akihabaraSidewalk, radiusM: 1500 },
   },
   {
@@ -230,7 +238,7 @@ export const SCRIPT: readonly ScriptScene[] = [
         `${SURVEY.year}年。${PEAK_YEAR}年は${nu(F.peakParked1990)}（自転車・原付・自動二輪の計、当時の数え方）`,
       ),
     },
-    camera: cameraFrom(P.akihabaraFirstBike, { heightM: 1.8, horizontalM: 7, azimuthDeg: AKIHABARA_GROUND_AZIMUTH_DEG, targetAltM: 0.6 }),
+    camera: cameraFrom(P.akihabaraFirstBike, { heightM: 1.8, horizontalM: 7, azimuthDeg: AKIHABARA_GROUND_AZIMUTH_DEG, targetAltM: AKIHABARA_GROUND_TARGET_ALT_M }),
     freeOrbit: true,
     place: { ...P.akihabaraSidewalk, radiusM: 1500 },
   },

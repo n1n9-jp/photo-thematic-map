@@ -23,6 +23,11 @@ export interface AkihabaraBikesContext {
   groundAt(x: number, z: number): number;
 }
 
+/**
+ * 足元の印の半径(m)。列の中の間隔（0.5〜0.6m）より大きいので、並んだ自転車の印はつながって、通り沿いの帯に見える。
+ */
+const MARKER_RADIUS_M = 1.3;
+
 /** 足元の印を見せ始める・見せきるカメラの高さ（地面から, m）。 */
 const MARKER_FADE_FROM_M = 12;
 const MARKER_FADE_TO_M = 45;
@@ -104,7 +109,7 @@ export class AkihabaraBikes {
     this.group = this.field.addGroup(stationLayoutToInstances(layout, { seed: 3 }), { reveal: 0 });
     // 動きを減らす設定では、現れた印を大きくせず、明るくするだけにする
     const reduced = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
-    this.markers = new BikeMarkers(layout.positions, layout.count, { radius: 0.9, flashScale: reduced ? 1 : 3 });
+    this.markers = new BikeMarkers(layout.positions, layout.count, { radius: MARKER_RADIUS_M, flashScale: reduced ? 1 : 2.5 });
     this.markers.opacity = 0;
     ctx.scene.add(this.field.object);
     ctx.scene.add(this.markers.mesh);

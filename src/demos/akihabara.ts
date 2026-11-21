@@ -6,7 +6,8 @@
  *   close（駅前を真上の近くから）| plan（街の高さ格子の範囲 700m 四方を真上の遠くから。建物を描かず航空写真だけ。
  *   線路の位置を格子と照らし合わせる用。画面を正方形にして使う）。既定 top。
  * - shown: 表示する台数（既定 462）。置いた順なので「shown 台のときの配置」になる。
- * - marker: 足元の印の半径(m)（既定 top は 2.5、ほかは 0.75）。0 で印を描かない。
+ * - marker: 足元の印の半径(m)（既定 top は 2.5、street と plan は 0（描かない）、ほかは本編と同じ 1.3）。
+ * - cam: 方位,高さ,水平距離,注視点の東,注視点の北（m、駅の位置から）で視点を差し替える（カメラの位置を探す確認用）。
  */
 import { BufferGeometry, Float32BufferAttribute, LineBasicMaterial, LineLoop, type Vector3Tuple } from 'three';
 import { latLonToLocal, localToLatLon } from '../geo/enu';
@@ -61,7 +62,7 @@ field.addGroup(stationLayoutToInstances(layout, { seed: 3 }), { reveal: shown })
 stage.scene.add(field.object);
 const markerParam = Number(params.get('marker'));
 const markerRadius =
-  params.has('marker') && Number.isFinite(markerParam) ? markerParam : viewName === 'top' ? 2.5 : viewName === 'plan' || viewName === 'street' ? 0 : 0.75;
+  params.has('marker') && Number.isFinite(markerParam) ? markerParam : viewName === 'top' ? 2.5 : viewName === 'plan' || viewName === 'street' ? 0 : 1.3;
 if (viewName === 'plan') field.object.visible = params.get('bikes') === '1';
 let markers: BikeMarkers | null = null;
 if (markerRadius > 0) {
