@@ -42,8 +42,18 @@ export interface ScriptScene {
 export const PLACES = {
   /** 秋葉原駅（駅別の表の位置。国土数値情報の駅の代表点）。 */
   akihabaraStation: { lat: 35.698439, lon: 139.774018 },
-  /** 秋葉原駅 電気街口の駅前広場（総武線の高架の北、山手線の西）。場面1・8 の注視点、仮の目印を置く場所。 */
+  /** 秋葉原駅 電気街口の駅前広場（総武線の高架の北、山手線の西）。場面1・2・8 の建物を読む中心。ここに最も近い路上から自転車を置き始める。 */
   akihabaraSidewalk: { lat: 35.698815, lon: 139.772664 },
+  /**
+   * 駅前の1台（置いた順の先頭。駅前広場の南の端、総武線の高架の前の壁際）。場面1・8 の注視点。
+   * `src/app/modules/akihabara/layout.ts` の配置の結果の位置（tests/unit/akihabaraLayout.test.ts が一致を確かめる）。
+   */
+  akihabaraFirstBike: { lat: 35.698655, lon: 139.772652 },
+  /**
+   * 場面2 の注視点（電気街口の駅前広場の東の端）。462台は駅の西（電気街口）・東（中央改札口・昭和通り口）・南西の通りに
+   * 広がる。PC 幅では本文カードが画面の左に出るので、西の塊がカードの右に、東の塊が画面の右端に入るよう、広がりの中心より西に置く。
+   */
+  akihabaraBikesView: { lat: 35.698845, lon: 139.772803 },
   /**
    * 23区の俯瞰の注視点。注視点は本文カードに覆われない範囲の中央に置かれる（`story/layout.ts`）ので、西にずらす必要はない。
    * スマートフォンの縦長の画面では、横に 12km ほどしか入らない（高さ 28km のとき）。駅の多い都心（新宿・渋谷・池袋から
@@ -92,6 +102,14 @@ const P = PLACES;
 const pile5 = PILES.removedFY2024;
 const pile6 = PILES.removed15Years;
 
+/** 場面1・8 の地上のカメラの方位（度）。駅前の1台の横向きの姿と、その奥に壁沿いに続く列が見える向き。 */
+const AKIHABARA_GROUND_AZIMUTH_DEG = 250;
+/**
+ * 場面1・8 の注視点の地表からの高さ(m)。目の高さ（1.8m）より少し上を見て、自転車（高さ約1.1m）を画面の下寄りに置く。
+ * スマートフォン幅では本文カードが画面の中ほどに出るので、自転車がカードの下に見えるようにするため。
+ */
+const AKIHABARA_GROUND_TARGET_ALT_M = 2.4;
+
 /** 23区の俯瞰の高さ(m)と仰角(度)。 */
 const WARDS_HEIGHT_M = 28_000;
 const WARDS_ELEVATION_DEG = 60;
@@ -107,7 +125,9 @@ export const SCRIPT: readonly ScriptScene[] = [
       ],
       stat: { value: 1, unit: '台' },
     },
-    camera: cameraFrom(P.akihabaraSidewalk, { heightM: 1.8, horizontalM: 7, azimuthDeg: 105, targetAltM: 0.6 }),
+    // 駅前の1台を、東北東 7m の人の目の高さ（1.8m）から見る。自転車はほぼ南北向き（前輪が南の高架の壁へ）なので、
+    // 西南西を向くと横向きの姿が見える。
+    camera: cameraFrom(P.akihabaraFirstBike, { heightM: 1.8, horizontalM: 7, azimuthDeg: AKIHABARA_GROUND_AZIMUTH_DEG, targetAltM: AKIHABARA_GROUND_TARGET_ALT_M }),
     place: { ...P.akihabaraSidewalk, radiusM: 1500 },
   },
   {
@@ -121,7 +141,8 @@ export const SCRIPT: readonly ScriptScene[] = [
       ],
       stat: stat(F.akihabaraParked, `${SURVEY.year}年${SURVEY.month}月、秋葉原駅周辺の放置自転車`),
     },
-    camera: cameraFrom(P.akihabaraSidewalk, { heightM: 110, horizontalM: 200, azimuthDeg: 60, targetAltM: 0 }),
+    // 462台は通りの壁際に並ぶので、低い角度で斜めから見ると多くが建物に隠れる。南の上空から急な角度（約65°）で見下ろす。
+    camera: cameraFrom(P.akihabaraBikesView, { heightM: 260, horizontalM: 120, azimuthDeg: 10, targetAltM: 0 }),
     place: { ...P.akihabaraSidewalk, radiusM: 1500 },
   },
   {
@@ -218,7 +239,7 @@ export const SCRIPT: readonly ScriptScene[] = [
         `${SURVEY.year}年。${PEAK_YEAR}年は${nu(F.peakParked1990)}（自転車・原付・自動二輪の計、当時の数え方）`,
       ),
     },
-    camera: cameraFrom(P.akihabaraSidewalk, { heightM: 1.8, horizontalM: 7, azimuthDeg: 105, targetAltM: 0.6 }),
+    camera: cameraFrom(P.akihabaraFirstBike, { heightM: 1.8, horizontalM: 7, azimuthDeg: AKIHABARA_GROUND_AZIMUTH_DEG, targetAltM: AKIHABARA_GROUND_TARGET_ALT_M }),
     freeOrbit: true,
     place: { ...P.akihabaraSidewalk, radiusM: 1500 },
   },

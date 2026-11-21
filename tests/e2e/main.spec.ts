@@ -1,5 +1,6 @@
 /**
  * 本編: 8場面を順にスクロールし、場面の番号・カメラの注視点・コンソールエラーを確かめ、各場面のスクリーンショットを撮る。
+ * 秋葉原の場面（1・2・8）では、表示中の自転車の台数（場面1 で 1台、場面2 の途中と終わり、場面8 で 462台）を確かめる。
  * 場面ごとに、切り替えてから街並みが出そろうまでの時間と、その間に読み込んだ量を screenshots/main-metrics*.json に書き出す。
  */
 import { mkdirSync, writeFileSync } from 'node:fs';
@@ -10,7 +11,8 @@ import { SCRIPT } from '../../src/story/content/script';
 // ソフトウェア描画（SwiftShader）では PLATEAU の読み込みと描画に時間がかかる
 test.setTimeout(1_500_000);
 
-const SETTLE_TIMEOUT_MS = 240_000;
+// 地上の目線の場面（1・8）は、航空写真の細かいタイルの読み込みに 2〜4 分かかる（ほかのテストと並行して動くとき）
+const SETTLE_TIMEOUT_MS = 420_000;
 
 function collectErrors(page: Page): string[] {
   const errors: string[] = [];
@@ -47,14 +49,20 @@ async function open(page: Page): Promise<void> {
   await page.waitForFunction(() => window.__APP_READY__ === true, undefined, { timeout: 120_000 });
 }
 
-/** 場面 i の、カメラが止まっていて本文カードが画面の中ほどにある位置へスクロールし、出そろうのを待つ。 */
-async function goToScene(page: Page, i: number): Promise<number> {
+/**
+ * 場面 i の、カメラが止まっていて本文カードが画面の中ほどにある位置へスクロールし、出そろうのを待つ。
+ * holdFraction は、カメラが止まっている区間のどこへ行くか（既定 0.5 = 真ん中）。
+ */
+async function goToScene(page: Page, i: number, holdFraction = 0.5): Promise<number> {
   const t0 = Date.now();
-  await page.evaluate((i) => {
-    const api = window.__MAIN__!;
-    const hold = api.holds()[i] ?? 0.4;
-    window.scrollTo({ top: api.scrollYFor(i, hold * 0.5), behavior: 'instant' });
-  }, i);
+  await page.evaluate(
+    ([i, f]) => {
+      const api = window.__MAIN__!;
+      const hold = api.holds()[i] ?? 0.4;
+      window.scrollTo({ top: api.scrollYFor(i, hold * f), behavior: 'instant' });
+    },
+    [i, holdFraction] as const,
+  );
   await expect.poll(() => page.evaluate(() => window.__MAIN__!.getState().stage)).toBe(i);
   await page.waitForFunction(() => window.__MAIN__!.isSettled(), undefined, { timeout: SETTLE_TIMEOUT_MS, polling: 250 });
   return Date.now() - t0;
@@ -73,6 +81,14 @@ async function visibleCards(page: Page): Promise<{ x: number; y: number; width: 
     return out;
   });
 }
+
+/** 秋葉原の自転車の表示中の台数。 */
+async function akihabaraShown(page: Page): Promise<number> {
+  return page.evaluate(() => window.__AKIHABARA__?.shown ?? -1);
+}
+
+/** 秋葉原の場面の表示中の台数（場面 id → 台数）。場面2 はカメラが止まっている区間の終わり近くで数える。 */
+const AKIHABARA_SHOWN: Record<string, number> = { 'akihabara-one': 1, 'akihabara-462': 462, 'since-1990': 462 };
 
 interface SceneMetric {
   scene: number;
@@ -101,7 +117,17 @@ test('8場面を順にスクロールすると、場面が進み、カメラが�
   let before = 0;
   for (let i = 0; i < SCRIPT.length; i++) {
     const scene = SCRIPT[i]!;
-    const settleMs = i === 0 ? (await goToScene(page, i), Date.now() - tOpen) : await goToScene(page, i);
+    if (scene.id === 'akihabara-462') {
+      // 場面2 の途中（台数が増えている途中）。台数は 1 と 462 の間で、表示の工夫（足元の印）が見えている。
+      await goToScene(page, i, 0.42);
+      const half = await akihabaraShown(page);
+      expect(half).toBeGreaterThan(150);
+      expect(half).toBeLessThan(400);
+      expect(await page.evaluate(() => window.__AKIHABARA__!.markerOpacity)).toBeGreaterThan(0.9);
+      await page.screenshot({ path: 'screenshots/main-2-half.png' });
+    }
+    const holdFraction = scene.id === 'akihabara-462' ? 0.95 : 0.5;
+    const settleMs = i === 0 ? (await goToScene(page, i, holdFraction), Date.now() - tOpen) : await goToScene(page, i, holdFraction);
     const after = bytes.total();
     metrics.push({ scene: i + 1, id: scene.id, settleMs, bytes: after - before });
     before = after;
@@ -113,6 +139,18 @@ test('8場面を順にスクロールすると、場面が進み、カメラが�
     // カメラは地面の上
     const cam = await page.evaluate(() => window.__MAIN__!.camera());
     expect(cam.heightAboveGround).toBeGreaterThan(0.5);
+
+    // 秋葉原の自転車の台数（ほかの場面では描かない）
+    const expected = AKIHABARA_SHOWN[scene.id] ?? 0;
+    expect(await akihabaraShown(page), `場面${i + 1} ${scene.id} の自転車の台数`).toBe(expected);
+    if (expected > 0) {
+      const info = await page.evaluate(() => window.__AKIHABARA__!);
+      expect(info.total).toBe(462);
+      expect(info.onGround + info.underBridge).toBe(462);
+      expect(info.maxDistanceM).toBeLessThanOrEqual(500);
+      // 増えた分の印が光り終わってから撮る
+      await page.waitForTimeout(2500);
+    }
 
     await page.screenshot({ path: `screenshots/main-${i + 1}.png` });
   }
@@ -133,11 +171,12 @@ test('8場面を順にスクロールすると、場面が進み、カメラが�
   expect(errors).toEqual([]);
 });
 
-test('スマートフォン幅（390×844）で場面2と場面5が読める', async ({ page }) => {
+test('スマートフォン幅（390×844）で場面1・2・5が読める', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   const errors = collectErrors(page);
   await open(page);
-  for (const i of [1, 4]) {
+  for (const i of [0, 1, 4]) {
+    const id = SCRIPT[i]!.id;
     await goToScene(page, i);
     // 場面の最初のカードが止まっている位置（カードとカードのあいだは何も出ない）で、カードが画面の幅と高さに収まっている
     await page.evaluate((i) => window.scrollTo({ top: window.__MAIN__!.scrollYFor(i, 0.01), behavior: 'instant' }), i);
@@ -150,6 +189,10 @@ test('スマートフォン幅（390×844）で場面2と場面5が読める', a
       expect(box.y).toBeGreaterThanOrEqual(0);
       expect(box.y + box.height).toBeLessThanOrEqual(844);
     }
+    // 秋葉原の自転車の表示中の台数（場面2 はカメラが止まっている区間の終わり近くで数える）
+    await goToScene(page, i, id === 'akihabara-462' ? 0.95 : 0.5);
+    expect(await akihabaraShown(page)).toBe(AKIHABARA_SHOWN[id] ?? 0);
+    if (AKIHABARA_SHOWN[id]) await page.waitForTimeout(2500);
     await page.screenshot({ path: `screenshots/main-mobile-${i + 1}.png` });
   }
   // 出典のリンクがタップできる大きさ（高さ 24px 以上）

@@ -9,6 +9,9 @@
  *    - 成分の境界で「隣の成分が高い（壁が立ち上がる）」辺と「隣が低い（屋上の縁から落ちる）」辺を数え、
  *      立ち上がりが落ち込み以上の成分を地表（路上）とする。屋上は周囲より高いので落ち込みが多い。
  *      小さすぎる成分（`minStreetArea` 未満）と欠損（NaN）は路上にしない。
+ *    - 分類（`classes`。街の高さ格子の 0=地面、1=建物、2=橋梁・高架、255=水面など）を渡したときは、段差ではなく
+ *      分類で決める: 地面と高架の下を路上、建物と水面を置けない場所にする（高架の下の高さは地面の格子の値）。
+ *      `blocked` で、分類では分からない置けない場所（線路など）を足せる。
  *    - 路上以外のセル（建物・欠損）を壁とみなし、各路上セルから最寄りの壁面までの距離と、
  *      壁から離れる向き（法線）を求める（ベクトル伝播による距離変換）。
  *    - 壁からの距離の近傍最大値を、その場所の「通りの半幅」とする。
@@ -38,6 +41,19 @@ export interface StreetMapOptions {
   minStreetArea?: number;
   /** 通りの半幅を求める近傍の半径(m)。既定 12。 */
   halfWidthWindow?: number;
+  /**
+   * セルの分類（`GRID_CLASS`: 0=地面、1=建物、2=橋梁・高架、255=標高データなし）。長さ width*height。
+   * 指定すると、段差ではなく分類で路上を決める。0 と 2 を路上（高架の下）、それ以外を置けない場所にする。
+   * このとき格子には建物・高架を除いた地面の高さ（`CityGrid.ground`）を渡す。
+   */
+  classes?: Uint8Array;
+  /** 1 のセルを、分類によらず置けない場所にする（線路など）。長さ width*height。 */
+  blocked?: Uint8Array;
+  /**
+   * これより小さい「路上でない場所」の塊（広場の売店・柱など, m²）は、列を作る壁にしない（既定 0 = すべて壁）。
+   * 塊の上には置かないが、自転車の列は大きな建物の壁面に沿って作る。
+   */
+  minWallArea?: number;
 }
 
 /** 格子から求めた路上の情報。複数の駅の配置で共有できる。 */
@@ -52,6 +68,8 @@ export interface StreetMap {
   normalZ: Float32Array;
   /** 通りの半幅の目安(m)（wallDist の近傍最大値）。 */
   halfWidth: Float32Array;
+  /** 分類（`StreetMapOptions.classes` を渡したとき）。 */
+  classes?: Uint8Array;
 }
 
 /** 配置のオプション。 */
@@ -85,6 +103,21 @@ export interface StationLayoutOptions {
   startSlack?: number;
   /** 足元の高さの許容差(m)。これを超える段差の上には置かない。既定 0.4。 */
   flatness?: number;
+  /**
+   * 置き始める点（ローカル座標）。既定は駅の位置。駅前の決まった場所から外側へ広げるときに使う。
+   * radius は駅の位置から測る。
+   */
+  start?: { x: number; z: number };
+  /**
+   * ほかの出口など、少し遅れて置き始める点（ローカル座標と、経路距離に足す遅れ m）。
+   * 駅前の1か所から、駅の反対側の通りにもあふれるようにするときに使う。
+   */
+  extraStarts?: readonly { x: number; z: number; delay: number }[];
+  /**
+   * 塊の間を空ける割合（0〜1、既定 0）。塊のノイズがこの値より小さい場所には置かない。
+   * 大きくすると、塊がとびとびになり、同じ台数でも通り沿いに遠くまで広がる。
+   */
+  clumpGap?: number;
   /** 路上の判定のオプション（HeightGrid を渡したときに使う）。 */
   street?: StreetMapOptions;
 }
@@ -121,6 +154,17 @@ export function prepareStreetMap(grid: HeightGrid, options: StreetMapOptions = {
   const window = options.halfWidthWindow ?? 12;
   const { width: W, height: H, cellSize: cs, data } = grid;
   const N = W * H;
+  const classes = options.classes;
+  const blocked = options.blocked;
+  if (classes && classes.length !== N) throw new Error('classes の長さが格子と合いません');
+  if (blocked && blocked.length !== N) throw new Error('blocked の長さが格子と合いません');
+  /** 分類で置ける場所か（分類がなければ常に true）。 */
+  const usable = (i: number): boolean => {
+    if (blocked && blocked[i] === 1) return false;
+    if (!classes) return true;
+    const k = classes[i];
+    return k === 0 || k === 2;
+  };
 
   // 1. 段差でつながる連結成分
   const label = new Int32Array(N).fill(-1);
@@ -128,7 +172,7 @@ export function prepareStreetMap(grid: HeightGrid, options: StreetMapOptions = {
   const area: number[] = [];
   let comps = 0;
   for (let s = 0; s < N; s++) {
-    if (label[s] !== -1 || Number.isNaN(data[s]!)) continue;
+    if (label[s] !== -1 || Number.isNaN(data[s]!) || !usable(s)) continue;
     const id = comps++;
     let head = 0;
     let tail = 0;
@@ -159,7 +203,7 @@ export function prepareStreetMap(grid: HeightGrid, options: StreetMapOptions = {
         }
         if (label[j] !== -1) continue;
         const hj = data[j]!;
-        if (Number.isNaN(hj) || Math.abs(hj - h) >= step) continue;
+        if (Number.isNaN(hj) || Math.abs(hj - h) >= step || !usable(j)) continue;
         label[j] = id;
         queue[tail++] = j;
       }
@@ -194,19 +238,51 @@ export function prepareStreetMap(grid: HeightGrid, options: StreetMapOptions = {
   }
   const minCells = minArea / (cs * cs);
   const isStreetComp = new Uint8Array(comps);
-  for (let k = 0; k < comps; k++) isStreetComp[k] = area[k]! >= minCells && rise[k]! >= drop[k]! ? 1 : 0;
+  // 分類があるときは、置ける場所の成分のうち小さすぎないものをすべて路上にする
+  for (let k = 0; k < comps; k++) isStreetComp[k] = area[k]! >= minCells && (classes !== undefined || rise[k]! >= drop[k]!) ? 1 : 0;
   const street = new Uint8Array(N);
   for (let i = 0; i < N; i++) {
     const l = label[i]!;
     street[i] = l >= 0 && isStreetComp[l] === 1 ? 1 : 0;
   }
 
-  // 3. 最寄りの壁（路上でないセル）へのベクトル（8SSEDT のベクトル伝播）
+  // 3. 最寄りの壁（路上でないセル）へのベクトル（8SSEDT のベクトル伝播）。小さな塊は壁にしない。
+  const wall = new Uint8Array(N);
+  for (let i = 0; i < N; i++) wall[i] = street[i] === 1 ? 0 : 1;
+  const minWallCells = (options.minWallArea ?? 0) / (cs * cs);
+  if (minWallCells > 0) {
+    const seen = new Uint8Array(N);
+    const members: number[] = [];
+    for (let s = 0; s < N; s++) {
+      if (wall[s] === 0 || seen[s] === 1) continue;
+      members.length = 0;
+      seen[s] = 1;
+      members.push(s);
+      for (let h = 0; h < members.length; h++) {
+        const i = members[h]!;
+        const r = (i / W) | 0;
+        const c = i - r * W;
+        for (let dr = -1; dr <= 1; dr++) {
+          for (let dc = -1; dc <= 1; dc++) {
+            const rr = r + dr;
+            const cc = c + dc;
+            if (rr < 0 || rr >= H || cc < 0 || cc >= W) continue;
+            const j = rr * W + cc;
+            if (wall[j] === 1 && seen[j] === 0) {
+              seen[j] = 1;
+              members.push(j);
+            }
+          }
+        }
+      }
+      if (members.length < minWallCells) for (const i of members) wall[i] = 0;
+    }
+  }
   const vx = new Int32Array(N);
   const vz = new Int32Array(N);
   const INF = 1 << 20;
   for (let i = 0; i < N; i++) {
-    if (street[i] === 1) {
+    if (wall[i] === 0) {
       vx[i] = INF;
       vz[i] = INF;
     }
@@ -225,7 +301,7 @@ export function prepareStreetMap(grid: HeightGrid, options: StreetMapOptions = {
   for (let r = 0; r < H; r++) {
     for (let c = 0; c < W; c++) {
       const i = r * W + c;
-      if (street[i] === 0) continue;
+      if (wall[i] === 1) continue;
       if (c > 0) relax(i, i - 1, -1, 0);
       if (r > 0) {
         relax(i, i - W, 0, -1);
@@ -235,13 +311,13 @@ export function prepareStreetMap(grid: HeightGrid, options: StreetMapOptions = {
     }
     for (let c = W - 1; c >= 0; c--) {
       const i = r * W + c;
-      if (street[i] === 1 && c < W - 1) relax(i, i + 1, 1, 0);
+      if (wall[i] === 0 && c < W - 1) relax(i, i + 1, 1, 0);
     }
   }
   for (let r = H - 1; r >= 0; r--) {
     for (let c = W - 1; c >= 0; c--) {
       const i = r * W + c;
-      if (street[i] === 0) continue;
+      if (wall[i] === 1) continue;
       if (c < W - 1) relax(i, i + 1, 1, 0);
       if (r < H - 1) {
         relax(i, i + W, 0, 1);
@@ -251,7 +327,7 @@ export function prepareStreetMap(grid: HeightGrid, options: StreetMapOptions = {
     }
     for (let c = 0; c < W; c++) {
       const i = r * W + c;
-      if (street[i] === 1 && c > 0) relax(i, i - 1, -1, 0);
+      if (wall[i] === 0 && c > 0) relax(i, i - 1, -1, 0);
     }
   }
   const wallDist = new Float32Array(N);
@@ -283,7 +359,7 @@ export function prepareStreetMap(grid: HeightGrid, options: StreetMapOptions = {
   const halfWidth = new Float32Array(N);
   slidingMax(tmp, halfWidth, H, W, W, 1, R);
 
-  return { grid, street, wallDist, normalX, normalZ, halfWidth };
+  return { grid, street, wallDist, normalX, normalZ, halfWidth, classes };
 }
 
 /**
@@ -501,6 +577,8 @@ export function layoutStation(
   const jitter = options.orderJitter ?? 2;
   const flatness = options.flatness ?? 0.4;
   const startSlack = options.startSlack ?? 15;
+  const clumpGap = Math.min(Math.max(options.clumpGap ?? 0, 0), 0.95);
+  const from = options.start ?? station;
 
   const out: StationLayout = {
     count,
@@ -515,7 +593,7 @@ export function layoutStation(
   };
   if (count === 0) return out;
 
-  const startCell = nearestStreetCell(map, station.x, station.z, radius);
+  const startCell = nearestStreetCell(map, from.x, from.z, radius);
   if (startCell < 0) throw new Error('駅の周りに路上のセルがありません');
   const sr = (startCell / W) | 0;
   const sc = startCell - sr * W;
@@ -602,8 +680,9 @@ export function layoutStation(
         const t = (s + 0.5) * (cs / steps) - cs / 2;
         const x = px + tx * t;
         const z = pz + tz * t;
-        const pr =
-          gDist + k * rowPenalty + clumpPenalty * valueNoise(x, z, clumpScale, noiseSeed) + jitter * hash2(Math.round(x * 20), Math.round(z * 20), noiseSeed + 7);
+        const noise = valueNoise(x, z, clumpScale, noiseSeed);
+        if (noise < clumpGap) continue;
+        const pr = gDist + k * rowPenalty + clumpPenalty * noise + jitter * hash2(Math.round(x * 20), Math.round(z * 20), noiseSeed + 7);
         const id = candX.length;
         candX.push(x);
         candZ.push(z);
@@ -701,19 +780,33 @@ export function layoutStation(
   // 始点の距離は駅からの直線距離にする。
   const dist = new Float64Array(W * H).fill(Infinity);
   const front = new MinHeap();
-  const nearest = Math.hypot(out.start.x - station.x, out.start.z - station.z);
+  const nearest = Math.hypot(out.start.x - from.x, out.start.z - from.z);
   const seedRadius = nearest + startSlack;
   {
-    const c0 = Math.max(0, Math.floor((station.x - seedRadius - g.originX) / cs));
-    const c1 = Math.min(W - 1, Math.floor((station.x + seedRadius - g.originX) / cs));
-    const r0 = Math.max(0, Math.floor((station.z - seedRadius - g.originZ) / cs));
-    const r1 = Math.min(H - 1, Math.floor((station.z + seedRadius - g.originZ) / cs));
+    const c0 = Math.max(0, Math.floor((from.x - seedRadius - g.originX) / cs));
+    const c1 = Math.min(W - 1, Math.floor((from.x + seedRadius - g.originX) / cs));
+    const r0 = Math.max(0, Math.floor((from.z - seedRadius - g.originZ) / cs));
+    const r1 = Math.min(H - 1, Math.floor((from.z + seedRadius - g.originZ) / cs));
     for (let r = r0; r <= r1; r++) {
       for (let c = c0; c <= c1; c++) {
         const i = r * W + c;
         if (map.street[i] !== 1) continue;
-        const d = Math.hypot(g.originX + (c + 0.5) * cs - station.x, g.originZ + (r + 0.5) * cs - station.z);
-        if (d > seedRadius || d > radius) continue;
+        const cx = g.originX + (c + 0.5) * cs;
+        const cz = g.originZ + (r + 0.5) * cs;
+        const d = Math.hypot(cx - from.x, cz - from.z);
+        if (d > seedRadius || Math.hypot(cx - station.x, cz - station.z) > radius) continue;
+        dist[i] = d;
+        front.push(d, i);
+      }
+    }
+    for (const e of options.extraStarts ?? []) {
+      const i = nearestStreetCell(map, e.x, e.z, radius);
+      if (i < 0) continue;
+      const r = (i / W) | 0;
+      const c = i - r * W;
+      if (Math.hypot(g.originX + (c + 0.5) * cs - station.x, g.originZ + (r + 0.5) * cs - station.z) > radius) continue;
+      const d = e.delay + Math.hypot(g.originX + (c + 0.5) * cs - e.x, g.originZ + (r + 0.5) * cs - e.z);
+      if (d < dist[i]!) {
         dist[i] = d;
         front.push(d, i);
       }
