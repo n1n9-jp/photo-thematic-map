@@ -1,10 +1,12 @@
 /**
  * 台本の場面 id → 3D の中身（今は仮の表示）。本物の中身ができたら、ここの対応を差し替える。
  */
-import { FACTS, PILES } from '../story/content/facts';
+import { FACTS } from '../story/content/facts';
 import { PLACES } from '../story/content/script';
 import { assetUrl } from '../paths';
-import { ConeModule, MarkersModule, PillarsModule, type PillarSpec } from './placeholders';
+import { MarkersModule, PillarsModule, type PillarSpec } from './placeholders';
+import { PILE_SITES } from './modules/pileSites';
+import { PileModule } from './modules/pileModule';
 import type { SceneModuleFactory } from './sceneModule';
 
 interface StationRow {
@@ -89,12 +91,9 @@ export const SCENE_MODULES: Record<string, SceneModuleFactory> = {
           { name: `${s.name}:空き`, lat: s.lat, lon: s.lon, value: s.vacancy, color: VACANCY_COLOR, offsetEastM: PILLAR_WIDTH_M * 1.3 },
         ]),
     }),
-  'removed-fy2024': () =>
-    new ConeModule({ id: 'removed-fy2024', ...PLACES.tokyoPlaza, heightM: PILES.removedFY2024.heightM, diameterM: PILES.removedFY2024.diameterM }),
-  'removed-15years': () =>
-    new ConeModule({ id: 'removed-15years', ...PLACES.shinjukuPark, heightM: PILES.removed15Years.heightM, diameterM: PILES.removed15Years.diameterM }),
-  'after-removal': () =>
-    new ConeModule({ id: 'after-removal', ...PLACES.tokyoPlaza, heightM: PILES.removedFY2024.heightM, diameterM: PILES.removedFY2024.diameterM }),
+  'removed-fy2024': () => new PileModule({ id: 'removed-fy2024', site: PILE_SITES.year, growth: 'grow' }),
+  'removed-15years': () => new PileModule({ id: 'removed-15years', site: PILE_SITES.fifteenYears, growth: 'grow' }),
+  'after-removal': () => new PileModule({ id: 'after-removal', site: PILE_SITES.year, growth: 'full' }),
   'since-1990': () =>
     new MarkersModule({
       id: 'since-1990',

@@ -49,6 +49,31 @@ export const STATION_RADIUS_M = 500;
 /** 「100台以上あった駅」の閾値。 */
 export const MANY_BICYCLES_THRESHOLD = 100;
 
+/**
+ * 山の大きさ。本編と同じ計算（`src/scene/pileScene/compute.ts` の computePileScene、1台あたりのかさ 0.35m³、安息角 35°）を、
+ * 街の高さ格子（public/data/grids/）で行った結果（`scripts/bake/pileFacts.ts` で求めた値。`tests/unit/pileFacts.test.ts` が照合する）。
+ * - removedFY2024: 2024年度の撤去台数を東京駅丸の内口の駅前広場に積んだ山（全台を詰める）。
+ * - removed15Years: 15年の累計を新宿中央公園（都庁前）に積んだ山（表層だけを置く）。
+ * - heightM: 頂上の、山を積んだ地点の地表からの高さ(m)。
+ * - diameterM: 裾の直径(m)。山が覆う範囲（厚さ 5cm 以上）の面積と同じ面積の円の直径。
+ */
+export const PILES = {
+  removedFY2024: {
+    grid: 'marunouchi',
+    heightM: 37.3,
+    diameterM: 86,
+    areaM2: 5_818,
+    source: `${CALC}（堆積計算 src/scene/pileScene/compute.ts）`,
+  },
+  removed15Years: {
+    grid: 'shinjuku',
+    heightM: 98.9,
+    diameterM: 278,
+    areaM2: 60_740,
+    source: `${CALC}（堆積計算 src/scene/pileScene/compute.ts）`,
+  },
+} as const;
+
 export const FACTS = {
   // --- 秋葉原駅（場面1・2・4）
   akihabaraParked: fact(462, '台', SOURCES.stations, { note: '秋葉原駅の行、自転車' }),
@@ -73,6 +98,8 @@ export const FACTS = {
 
   // --- 撤去（場面5）
   removedFY2024: fact(187_262, '台', SOURCES.full, { note: '2024年度、自転車のみ' }),
+  yearPileHeight: fact(Math.round(PILES.removedFY2024.heightM), 'メートル', PILES.removedFY2024.source, { note: '頂上の地表からの高さ' }),
+  yearPileDiameter: fact(Math.round(PILES.removedFY2024.diameterM / 10) * 10, 'メートル', PILES.removedFY2024.source, { note: '裾の直径、10m 単位' }),
   removedPerDay: fact(513, '台', `${CALC}（187,262 ÷ 365）`),
   removalCost: fact(53.7, '億円', SOURCES.summary, { fractionDigits: 1 }),
   removalCostPerBicycle: fact(28_000, '円', `${CALC}（53.7億円 ÷ 撤去台数 18万8,561台（原付を含む）、千円未満を丸め）`),
@@ -81,6 +108,8 @@ export const FACTS = {
   // --- 15年の累計（場面6）
   removed15Years: fact(5_798_477, '台', SOURCES.full, { note: '2010〜2024年度の撤去台数（自転車）の合計' }),
   removed15YearsInYears: fact(31, '年分', `${CALC}（579万8,477 ÷ 18万7,262）`),
+  cumulativePileHeight: fact(Math.round(PILES.removed15Years.heightM), 'メートル', PILES.removed15Years.source, { note: '頂上の地表からの高さ' }),
+  cumulativePileDiameter: fact(Math.round(PILES.removed15Years.diameterM / 10) * 10, 'メートル', PILES.removed15Years.source, { note: '裾の直径（覆う範囲と同じ面積の円）、10m 単位' }),
   cumulativePileVolume: fact(2_030_000, '立方メートル', `${CALC}（堆積計算 src/sim/pile.ts）`),
   tochoHeight: fact(243, 'メートル', '東京都財務局の資料（都庁第一本庁舎の高さ、最高部 243.4m）'),
   cumulativePileDomes: fact(1.6, '杯分', `${CALC}（東京ドームの容積 124万立方メートル）`, { fractionDigits: 1 }),
@@ -101,12 +130,3 @@ export const FACTS = {
   targetParked: fact(15_000, '台以下', SOURCES.press, { note: '2025年度中の目標' }),
 } as const satisfies Record<string, Fact>;
 
-/**
- * 仮の山の大きさ（堆積計算の結果の目安）。
- * - removedFY2024: 2024年度の撤去台数を東京駅丸の内口の駅前広場に積んだ山。
- * - removed15Years: 15年の累計を新宿中央公園（都庁前）に積んだ山。
- */
-export const PILES = {
-  removedFY2024: { heightM: 31, diameterM: 89, source: `${CALC}（堆積計算 src/sim/pile.ts）` },
-  removed15Years: { heightM: 98, diameterM: 281, source: `${CALC}（堆積計算 src/sim/pile.ts）` },
-} as const;

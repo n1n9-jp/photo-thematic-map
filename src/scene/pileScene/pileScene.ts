@@ -29,7 +29,7 @@ import {
 } from 'three';
 import type { GridName } from '../../data/grids';
 import { latLonToLocal } from '../../geo/enu';
-import { BicycleField, type BicycleFieldStats } from '../bicycle/field';
+import { BicycleField, type BicycleFieldOptions, type BicycleFieldStats, type BicycleTone } from '../bicycle/field';
 import { HIDE_DEPTH, countAtMost, stageAt, type PileComputeParams, type PileComputeProgress, type PileComputeResult, type PileMode } from './compute';
 import { computePileInWorker } from './computeInWorker';
 
@@ -55,6 +55,14 @@ export interface PileSceneOptions {
   fallWindow?: number;
   /** 動きを減らす（落下を省く）。既定は `prefers-reduced-motion: reduce` に従う。 */
   reducedMotion?: boolean;
+  /** 自転車の描画の設定（詳細度の切り替え・上限・点景）。端末に合わせて変える。 */
+  field?: BicycleFieldOptions;
+  /** 自転車の色の調子。既定 {@link PILE_TONE}。 */
+  tone?: BicycleTone;
+  /** 表面から深い自転車の明るさ（0〜1）。既定 {@link PILE_DEEP_SHADE}。 */
+  deepShade?: number;
+  /** 暗い面の色（sRGB 16進）。既定 {@link PILE_SHELL_COLOR}。 */
+  shellColor?: number;
   /** 計算の進み具合。 */
   onProgress?: (p: PileComputeProgress) => void;
   /** 計算の差し替え（既定は Web Worker）。 */
@@ -113,6 +121,8 @@ export interface PileScene {
   pauseFalls: boolean;
   /** 動きを減らす設定。 */
   reducedMotion: boolean;
+  /** 落下・降り直しの途中か（毎フレームの描画が要るか）。直近の `update` の時点。 */
+  readonly animating: boolean;
   readonly stats: PileSceneStats;
   /** 毎フレーム、描画の前に呼ぶ。 */
   update(camera: PerspectiveCamera, viewportHeightPx: number): void;
@@ -121,7 +131,17 @@ export interface PileScene {
 
 /** 暗い面を表面から下げる量（m）。 */
 const SHELL_OFFSET: Record<PileMode, number> = { full: 0.9, surface: 0.6 };
-const SHELL_COLOR = 0x2c2a27;
+/**
+ * 暗い面の色。自転車の隙間から見えるので、真っ黒にせず、遠くから見た自転車の平均に近い灰褐色にする。
+ */
+export const PILE_SHELL_COLOR = 0x5a5550;
+/**
+ * 山の自転車の色の調子。遠くから見ると、黒・紺のフレームと影が重なって暗い塊に見えるので、
+ * 暗いフレーム色を持ち上げ、彩度を上げ、陰影の暗い側を浅くする。
+ */
+export const PILE_TONE: BicycleTone = { lift: 0.55, saturation: 1.35, shadeFloor: 0.3 };
+/** 表面から深い自転車の明るさ（BicycleField の既定 0.45 より浅くする）。 */
+export const PILE_DEEP_SHADE = 0.6;
 /** 'surface' の遅れ（降り直しの着地の基準）の追いかけ。 */
 const LAG_TAU = 0.45;
 const LAG_MIN_RATE = 0.03;
@@ -156,7 +176,7 @@ export async function createPileScene(options: PileSceneOptions): Promise<PileSc
 /** 計算済みの結果から場面を作る。 */
 export function createPileSceneFromResult(
   result: PileComputeResult,
-  options: Pick<PileSceneOptions, 'dropHeight' | 'fallWindow' | 'reducedMotion'> & { surfaceDepth?: number } = {},
+  options: Pick<PileSceneOptions, 'dropHeight' | 'fallWindow' | 'reducedMotion' | 'field' | 'tone' | 'deepShade' | 'shellColor'> & { surfaceDepth?: number } = {},
 ): PileScene {
   const mode = result.mode;
   const n = result.placedCount;
@@ -178,7 +198,9 @@ export function createPileSceneFromResult(
   const rect = { x0: layerRect.x0, z0: layerRect.z0, sizeX: lw * cs, sizeZ: lh * cs };
 
   // 自転車
-  const field = new BicycleField();
+  const field = new BicycleField(options.field);
+  field.tone = options.tone ?? PILE_TONE;
+  field.deepShade = options.deepShade ?? PILE_DEEP_SHADE;
   field.reducedMotion = options.reducedMotion ?? prefersReducedMotion();
   field.setPileSurface({ texture, rect });
   const dropHeight = options.dropHeight ?? (mode === 'full' ? 60 : 70);
@@ -205,7 +227,7 @@ export function createPileSceneFromResult(
   object.add(field.object);
 
   // 暗い面
-  const shell = createShellMesh(result, texture, SHELL_OFFSET[mode]);
+  const shell = createShellMesh(result, texture, SHELL_OFFSET[mode], options.shellColor ?? PILE_SHELL_COLOR);
   object.add(shell.mesh);
 
   // 外接矩形（厚さのある範囲）
@@ -243,6 +265,7 @@ export function createPileSceneFromResult(
   let lag = 0; // 'surface' の降り直しの着地の基準（進み具合）
   let lastMs = -1;
   let pause = false;
+  let animating = false;
   const shownAt = (t: number): number => countAtMost(result.arrivals, t);
   const representedAt = (t: number): number => (mode === 'full' ? shownAt(t) : Math.round(Math.min(1, Math.max(0, t)) * N));
 
@@ -297,6 +320,9 @@ export function createPileSceneFromResult(
     get reducedMotion() {
       return field.reducedMotion;
     },
+    get animating() {
+      return animating;
+    },
     set reducedMotion(v: boolean) {
       field.reducedMotion = v;
     },
@@ -319,6 +345,7 @@ export function createPileSceneFromResult(
       stats.field = field.stats;
       stats.shellTriangles = shell.mesh.visible ? shell.triangles : 0;
       stats.triangles = field.stats.triangles + stats.shellTriangles;
+      animating = !pause && (field.stats.falling > 0 || (mode === 'surface' && !field.reducedMotion && lag < progress));
     },
     dispose() {
       field.dispose();
@@ -381,7 +408,7 @@ void main() {
 }`;
 
 /** 山の表面より offset だけ内側の暗い面（格子のセルの中心を頂点にする）。 */
-function createShellMesh(result: PileComputeResult, texture: DataArrayTexture, offset: number): ShellMesh {
+function createShellMesh(result: PileComputeResult, texture: DataArrayTexture, offset: number, color: number): ShellMesh {
   const { layerWidth: lw, layerHeight: lh, layerRect, layerGround, fractions } = result;
   const cs = layerRect.cellSize;
   const K = fractions.length;
@@ -438,7 +465,7 @@ function createShellMesh(result: PileComputeResult, texture: DataArrayTexture, o
       uOffset: { value: offset },
       uTexel: { value: [1 / lw, 1 / lh] },
       uCell: { value: cs },
-      uColor: { value: new Color(SHELL_COLOR) },
+      uColor: { value: new Color(color) },
       uLight: { value: light },
     },
     vertexShader: SHELL_VERTEX,

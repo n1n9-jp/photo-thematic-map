@@ -6,6 +6,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import { SCRIPT } from '../../src/story/content/script';
+import { checkPileScene, PILE_SCENES, type PileMetric } from './pileHelpers';
 
 // ソフトウェア描画（SwiftShader）では PLATEAU の読み込みと描画に時間がかかる
 test.setTimeout(1_500_000);
@@ -84,6 +85,7 @@ test('8場面を順にスクロールすると、場面が進み、カメラが�
   await expect(page.locator('#data-and-methods')).toContainText('準備中');
 
   const metrics: SceneMetric[] = [];
+  const pileMetrics: PileMetric[] = [];
   let before = 0;
   for (let i = 0; i < SCRIPT.length; i++) {
     const scene = SCRIPT[i]!;
@@ -100,6 +102,9 @@ test('8場面を順にスクロールすると、場面が進み、カメラが�
     const cam = await page.evaluate(() => window.__MAIN__!.camera());
     expect(cam.heightAboveGround).toBeGreaterThan(0.5);
 
+    // 山の場面（5・6・7）: 降って積もり、実数に達する
+    if (PILE_SCENES[i]) pileMetrics.push(await checkPileScene(page, i, '1280x720', i === 4 ? 'screenshots/main-5-falling.png' : undefined));
+
     await page.screenshot({ path: `screenshots/main-${i + 1}.png` });
   }
 
@@ -113,17 +118,20 @@ test('8場面を順にスクロールすると、場面が進み、カメラが�
 
   mkdirSync('screenshots', { recursive: true });
   writeFileSync('screenshots/main-metrics.json', JSON.stringify(metrics, null, 2));
+  writeFileSync('screenshots/main-piles-metrics.json', JSON.stringify(pileMetrics, null, 2));
+  for (const m of pileMetrics) console.log(`場面${m.scene} 山 ${m.key}: ${m.triangles.toLocaleString('en-US')} 三角形（${m.profile}）`);
   for (const m of metrics) {
     console.log(`場面${m.scene} ${m.id}: ${(m.bytes / 1e6).toFixed(1)} MB, ${(m.settleMs / 1000).toFixed(1)} s`);
   }
   expect(errors).toEqual([]);
 });
 
-test('スマートフォン幅（390×844）で場面2と場面5が読める', async ({ page }) => {
+test('スマートフォン幅（390×844）で場面2・5・6が読める', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   const errors = collectErrors(page);
+  const pileMetrics: PileMetric[] = [];
   await open(page);
-  for (const i of [1, 4]) {
+  for (const i of [1, 4, 5]) {
     await goToScene(page, i);
     const card = page.locator('.story-card').nth(i);
     const box = await card.boundingBox();
@@ -133,11 +141,20 @@ test('スマートフォン幅（390×844）で場面2と場面5が読める', a
     expect(box!.x + box!.width).toBeLessThanOrEqual(390);
     expect(box!.y).toBeGreaterThanOrEqual(0);
     expect(box!.y + box!.height).toBeLessThanOrEqual(844);
+    if (PILE_SCENES[i]) {
+      const m = await checkPileScene(page, i, '390x844');
+      // 画面の短辺が 600px 以下なのでスマートフォン向けの設定になる
+      expect(m.profile).toBe('small');
+      pileMetrics.push(m);
+    }
     await page.screenshot({ path: `screenshots/main-mobile-${i + 1}.png` });
   }
   // 出典のリンクがタップできる大きさ（高さ 24px 以上）
   const link = page.locator('.ptm-site-attribution a').first();
   const lb = await link.boundingBox();
   expect(lb!.height).toBeGreaterThanOrEqual(24);
+  mkdirSync('screenshots', { recursive: true });
+  writeFileSync('screenshots/main-piles-metrics-mobile.json', JSON.stringify(pileMetrics, null, 2));
+  for (const m of pileMetrics) console.log(`場面${m.scene} 山 ${m.key}（スマートフォン）: ${m.triangles.toLocaleString('en-US')} 三角形`);
   expect(errors).toEqual([]);
 });

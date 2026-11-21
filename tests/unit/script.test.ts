@@ -37,7 +37,7 @@ describe('台本', () => {
     expect(text('parking-vacancy')).toContain('都内の駅周辺の駐輪場は2,943か所、収容能力は89万7,461台');
     expect(text('removed-fy2024')).toContain('撤去1台あたり約2万8,000円');
     expect(text('removed-15years')).toContain('15年で579万8,477台');
-    expect(text('removed-15years')).toContain('新宿の都庁前、新宿中央公園に1つの山として積むと、高さはおよそ98メートル、裾の直径は約280メートルになる。');
+    expect(text('removed-15years')).toContain('新宿の都庁前、新宿中央公園に1つの山として積むと、高さはおよそ99メートル、裾の直径は約280メートルになる。');
     expect(text('removed-15years')).toContain('隣に立つ都庁第一本庁舎の高さは243メートル。');
     expect(text('removed-15years')).toContain('体積は約203万立方メートル。東京ドーム約1.6杯分');
     expect(text('after-removal')).toContain('返還されたのは64.4％だった');
