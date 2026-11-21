@@ -1,10 +1,14 @@
 #!/usr/bin/env bash
 # dist/ を gh-pages ブランチへ置く（GitHub Pages の「Deploy from a branch」用）。
-# 使い方: npm run build のあとで bash scripts/deploy/gh-pages.sh
+# 使い方: bash scripts/deploy/gh-pages.sh
+#   変換済みの建物（npm run data:buildings。public/data/buildings/ は Git の管理外）を作り（入力が変わっていなければ何もしない）、
+#   npm run build してから置く。
 # gh-pages ブランチの履歴は残し、上に1コミット積む（強制プッシュはしない）。
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 DIST="$ROOT/dist"
+(cd "$ROOT" && npm run data:buildings && npm run build)
+[ -f "$DIST/data/buildings/manifest.json" ] || { echo "dist/data/buildings/manifest.json がありません。" >&2; exit 1; }
 [ -f "$DIST/index.html" ] || { echo "dist/index.html がありません。先に npm run build を実行してください。" >&2; exit 1; }
 SRC_COMMIT="$(git -C "$ROOT" rev-parse --short HEAD)"
 WORK="$(mktemp -d)"

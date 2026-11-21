@@ -65,6 +65,10 @@ async function goToScene(page: Page, i: number, holdFraction = 0.5): Promise<num
     [i, holdFraction] as const,
   );
   await expect.poll(() => page.evaluate(() => window.__MAIN__!.getState().stage)).toBe(i);
+  // スクロールの進捗が反映されるまで待つ（街並みがすぐ出そろうと、反映の前に isSettled() が true になることがある）
+  await expect
+    .poll(() => page.evaluate(([i, f]) => Math.abs(window.__MAIN__!.getState().progress - (window.__MAIN__!.holds()[i] ?? 0.4) * f), [i, holdFraction] as const))
+    .toBeLessThan(0.01);
   await page.waitForFunction(() => window.__MAIN__!.isSettled(), undefined, { timeout: SETTLE_TIMEOUT_MS, polling: 250 });
   return Date.now() - t0;
 }
@@ -560,5 +564,83 @@ test('場面3・4（スマートフォン幅 390×844）: ラベルは上位5か
     expect(await skyColoredPixels(page)).toBeLessThan(200);
     await page.screenshot({ path: file });
   }
+  expect(errors).toEqual([]);
+});
+
+// ---------------------------------------------------------------------------
+// 変換済みの建物: 場面ごとの読み込み量（種類別）
+// ---------------------------------------------------------------------------
+
+type LoadKind = 'buildingsBaked' | 'buildingsLive' | 'ortho' | 'elevation' | 'other';
+
+function loadKind(url: string): LoadKind {
+  if (url.includes('/data/buildings/')) return 'buildingsBaked';
+  if (/assets\.cms\.plateau\.reearth\.io/.test(url)) return 'buildingsLive';
+  if (/plateauview\.mlit\.go\.jp\/tiles\//.test(url)) return 'ortho';
+  if (/cyberjapandata\.gsi\.go\.jp/.test(url)) return 'elevation';
+  return 'other';
+}
+
+/** 場面 1〜8 を順に巡り、場面ごとの読み込み量（種類別）と出そろうまでの時間を返す。 */
+async function measureScenes(page: Page, query: string): Promise<Record<string, unknown>[]> {
+  const totals: Record<LoadKind, number> = { buildingsBaked: 0, buildingsLive: 0, ortho: 0, elevation: 0, other: 0 };
+  page.on('requestfinished', (req) => {
+    void req
+      .sizes()
+      .then((s) => {
+        totals[loadKind(req.url())] += s.responseBodySize + s.responseHeadersSize;
+      })
+      .catch(() => undefined);
+  });
+  const tOpen = Date.now();
+  await page.goto(`/${query}`);
+  await page.waitForFunction(() => window.__APP_READY__ === true, undefined, { timeout: 120_000 });
+  const rows: Record<string, unknown>[] = [];
+  let before = { ...totals };
+  for (let i = 0; i < SCRIPT.length; i++) {
+    const t = await goToScene(page, i, SCRIPT[i]!.id === 'akihabara-462' ? 0.95 : 0.5);
+    const settleMs = i === 0 ? Date.now() - tOpen : t;
+    // 応答の大きさは非同期に数えるので、少し待ってから読む
+    await page.waitForTimeout(500);
+    const now = { ...totals };
+    const delta = Object.fromEntries(Object.entries(now).map(([k, v]) => [k, v - before[k as LoadKind]])) as Record<LoadKind, number>;
+    before = now;
+    const city = await page.evaluate(() => window.__MAIN__!.status().city);
+    rows.push({
+      scene: i + 1,
+      id: SCRIPT[i]!.id,
+      settleMs,
+      bytes: Object.values(delta).reduce((a, b) => a + b, 0),
+      ...delta,
+      bakedTriangles: city.baked?.triangles ?? null,
+      bakedChunks: city.baked ? { detail: city.baked.detailChunks, far: city.baked.farChunks } : null,
+    });
+  }
+  return rows;
+}
+
+test('変換済みの建物で、場面ごとの読み込み量（種類別）を測り、PLATEAU の建物のタイルを読まない', async ({ page }) => {
+  const errors = collectErrors(page);
+  const rows = await measureScenes(page, '');
+  mkdirSync('screenshots', { recursive: true });
+  writeFileSync('screenshots/main-metrics-buildings.json', JSON.stringify(rows, null, 2));
+  for (const r of rows) {
+    console.log(`場面${String(r.scene)} ${String(r.id)}: 計 ${((r.bytes as number) / 1e6).toFixed(1)} MB（建物 ${((r.buildingsBaked as number) / 1e6).toFixed(1)} MB）${((r.settleMs as number) / 1000).toFixed(1)} s`);
+    expect(r.buildingsLive).toBe(0);
+    // 1 つの場面で読む建物は 10MB 以下
+    expect(r.buildingsBaked as number).toBeLessThanOrEqual(10e6);
+  }
+  // 建物を描く場面（1・2・5・6・7・8）では建物が表示されている
+  for (const r of rows.filter((r) => SCRIPT[(r.scene as number) - 1]!.place)) expect(r.bakedTriangles as number).toBeGreaterThan(50_000);
+  expect(errors).toEqual([]);
+});
+
+test('直接読む経路（?buildings=live）の場面ごとの読み込み量（比較用。PTM_COMPARE=1 のときだけ）', async ({ page }) => {
+  test.skip(!process.env.PTM_COMPARE, '比較用（PTM_COMPARE=1 のときだけ実行）');
+  const errors = collectErrors(page);
+  const rows = await measureScenes(page, '?buildings=live');
+  mkdirSync('screenshots', { recursive: true });
+  writeFileSync('screenshots/main-metrics-live.json', JSON.stringify(rows, null, 2));
+  for (const r of rows) console.log(`場面${String(r.scene)} ${String(r.id)}: 計 ${((r.bytes as number) / 1e6).toFixed(1)} MB（建物 ${((r.buildingsLive as number) / 1e6).toFixed(1)} MB）${((r.settleMs as number) / 1000).toFixed(1)} s`);
   expect(errors).toEqual([]);
 });
