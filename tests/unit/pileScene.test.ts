@@ -175,3 +175,23 @@ describe('山の場面の部品', () => {
     scene.dispose();
   });
 });
+
+describe('animating', () => {
+  it("'surface' は進み具合を上げると降り直しの途中になり、追いつくと終わる", async () => {
+    const { PerspectiveCamera } = await import('three');
+    const camera = new PerspectiveCamera(45, 16 / 9, 1, 5000);
+    camera.position.set(0, 200, 400);
+    camera.lookAt(0, 0, 0);
+    const scene = createPileSceneFromResult(surface, { reducedMotion: false });
+    scene.setProgress(0.2);
+    scene.update(camera, 720);
+    await new Promise((r) => setTimeout(r, 20));
+    scene.update(camera, 720);
+    expect(scene.animating).toBe(true);
+    for (let k = 0; k < 400 && scene.animating; k++) {
+      await new Promise((r) => setTimeout(r, 5));
+      scene.update(camera, 720);
+    }
+    expect(scene.animating).toBe(false);
+  });
+});

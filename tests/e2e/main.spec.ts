@@ -8,12 +8,14 @@ import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import { SCRIPT } from '../../src/story/content/script';
 import { freeRegionFor } from '../../src/story/layout';
+import { checkPileScene, PILE_SCENES, type PileMetric } from './pileHelpers';
 
 // ソフトウェア描画（SwiftShader）では PLATEAU の読み込みと描画に時間がかかる
-test.setTimeout(1_500_000);
+test.setTimeout(5_400_000);
 
-// 地上の目線の場面（1・8）は、航空写真の細かいタイルの読み込みに 2〜4 分かかる（ほかのテストと並行して動くとき）
-const SETTLE_TIMEOUT_MS = 420_000;
+// 地上の目線の場面（1・8）は航空写真の細かいタイルの読み込みに、山の場面（5・6・7）は山と街並みの描画に時間がかかる。
+// ソフトウェア描画で、ほかの E2E と並行して動くと 10 分を超えることがある。
+const SETTLE_TIMEOUT_MS = 1_200_000;
 
 function collectErrors(page: Page): string[] {
   const errors: string[] = [];
@@ -64,7 +66,7 @@ async function goToScene(page: Page, i: number, holdFraction = 0.5): Promise<num
     },
     [i, holdFraction] as const,
   );
-  await expect.poll(() => page.evaluate(() => window.__MAIN__!.getState().stage)).toBe(i);
+  await expect.poll(() => page.evaluate(() => window.__MAIN__!.getState().stage), { timeout: 120_000 }).toBe(i);
   // スクロールの進捗が反映されるまで待つ（街並みがすぐ出そろうと、反映の前に isSettled() が true になることがある）
   await expect
     .poll(() => page.evaluate(([i, f]) => Math.abs(window.__MAIN__!.getState().progress - (window.__MAIN__!.holds()[i] ?? 0.4) * f), [i, holdFraction] as const))
@@ -119,6 +121,7 @@ test('8場面を順にスクロールすると、場面が進み、カメラが�
   await expect(page.locator('#data-and-methods')).toContainText('準備中');
 
   const metrics: SceneMetric[] = [];
+  const pileMetrics: PileMetric[] = [];
   let before = 0;
   for (let i = 0; i < SCRIPT.length; i++) {
     const scene = SCRIPT[i]!;
@@ -156,6 +159,8 @@ test('8場面を順にスクロールすると、場面が進み、カメラが�
       // 増えた分の印が光り終わってから撮る
       await page.waitForTimeout(2500);
     }
+    // 山の場面（5・6・7）: 降って積もり、実数に達する
+    if (PILE_SCENES[i]) pileMetrics.push(await checkPileScene(page, i, '1280x720', i === 4 ? 'screenshots/main-5-falling.png' : undefined));
 
     await page.screenshot({ path: `screenshots/main-${i + 1}.png` });
   }
@@ -164,23 +169,26 @@ test('8場面を順にスクロールすると、場面が進み、カメラが�
   const toggle = page.locator('.story-free-toggle');
   await expect(toggle).toBeVisible();
   await toggle.click();
-  await expect.poll(() => page.evaluate(() => window.__MAIN__!.status().free)).toBe(true);
+  await expect.poll(() => page.evaluate(() => window.__MAIN__!.status().free), { timeout: 120_000 }).toBe(true);
   await toggle.click();
-  await expect.poll(() => page.evaluate(() => window.__MAIN__!.status().free)).toBe(false);
+  await expect.poll(() => page.evaluate(() => window.__MAIN__!.status().free), { timeout: 120_000 }).toBe(false);
 
   mkdirSync('screenshots', { recursive: true });
   writeFileSync('screenshots/main-metrics.json', JSON.stringify(metrics, null, 2));
+  writeFileSync('screenshots/main-piles-metrics.json', JSON.stringify(pileMetrics, null, 2));
+  for (const m of pileMetrics) console.log(`場面${m.scene} 山 ${m.key}: ${m.triangles.toLocaleString('en-US')} 三角形（${m.profile}）`);
   for (const m of metrics) {
     console.log(`場面${m.scene} ${m.id}: ${(m.bytes / 1e6).toFixed(1)} MB, ${(m.settleMs / 1000).toFixed(1)} s`);
   }
   expect(errors).toEqual([]);
 });
 
-test('スマートフォン幅（390×844）で場面1・2・5が読める', async ({ page }) => {
+test('スマートフォン幅（390×844）で場面1・2・5・6が読める', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   const errors = collectErrors(page);
+  const pileMetrics: PileMetric[] = [];
   await open(page);
-  for (const i of [0, 1, 4]) {
+  for (const i of [0, 1, 4, 5]) {
     const id = SCRIPT[i]!.id;
     await goToScene(page, i);
     // 場面の最初のカードが止まっている位置（カードとカードのあいだは何も出ない）で、カードが画面の幅と高さに収まっている
@@ -198,12 +206,21 @@ test('スマートフォン幅（390×844）で場面1・2・5が読める', asy
     await goToScene(page, i, id === 'akihabara-462' ? 0.95 : 0.5);
     expect(await akihabaraShown(page)).toBe(AKIHABARA_SHOWN[id] ?? 0);
     if (AKIHABARA_SHOWN[id]) await page.waitForTimeout(2500);
+    if (PILE_SCENES[i]) {
+      const m = await checkPileScene(page, i, '390x844');
+      // 画面の短辺が 600px 以下なのでスマートフォン向けの設定になる
+      expect(m.profile).toBe('small');
+      pileMetrics.push(m);
+    }
     await page.screenshot({ path: `screenshots/main-mobile-${i + 1}.png` });
   }
   // 出典のリンクがタップできる大きさ（高さ 24px 以上）
   const link = page.locator('.ptm-site-attribution a').first();
   const lb = await link.boundingBox();
   expect(lb!.height).toBeGreaterThanOrEqual(24);
+  mkdirSync('screenshots', { recursive: true });
+  writeFileSync('screenshots/main-piles-metrics-mobile.json', JSON.stringify(pileMetrics, null, 2));
+  for (const m of pileMetrics) console.log(`場面${m.scene} 山 ${m.key}（スマートフォン）: ${m.triangles.toLocaleString('en-US')} 三角形`);
   expect(errors).toEqual([]);
 });
 

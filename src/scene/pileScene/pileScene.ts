@@ -14,6 +14,7 @@
  */
 import {
   BufferAttribute,
+  NormalBlending,
   BufferGeometry,
   Color,
   DataArrayTexture,
@@ -29,7 +30,7 @@ import {
 } from 'three';
 import type { GridName } from '../../data/grids';
 import { latLonToLocal } from '../../geo/enu';
-import { BicycleField, type BicycleFieldStats } from '../bicycle/field';
+import { BicycleField, type BicycleFieldOptions, type BicycleFieldStats, type BicycleTone } from '../bicycle/field';
 import { HIDE_DEPTH, countAtMost, stageAt, type PileComputeParams, type PileComputeProgress, type PileComputeResult, type PileMode } from './compute';
 import { computePileInWorker } from './computeInWorker';
 
@@ -55,6 +56,14 @@ export interface PileSceneOptions {
   fallWindow?: number;
   /** 動きを減らす（落下を省く）。既定は `prefers-reduced-motion: reduce` に従う。 */
   reducedMotion?: boolean;
+  /** 自転車の描画の設定（詳細度の切り替え・上限・点景）。端末に合わせて変える。 */
+  field?: BicycleFieldOptions;
+  /** 自転車の色の調子。既定 {@link PILE_TONE}。 */
+  tone?: BicycleTone;
+  /** 表面から深い自転車の明るさ（0〜1）。既定 {@link PILE_DEEP_SHADE}。 */
+  deepShade?: number;
+  /** 暗い面の色（sRGB 16進）。既定 {@link PILE_SHELL_COLOR}。 */
+  shellColor?: number;
   /** 計算の進み具合。 */
   onProgress?: (p: PileComputeProgress) => void;
   /** 計算の差し替え（既定は Web Worker）。 */
@@ -113,6 +122,8 @@ export interface PileScene {
   pauseFalls: boolean;
   /** 動きを減らす設定。 */
   reducedMotion: boolean;
+  /** 落下・降り直しの途中か（毎フレームの描画が要るか）。直近の `update` の時点。 */
+  readonly animating: boolean;
   readonly stats: PileSceneStats;
   /** 毎フレーム、描画の前に呼ぶ。 */
   update(camera: PerspectiveCamera, viewportHeightPx: number): void;
@@ -121,7 +132,19 @@ export interface PileScene {
 
 /** 暗い面を表面から下げる量（m）。 */
 const SHELL_OFFSET: Record<PileMode, number> = { full: 0.9, surface: 0.6 };
-const SHELL_COLOR = 0x2c2a27;
+/**
+ * 暗い面の色。自転車の隙間から見えるので、真っ黒にせず、遠くから見た自転車の平均に近い灰褐色にする。
+ */
+export const PILE_SHELL_COLOR = 0x5a5550;
+/**
+ * 山の自転車の色の調子。遠くから見ると、黒・紺のフレームと影が重なって暗い塊に見えるので、
+ * 暗いフレーム色を持ち上げ、彩度を上げ、陰影の暗い側を浅くする。
+ */
+export const PILE_TONE: BicycleTone = { lift: 0.65, saturation: 1.7, shadeFloor: 0.4 };
+/** 遠景・点景で部品の色をフレーム色に寄せる量（`BicycleField.farFrameFill`）。 */
+export const PILE_FAR_FRAME_FILL = 0.65;
+/** 表面から深い自転車の明るさ（BicycleField の既定 0.45 より浅くする）。 */
+export const PILE_DEEP_SHADE = 0.6;
 /** 'surface' の遅れ（降り直しの着地の基準）の追いかけ。 */
 const LAG_TAU = 0.45;
 const LAG_MIN_RATE = 0.03;
@@ -156,7 +179,7 @@ export async function createPileScene(options: PileSceneOptions): Promise<PileSc
 /** 計算済みの結果から場面を作る。 */
 export function createPileSceneFromResult(
   result: PileComputeResult,
-  options: Pick<PileSceneOptions, 'dropHeight' | 'fallWindow' | 'reducedMotion'> & { surfaceDepth?: number } = {},
+  options: Pick<PileSceneOptions, 'dropHeight' | 'fallWindow' | 'reducedMotion' | 'field' | 'tone' | 'deepShade' | 'shellColor'> & { surfaceDepth?: number } = {},
 ): PileScene {
   const mode = result.mode;
   const n = result.placedCount;
@@ -178,7 +201,10 @@ export function createPileSceneFromResult(
   const rect = { x0: layerRect.x0, z0: layerRect.z0, sizeX: lw * cs, sizeZ: lh * cs };
 
   // 自転車
-  const field = new BicycleField();
+  const field = new BicycleField(options.field);
+  field.tone = options.tone ?? PILE_TONE;
+  field.deepShade = options.deepShade ?? PILE_DEEP_SHADE;
+  field.farFrameFill = PILE_FAR_FRAME_FILL;
   field.reducedMotion = options.reducedMotion ?? prefersReducedMotion();
   field.setPileSurface({ texture, rect });
   const dropHeight = options.dropHeight ?? (mode === 'full' ? 60 : 70);
@@ -205,8 +231,11 @@ export function createPileSceneFromResult(
   object.add(field.object);
 
   // 暗い面
-  const shell = createShellMesh(result, texture, SHELL_OFFSET[mode]);
+  const shell = createShellMesh(result, texture, SHELL_OFFSET[mode], options.shellColor ?? PILE_SHELL_COLOR);
   object.add(shell.mesh);
+  // 裾の接地の影（航空写真の地面と、まばらな自転車の境目をなじませる）
+  const rim = createRimShadow(result, texture);
+  object.add(rim.mesh);
 
   // 外接矩形（厚さのある範囲）
   const last = result.layers.subarray((K - 1) * lw * lh);
@@ -243,6 +272,7 @@ export function createPileSceneFromResult(
   let lag = 0; // 'surface' の降り直しの着地の基準（進み具合）
   let lastMs = -1;
   let pause = false;
+  let animating = false;
   const shownAt = (t: number): number => countAtMost(result.arrivals, t);
   const representedAt = (t: number): number => (mode === 'full' ? shownAt(t) : Math.round(Math.min(1, Math.max(0, t)) * N));
 
@@ -261,6 +291,7 @@ export function createPileSceneFromResult(
     const lagStage = { k0: lagS.k, k1: Math.min(K - 1, lagS.k + 1), mix: lagS.a };
     field.setPileSurfaceStage(headStage, lagStage);
     shell.setStage(lagStage);
+    rim.setStage(lagStage);
   };
 
   const stats: PileSceneStats = { represented: 0, shown: 0, falling: 0, field: field.stats, shellTriangles: 0, triangles: 0 };
@@ -297,6 +328,9 @@ export function createPileSceneFromResult(
     get reducedMotion() {
       return field.reducedMotion;
     },
+    get animating() {
+      return animating;
+    },
     set reducedMotion(v: boolean) {
       field.reducedMotion = v;
     },
@@ -317,12 +351,14 @@ export function createPileSceneFromResult(
       stats.shown = field.getRevealCount(group);
       stats.falling = field.stats.falling;
       stats.field = field.stats;
-      stats.shellTriangles = shell.mesh.visible ? shell.triangles : 0;
+      stats.shellTriangles = (shell.mesh.visible ? shell.triangles : 0) + (rim.mesh.visible ? rim.triangles : 0);
       stats.triangles = field.stats.triangles + stats.shellTriangles;
+      animating = !pause && (field.stats.falling > 0 || (mode === 'surface' && !field.reducedMotion && lag < progress));
     },
     dispose() {
       field.dispose();
       shell.dispose();
+      rim.dispose();
       texture.dispose();
       object.removeFromParent();
     },
@@ -381,7 +417,7 @@ void main() {
 }`;
 
 /** 山の表面より offset だけ内側の暗い面（格子のセルの中心を頂点にする）。 */
-function createShellMesh(result: PileComputeResult, texture: DataArrayTexture, offset: number): ShellMesh {
+function createShellMesh(result: PileComputeResult, texture: DataArrayTexture, offset: number, color: number): ShellMesh {
   const { layerWidth: lw, layerHeight: lh, layerRect, layerGround, fractions } = result;
   const cs = layerRect.cellSize;
   const K = fractions.length;
@@ -438,7 +474,7 @@ function createShellMesh(result: PileComputeResult, texture: DataArrayTexture, o
       uOffset: { value: offset },
       uTexel: { value: [1 / lw, 1 / lh] },
       uCell: { value: cs },
-      uColor: { value: new Color(SHELL_COLOR) },
+      uColor: { value: new Color(color) },
       uLight: { value: light },
     },
     vertexShader: SHELL_VERTEX,
@@ -454,6 +490,120 @@ function createShellMesh(result: PileComputeResult, texture: DataArrayTexture, o
     setStage(stage) {
       (material.uniforms.uStage!.value as Vector3).set(stage.k0, stage.k1, stage.mix);
       // まだ何も積もっていない間は描かない
+      mesh.visible = stage.k0 > 0 || stage.mix > 0;
+    },
+    dispose() {
+      geometry.dispose();
+      material.dispose();
+      mesh.removeFromParent();
+    },
+  };
+}
+
+const RIM_VERTEX = /* glsl */ `
+precision highp sampler2DArray;
+uniform highp sampler2DArray uSurf;
+uniform vec3 uStage;
+uniform vec2 uTexel;
+varying float vT;
+float rimThick(vec2 p) {
+  float a = texture(uSurf, vec3(p, uStage.x)).r;
+  float b = texture(uSurf, vec3(p, uStage.y)).r;
+  return max(0.0, mix(a, b, uStage.z));
+}
+void main() {
+  // 周りの厚さの平均（ぼかし）。裾から外へ少しはみ出して薄くなる
+  vec2 d = uTexel * 1.5;
+  vT = (rimThick(uv) * 2.0 + rimThick(uv + vec2(d.x, 0.0)) + rimThick(uv - vec2(d.x, 0.0)) + rimThick(uv + vec2(0.0, d.y)) + rimThick(uv - vec2(0.0, d.y))) / 6.0;
+  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+}`;
+
+const RIM_FRAGMENT = /* glsl */ `
+uniform vec3 uColor;
+uniform float uAlpha;
+varying float vT;
+void main() {
+  float a = uAlpha * smoothstep(0.0, 0.7, vT);
+  if (a < 0.01) discard;
+  gl_FragColor = vec4(uColor, a);
+  #include <colorspace_fragment>
+}`;
+
+/** 裾の接地の影の濃さと色。 */
+const RIM_ALPHA = 0.45;
+const RIM_COLOR = 0x2e2a24;
+/** 接地の影を張る範囲: 最終の厚さがこれ未満の裾（m）。 */
+const RIM_MAX_THICKNESS = 1.6;
+
+/**
+ * 山の裾の接地の影。地表（屋上を含む）の少し上に、厚さの薄い裾だけ半透明の暗い面を張る。
+ * 自転車がまばらな裾で航空写真がそのまま見えて、山の縁が切り抜いたように見えるのを和らげる。
+ */
+function createRimShadow(result: PileComputeResult, texture: DataArrayTexture): ShellMesh {
+  const { layerWidth: lw, layerHeight: lh, layerRect, layerGround, fractions } = result;
+  const cs = layerRect.cellSize;
+  const K = fractions.length;
+  const positions = new Float32Array(lw * lh * 3);
+  const uvs = new Float32Array(lw * lh * 2);
+  for (let r = 0; r < lh; r++) {
+    for (let c = 0; c < lw; c++) {
+      const i = r * lw + c;
+      positions[i * 3] = (c + 0.5) * cs;
+      positions[i * 3 + 1] = (layerGround[i] as number) + 0.15;
+      positions[i * 3 + 2] = (r + 0.5) * cs;
+      uvs[i * 2] = (c + 0.5) / lw;
+      uvs[i * 2 + 1] = (r + 0.5) / lh;
+    }
+  }
+  const last = result.layers.subarray((K - 1) * lw * lh);
+  const maxHalf = DataUtils.toHalfFloat(RIM_MAX_THICKNESS);
+  const index: number[] = [];
+  for (let r = 0; r < lh - 1; r++) {
+    for (let c = 0; c < lw - 1; c++) {
+      const a = r * lw + c;
+      const b = a + 1;
+      const d = a + lw;
+      const e = d + 1;
+      const mx = Math.max(last[a]!, last[b]!, last[d]!, last[e]!);
+      const mn = Math.min(last[a]!, last[b]!, last[d]!, last[e]!);
+      // 半精度の正の値は、符号なし整数としての大小が値の大小と一致する
+      if (mx === 0 || mn >= maxHalf) continue;
+      // 屋上など、山の地点の地表から大きく離れた面には張らない
+      if (Math.abs((layerGround[a] as number) - result.site.groundY) > 6) continue;
+      index.push(a, d, b, b, d, e);
+    }
+  }
+  const geometry = new BufferGeometry();
+  geometry.setAttribute('position', new BufferAttribute(positions, 3));
+  geometry.setAttribute('uv', new BufferAttribute(uvs, 2));
+  geometry.setIndex(index);
+  const material = new ShaderMaterial({
+    uniforms: {
+      uSurf: { value: texture },
+      uStage: { value: new Vector3(0, 0, 0) },
+      uTexel: { value: [1 / lw, 1 / lh] },
+      uColor: { value: new Color(RIM_COLOR) },
+      uAlpha: { value: RIM_ALPHA },
+    },
+    vertexShader: RIM_VERTEX,
+    fragmentShader: RIM_FRAGMENT,
+    transparent: true,
+    depthWrite: false,
+    blending: NormalBlending,
+    polygonOffset: true,
+    polygonOffsetFactor: -2,
+    polygonOffsetUnits: -2,
+  });
+  const mesh = new Mesh(geometry, material);
+  mesh.name = 'PileRimShadow';
+  mesh.position.set(layerRect.x0, 0, layerRect.z0);
+  mesh.frustumCulled = false;
+  mesh.renderOrder = -1;
+  return {
+    mesh,
+    triangles: index.length / 3,
+    setStage(stage) {
+      (material.uniforms.uStage!.value as Vector3).set(stage.k0, stage.k1, stage.mix);
       mesh.visible = stage.k0 > 0 || stage.mix > 0;
     },
     dispose() {

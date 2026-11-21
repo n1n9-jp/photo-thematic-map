@@ -60,10 +60,13 @@ export const PLACES = {
    * 距離は `WARDS_FIT`（この範囲が覆われていない範囲に収まる距離）で決まるので、画面の縦横比によらず23区の全体が見える。
    */
   wards: { lat: 35.68, lon: 139.735 },
-  /** 東京駅 丸の内口の駅前広場の中央。2024年度の撤去台数の山を置く。 */
-  tokyoPlaza: { lat: 35.68163, lon: 139.76539 },
-  /** 新宿中央公園の北側の開けた場所（都庁前）。15年の累計の山を置く。 */
-  shinjukuPark: { lat: 35.6901, lon: 139.6893 },
+  /**
+   * 東京駅 丸の内口の駅前広場。2024年度の撤去台数の山を置く地点（堆積計算が開けた地表に寄せた後の投入点。
+   * 駅舎の中央から西へ約 110m、行幸通りの軸の上）。
+   */
+  tokyoPlaza: { lat: 35.681407, lon: 139.765932 },
+  /** 新宿中央公園の北側の開けた場所（都庁前）。15年の累計の山を置く地点（同じく投入点）。 */
+  shinjukuPark: { lat: 35.689996, lon: 139.689501 },
   /** 東京都庁第一本庁舎。 */
   tochoFirstBuilding: { lat: 35.6895, lon: 139.69175 },
 } as const;
@@ -97,6 +100,18 @@ export function cameraFrom(
   return { target: { lat: target.lat, lon: target.lon, alt }, distance, azimuthDeg: o.azimuthDeg, elevationDeg };
 }
 
+/**
+ * 地点 p を、方位 azimuthDeg（北=0、東=90）へ distanceM(m) ずらした緯度経度。
+ * 本文カードが PC 幅で画面の左に出るので、注視点を山の左（カメラの向きの左手）へずらして、山を画面の右に寄せるのに使う。
+ */
+export function offsetLatLon(p: { lat: number; lon: number }, azimuthDeg: number, distanceM: number): { lat: number; lon: number } {
+  const a = (azimuthDeg * Math.PI) / 180;
+  const R = 6_378_137;
+  const dLat = ((distanceM * Math.cos(a)) / R) * (180 / Math.PI);
+  const dLon = ((distanceM * Math.sin(a)) / (R * Math.cos((p.lat * Math.PI) / 180))) * (180 / Math.PI);
+  return { lat: p.lat + dLat, lon: p.lon + dLon };
+}
+
 const F = FACTS;
 const P = PLACES;
 const pile5 = PILES.removedFY2024;
@@ -109,6 +124,24 @@ const AKIHABARA_GROUND_AZIMUTH_DEG = 250;
  * スマートフォン幅では本文カードが画面の中ほどに出るので、自転車がカードの下に見えるようにするため。
  */
 const AKIHABARA_GROUND_TARGET_ALT_M = 2.4;
+
+/**
+ * 場面5: 行幸通りの上（高さ約 34m、山の頂上とほぼ同じ高さ）から東南東（駅舎の方）を向く。山の後ろに丸の内駅舎（高さ約 35m）。
+ * 地上近くから見上げる構図も試したが、街並みの建物と地面のタイルを地平線まで読むため描画が重く（建物だけで約 720 万三角形）、
+ * スマートフォンで扱えないので、頂上の高さから水平に近く見る構図にした。
+ * 注視点は山の中心から左手（北北東）へ少しずらし、山を画面の中央より右に寄せる（スマートフォン幅でも山が画面に収まる量）。
+ */
+const SCENE5_VIEW = { azimuthDeg: 105, heightM: 34, horizontalM: 165, targetAltM: pile5.heightM * 0.45, shiftM: 14 } as const;
+/** 場面7: 東京駅前の山に寄る（北西の斜め上から。斜面の自転車が1台ずつ見え、後ろに駅舎の北側が入る距離）。 */
+const SCENE7_VIEW = { azimuthDeg: 125, heightM: 30, horizontalM: 115, targetAltM: pile5.heightM * 0.4, shiftM: 8 } as const;
+/**
+ * 場面6: 新宿中央公園の西の上空（高さ 230m、周りの高層ビルの上）から東を向く。山の右後ろに都庁第一本庁舎（高さ 243m）。
+ */
+const SCENE6_VIEW = { azimuthDeg: 95, heightM: 230, horizontalM: 600, targetAltM: pile6.heightM * 0.9, shiftM: 45 } as const;
+
+function pileCamera(site: { lat: number; lon: number }, v: { azimuthDeg: number; heightM: number; horizontalM: number; targetAltM: number; shiftM: number }): StoryCameraKeyframe {
+  return cameraFrom(offsetLatLon(site, v.azimuthDeg - 90, v.shiftM), v);
+}
 
 /**
  * 23区の俯瞰の距離の下限（高さ 28km・仰角 60° のときの距離）と仰角(度)。実際の距離は `WARDS_FIT` から求め、
@@ -201,7 +234,7 @@ export const SCRIPT: readonly ScriptScene[] = [
       ],
       stat: stat(F.removedFY2024, `${FISCAL_YEAR}年度に撤去された自転車`),
     },
-    camera: cameraFrom(P.tokyoPlaza, { heightM: 90, horizontalM: 320, azimuthDeg: 112, targetAltM: pile5.heightM * 0.4 }),
+    camera: pileCamera(P.tokyoPlaza, SCENE5_VIEW),
     place: { ...P.tokyoPlaza, radiusM: 1800 },
   },
   {
@@ -210,12 +243,12 @@ export const SCRIPT: readonly ScriptScene[] = [
       heading: `${FISCAL_YEAR - FIRST_FISCAL_YEAR + 1}年で${nu(F.removed15Years)}`,
       paragraphs: [
         `${FIRST_FISCAL_YEAR}年度から${FISCAL_YEAR}年度までの${FISCAL_YEAR - FIRST_FISCAL_YEAR + 1}年間に、都内で撤去された自転車は${nu(F.removed15Years)}。${FISCAL_YEAR}年度の撤去台数の約${nu(F.removed15YearsInYears)}にあたる。`,
-        `新宿の都庁前、新宿中央公園に1つの山として積むと、高さはおよそ${formatJaCount(pile6.heightM)}メートル、裾の直径は約${formatJaCount(Math.round(pile6.diameterM / 10) * 10)}メートルになる。隣に立つ都庁第一本庁舎の高さは${nu(F.tochoHeight)}。`,
+        `新宿の都庁前、新宿中央公園に1つの山として積むと、高さはおよそ${nu(F.cumulativePileHeight)}、裾の直径は約${nu(F.cumulativePileDiameter)}になる。隣に立つ都庁第一本庁舎の高さは${nu(F.tochoHeight)}。`,
         `体積は約${nu(F.cumulativePileVolume)}。東京ドーム約${nu(F.cumulativePileDomes)}になる。`,
       ],
       stat: stat(F.removed15Years, `${FIRST_FISCAL_YEAR}〜${FISCAL_YEAR}年度に撤去された自転車の累計`),
     },
-    camera: cameraFrom(P.shinjukuPark, { heightM: 200, horizontalM: 750, azimuthDeg: 80, targetAltM: pile6.heightM * 0.5 }),
+    camera: pileCamera(P.shinjukuPark, SCENE6_VIEW),
     place: { ...P.shinjukuPark, radiusM: 2000 },
   },
   {
@@ -229,7 +262,7 @@ export const SCRIPT: readonly ScriptScene[] = [
       ],
       stat: stat(F.returnRate, `返還率（${FISCAL_YEAR}年度、自転車と原付）`),
     },
-    camera: cameraFrom(P.tokyoPlaza, { heightM: 95, horizontalM: 150, azimuthDeg: 75, targetAltM: pile5.heightM * 0.4 }),
+    camera: pileCamera(P.tokyoPlaza, SCENE7_VIEW),
     place: { ...P.tokyoPlaza, radiusM: 1800 },
   },
   {

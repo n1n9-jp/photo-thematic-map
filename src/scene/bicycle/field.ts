@@ -54,7 +54,7 @@ import {
   type BufferGeometry,
   type PerspectiveCamera,
 } from 'three';
-import { createBicycleGeometry, triangleCount, type BicycleLod } from './geometry';
+import { createBicycleDotGeometry, createBicycleGeometry, triangleCount, type BicycleLod } from './geometry';
 
 /** インスタンスの入力データ（1つのまとまり）。 */
 export interface BicycleInstances {
@@ -141,6 +141,23 @@ export interface BicycleFieldOptions {
   regionSize?: number;
   /** 近景・中景に回す台数の上限。超えた分はカメラから遠いセルから一段粗くする。 */
   maxInstancesPerLod?: readonly [number, number];
+  /**
+   * 点景（10 三角形以下の形状）に切り替える画面上の全長(px)。自転車の全長がこれ未満に見えるセルは、
+   * 遠景の代わりに点景で描く。0（既定）は点景を使わない。
+   */
+  dotPixelThreshold?: number;
+}
+
+/**
+ * 色の調子（全詳細度に同じ値を掛ける）。遠くから見た山が暗い塊にならないようにするのに使う。
+ * - lift: 暗いフレーム色を明るくする量（0〜1）。明るい色はほとんど変えない。
+ * - saturation: フレーム色の彩度の倍率（1=そのまま）。
+ * - shadeFloor: 陰影係数（shade と山の深さの暗さ）の下限を持ち上げる量（0〜1）。shade' = floor + (1 − floor) × shade。
+ */
+export interface BicycleTone {
+  lift: number;
+  saturation: number;
+  shadeFloor: number;
 }
 
 export interface BicycleFieldStats {
@@ -170,6 +187,10 @@ export interface BicycleFieldStats {
   groups: number;
   /** 落下中（順位が落下の先頭の幅の中にあり、表示台数未満）の台数の目安。降り直しは含まない。 */
   falling: number;
+  /** 点景で描く台数（表示する台数のうち。`perLod` には含めない）。 */
+  dots: number;
+  /** 点景の1台あたり三角形数。 */
+  trianglesPerDot: number;
 }
 
 /** 自転車の全長(m)。距離計算に使う。 */
@@ -286,6 +307,9 @@ uniform vec4 uSurfRect;
 uniform float uDeepShade;
 uniform int uMaskWidth;
 uniform int uRevealWidth;
+uniform float uMaskLevel;
+uniform float uFrameFill;
+uniform vec3 uTone;
 vec3 bikeRotate(vec4 q, vec3 v) {
   return v + 2.0 * cross(q.xyz, cross(q.xyz, v) + q.w * v);
 }
@@ -375,7 +399,7 @@ const VERTEX_HIDE = `#include <project_vertex>
 {
   int bikeCell = int(iMeta.z + 0.5);
   float bikeMask = texelFetch(uCellMask, ivec2(bikeCell % uMaskWidth, bikeCell / uMaskWidth), 0).r;
-  if (bikeMask < 0.5 || bikeHidden) gl_Position = vec4(0.0, 0.0, 2.0, 1.0);
+  if (abs(bikeMask - uMaskLevel) > 0.25 || bikeHidden) gl_Position = vec4(0.0, 0.0, 2.0, 1.0);
 }`;
 
 interface FieldUniforms {
@@ -388,12 +412,17 @@ interface FieldUniforms {
   uDeepShade: { value: number };
   uMaskWidth: { value: number };
   uRevealWidth: { value: number };
+  uTone: { value: Vector3 };
 }
 
-function createBicycleMaterial(uniforms: FieldUniforms): MeshLambertMaterial {
+/**
+ * 自転車の材質。maskLevel はセル状態テクスチャの値（1=近景・中景・遠景、0.5=点景）で、
+ * この値のセルの自転車だけを描く（近景・中景の層はセル状態の0番 = 1 を参照する）。
+ */
+function createBicycleMaterial(uniforms: FieldUniforms, maskLevel = 1, frameFill: { value: number } = { value: 0 }): MeshLambertMaterial {
   const mat = new MeshLambertMaterial({ vertexColors: true, side: DoubleSide });
   mat.onBeforeCompile = (shader) => {
-    Object.assign(shader.uniforms, uniforms);
+    Object.assign(shader.uniforms, uniforms, { uMaskLevel: { value: maskLevel }, uFrameFill: frameFill });
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', VERTEX_HEADER)
       .replace(
@@ -412,11 +441,17 @@ function createBicycleMaterial(uniforms: FieldUniforms): MeshLambertMaterial {
         '#include <color_vertex>',
         `${VERTEX_STATE}
 vColor = vec4(1.0);
-vColor.rgb = color * mix(vec3(1.0), bikeSrgbToLinear(iColor.rgb), frameMask) * (iColor.a * bikeShade);`,
+vec3 bikeFc = bikeSrgbToLinear(iColor.rgb);
+float bikeLum = dot(bikeFc, vec3(0.2126, 0.7152, 0.0722));
+bikeFc = max(mix(vec3(bikeLum), bikeFc, uTone.y), 0.0);
+bikeFc = mix(bikeFc, max(bikeFc / max(max(bikeFc.r, max(bikeFc.g, bikeFc.b)), 1e-3) * 0.35, vec3(0.35)), uTone.x * (1.0 - smoothstep(0.02, 0.3, bikeLum)));
+float bikeTone = uTone.z + (1.0 - uTone.z) * iColor.a * bikeShade;
+float bikeFill = mix(frameMask, 1.0, uFrameFill);
+vColor.rgb = mix(color, vec3(1.0), uFrameFill * (1.0 - frameMask)) * mix(vec3(1.0), bikeFc, bikeFill) * bikeTone;`,
       )
       .replace('#include <project_vertex>', VERTEX_HIDE);
   };
-  mat.customProgramCacheKey = () => 'bicycle-instanced-v3';
+  mat.customProgramCacheKey = () => 'bicycle-instanced-v4';
   return mat;
 }
 
@@ -474,6 +509,8 @@ interface Region {
   e32: Float32Array | null;
   ebuf: InstancedInterleavedBuffer | null;
   ranges: FarRange[];
+  /** 点景の描画範囲（点景を使うときだけ）。 */
+  dotRanges: FarRange[];
   dirty: boolean;
 }
 
@@ -505,6 +542,14 @@ export class BicycleField {
   /** シーンに加えるルート。 */
   readonly object = new Group();
   readonly material: MeshLambertMaterial;
+  /** 遠景の材質（近景・中景と同じシェーダーで、部品の色をフレーム色に寄せる量だけ違う）。 */
+  private readonly farMaterial: MeshLambertMaterial;
+  private readonly farFill = { value: 0 };
+  /** 点景の材質（点景を使うときだけ）。 */
+  private readonly dotMaterial: MeshLambertMaterial | null;
+  private readonly dotBase: BufferGeometry | null;
+  private readonly dotTriangles: number;
+  private readonly dotThreshold: number;
   readonly stats: BicycleFieldStats;
 
   private readonly thresholds: readonly [number, number];
@@ -569,6 +614,7 @@ export class BicycleField {
     this.cellSize = options.cellSize ?? DEFAULT_CELL;
     this.regionSize = options.regionSize ?? DEFAULT_REGION;
     this.maxPerLod = options.maxInstancesPerLod ?? DEFAULT_MAX;
+    this.dotThreshold = Math.max(0, options.dotPixelThreshold ?? 0);
     this.object.name = 'BicycleField';
     this.bases = [createBicycleGeometry(0), createBicycleGeometry(1), createBicycleGeometry(2)];
     this.triangles = [triangleCount(this.bases[0]), triangleCount(this.bases[1]), triangleCount(this.bases[2])];
@@ -590,8 +636,13 @@ export class BicycleField {
       uDeepShade: { value: 0.45 },
       uMaskWidth: { value: 4 },
       uRevealWidth: { value: 4 },
+      uTone: { value: new Vector3(0, 1, 0) },
     };
     this.material = createBicycleMaterial(this.uniforms);
+    this.farMaterial = createBicycleMaterial(this.uniforms, 1, this.farFill);
+    this.dotBase = this.dotThreshold > 0 ? createBicycleDotGeometry() : null;
+    this.dotTriangles = this.dotBase ? triangleCount(this.dotBase) : 0;
+    this.dotMaterial = this.dotBase ? createBicycleMaterial(this.uniforms, 0.5, this.farFill) : null;
     this.dynamic = [this.createDynamicLayer(0, 256), this.createDynamicLayer(1, 1024)];
     this.stats = {
       total: 0,
@@ -607,7 +658,29 @@ export class BicycleField {
       drawCalls: 0,
       groups: 0,
       falling: 0,
+      dots: 0,
+      trianglesPerDot: this.dotTriangles,
     };
+  }
+
+  /** 色の調子（全詳細度に共通。uniform を書き換えるだけ）。 */
+  get tone(): BicycleTone {
+    const t = this.uniforms.uTone.value;
+    return { lift: t.x, saturation: t.y, shadeFloor: t.z };
+  }
+  set tone(t: BicycleTone) {
+    this.uniforms.uTone.value.set(t.lift, t.saturation, t.shadeFloor);
+  }
+
+  /**
+   * 遠景・点景で、部品（車輪・かごなど）の色をフレーム色に寄せる量（0〜1、既定 0）。
+   * 遠くでは1台が数ピクセルになり、面積の大きい車輪の暗い色で山全体が灰色に見えるので、フレーム色を見せる。
+   */
+  get farFrameFill(): number {
+    return this.farFill.value;
+  }
+  set farFrameFill(v: number) {
+    this.farFill.value = Math.min(1, Math.max(0, v));
   }
 
   /** 動きを減らす設定（prefers-reduced-motion）。true なら落下を省いてその場に現れる。 */
@@ -801,6 +874,7 @@ export class BicycleField {
     this.invObject.copy(this.object.matrixWorld).invert();
     camera.getWorldPosition(this.camPos).applyMatrix4(this.invObject);
     const sw = lodSwitchDistances(camera.fov / camera.zoom, viewportHeightPx, this.thresholds);
+    const dotDist = this.dotThreshold > 0 ? lodSwitchDistances(camera.fov / camera.zoom, viewportHeightPx, [this.dotThreshold, this.dotThreshold])[0] : Infinity;
     const force = this.forceLodValue;
     const reset = this.assignDirty;
     this.assignDirty = false;
@@ -831,8 +905,10 @@ export class BicycleField {
         if (force !== null) lod = force;
         else {
           const prev = reset ? -1 : this.cellLod[c]!;
-          lod = Math.max(this.cellFloor[c]!, selectLodWithHysteresis(d, sw, prev, this.hysteresis));
+          lod = Math.max(this.cellFloor[c]!, selectLodWithHysteresis(d, sw, Math.min(prev, 2), this.hysteresis));
           if (lod < 2) cand.push(c);
+          // 点景: 遠景のうち、さらに遠いセル（余裕幅つき）
+          else if (d > dotDist * (prev === 3 ? 1 - this.hysteresis : prev < 0 ? 1 : 1 + this.hysteresis)) lod = 3;
         }
         this.nextLod[c] = lod;
       }
@@ -860,8 +936,8 @@ export class BicycleField {
       if (prev === next) continue;
       if (prev === 0 || next === 0) nearChanged = true;
       if (prev === 1 || next === 1) midChanged = true;
-      if ((prev === 2) !== (next === 2)) {
-        this.maskData[c + 1] = next === 2 ? 255 : 0;
+      if (maskValue(prev) !== maskValue(next)) {
+        this.maskData[c + 1] = maskValue(next);
         maskChanged = true;
         this.regions[this.cellRegion[c]!]!.dirty = true;
       }
@@ -878,17 +954,20 @@ export class BicycleField {
 
     // 4. 統計
     const perLod: [number, number, number] = [0, 0, 0];
+    let dots = 0;
     for (let c = 0; c < this.cells; c++) {
       const lod = this.cellLod[c]!;
-      if (lod >= 0) perLod[lod]! += this.cellRevealed[c]!;
+      if (lod === 3) dots += this.cellRevealed[c]!;
+      else if (lod >= 0) perLod[lod]! += this.cellRevealed[c]!;
     }
     let drawCalls = 0;
     for (const layer of this.dynamic) if (layer.mesh.visible) drawCalls++;
-    for (const r of this.regions) for (const rg of r.ranges) if (rg.mesh.visible) drawCalls++;
+    for (const r of this.regions) for (const rg of [...r.ranges, ...r.dotRanges]) if (rg.mesh.visible) drawCalls++;
     const s = this.stats;
     s.perLod = perLod;
-    s.visible = perLod[0] + perLod[1] + perLod[2];
-    s.triangles = perLod[0] * this.triangles[0] + perLod[1] * this.triangles[1] + perLod[2] * this.triangles[2];
+    s.dots = dots;
+    s.visible = perLod[0] + perLod[1] + perLod[2] + dots;
+    s.triangles = perLod[0] * this.triangles[0] + perLod[1] * this.triangles[1] + perLod[2] * this.triangles[2] + dots * this.dotTriangles;
     s.drawCalls = drawCalls;
     s.overflow = Math.max(0, this.dynamic[0].count - this.dynamic[0].capacity) + Math.max(0, this.dynamic[1].count - this.dynamic[1].capacity);
     let falling = 0;
@@ -924,10 +1003,13 @@ export class BicycleField {
     this.disposeRegions();
     for (const layer of this.dynamic) layer.geometry.dispose();
     for (const b of this.bases) b.dispose();
+    this.dotBase?.dispose();
     this.uniforms.uCellMask.value.dispose();
     this.uniforms.uReveal.value.dispose();
     this.dummySurface.dispose();
     this.material.dispose();
+    this.farMaterial.dispose();
+    this.dotMaterial?.dispose();
     this.object.removeFromParent();
   }
 
@@ -1008,7 +1090,7 @@ export class BicycleField {
 
   private disposeRegions(): void {
     for (const r of this.regions) {
-      for (const rg of r.ranges) {
+      for (const rg of [...r.ranges, ...r.dotRanges]) {
         this.object.remove(rg.mesh);
         rg.geometry.dispose();
       }
@@ -1220,18 +1302,23 @@ export class BicycleField {
       const e32 = hasExtras ? new Float32Array(Math.max(1, n) * EXTRA) : null;
       const ebuf = e32 ? new InstancedInterleavedBuffer(e32, EXTRA, 1).setUsage(StaticDrawUsage) : null;
       if (e32) upload += e32.byteLength;
-      const ranges: FarRange[] = [];
-      for (let k = 0; k < FAR_RANGES; k++) {
-        const geometry = instancedFromBase(this.bases[2]);
-        const mesh = new Mesh(geometry, this.material);
-        mesh.frustumCulled = false;
-        mesh.visible = false;
-        mesh.name = `BicycleLOD2-r${r}-${k}`;
-        mesh.position.copy(anchor);
-        this.object.add(mesh);
-        ranges.push({ mesh, geometry, start: -1, count: 0 });
-      }
-      this.regions.push({ anchor, center, radius, cellBegin: regionCells[r]!, cellEnd: regionCells[r + 1]!, instances: n, f32, u8, fbuf, cbuf, e32, ebuf, ranges, dirty: true });
+      const makeRanges = (base: BufferGeometry, material: MeshLambertMaterial, name: string): FarRange[] => {
+        const list: FarRange[] = [];
+        for (let k = 0; k < FAR_RANGES; k++) {
+          const geometry = instancedFromBase(base);
+          const mesh = new Mesh(geometry, material);
+          mesh.frustumCulled = false;
+          mesh.visible = false;
+          mesh.name = `${name}-r${r}-${k}`;
+          mesh.position.copy(anchor);
+          this.object.add(mesh);
+          list.push({ mesh, geometry, start: -1, count: 0 });
+        }
+        return list;
+      };
+      const ranges = makeRanges(this.bases[2], this.farMaterial, 'BicycleLOD2');
+      const dotRanges = this.dotBase && this.dotMaterial ? makeRanges(this.dotBase, this.dotMaterial, 'BicycleDot') : [];
+      this.regions.push({ anchor, center, radius, cellBegin: regionCells[r]!, cellEnd: regionCells[r + 1]!, instances: n, f32, u8, fbuf, cbuf, e32, ebuf, ranges, dotRanges, dirty: true });
     }
     const fill = Uint32Array.from(this.cellStart);
     groups.forEach((g, slot) => {
@@ -1376,13 +1463,18 @@ export class BicycleField {
     this.pendingUpload += (realloc ? layer.capacity : o) * (BYTES_PER_INSTANCE + (ea ? EXTRA_BYTES : 0));
   }
 
-  /** 遠景で描くセルを覆う描画範囲（最大 FAR_RANGES 個）を決める。インスタンスは送り直さない。 */
+  /** 遠景・点景で描くセルを覆う描画範囲（それぞれ最大 FAR_RANGES 個）を決める。インスタンスは送り直さない。 */
   private updateFarRanges(r: Region): void {
     r.dirty = false;
-    // 遠景で描く（表示する台数が1台以上の）セルの連続した並び
+    this.updateRanges(r, r.ranges, 2);
+    if (r.dotRanges.length > 0) this.updateRanges(r, r.dotRanges, 3);
+  }
+
+  private updateRanges(r: Region, list: FarRange[], lod: number): void {
+    // その詳細度で描く（表示する台数が1台以上の）セルの連続した並び
     const runs: [number, number][] = [];
     for (let c = r.cellBegin; c < r.cellEnd; c++) {
-      if (this.cellLod[c] !== 2 || this.cellRevealed[c] === 0) continue;
+      if (this.cellLod[c] !== lod || this.cellRevealed[c] === 0) continue;
       const s = this.cellStart[c]!;
       const e = s + this.cellCount[c]!;
       const last = runs[runs.length - 1];
@@ -1403,7 +1495,7 @@ export class BicycleField {
       if (i > 0 && !splits.has(i - 1)) merged[merged.length - 1]![1] = run[1];
       else merged.push([run[0], run[1]]);
     });
-    r.ranges.forEach((rg, k) => {
+    list.forEach((rg, k) => {
       const m = merged[k];
       if (!m) {
         rg.mesh.visible = false;
@@ -1424,6 +1516,11 @@ export class BicycleField {
       rg.mesh.visible = rg.count > 0;
     });
   }
+}
+
+/** セル状態テクスチャの値（遠景 255、点景 128、それ以外 0）。 */
+function maskValue(lod: number): number {
+  return lod === 2 ? 255 : lod === 3 ? 128 : 0;
 }
 
 function clampInt(n: number, lo: number, hi: number): number {

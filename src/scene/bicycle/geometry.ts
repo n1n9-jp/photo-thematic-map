@@ -574,6 +574,37 @@ function buildFar(): BufferGeometry {
   return b.build();
 }
 
+/**
+ * 点景用（10 三角形以下）。画面上で数ピクセルにしか見えない距離で使う、色の点としての自転車。
+ * 横から見た面（下半分は車輪の平均の色、上半分はフレーム色）、上から見た面（フレーム色）、前から見た面（かご）。
+ * 遠くでは自転車の輪郭より「何色の自転車か」が見えるので、フレーム色の面を広く取る。
+ */
+function buildDot(): BufferGeometry {
+  const D = BIKE_DIMENSIONS;
+  const b = new PartBuilder();
+  const x0 = D.rearAxleX - D.wheelRadius * 0.8;
+  const x1 = D.frontAxleX + D.wheelRadius * 0.8;
+  const yMid = AXLE_Y + 0.08;
+  // 横の面: 車輪（下）とフレーム（上）
+  b.quad([v(x0, 0.05, 0), v(x1, 0.05, 0), v(x1, yMid, 0), v(x0, yMid, 0)], PART_COLORS.farWheel);
+  b.quad([v(x0 + 0.1, yMid, 0), v(x1 - 0.05, yMid, 0), v(x1 - 0.1, D.handleTopY - 0.05, 0), v(x0 + 0.25, D.saddle[1], 0)], 'frame');
+  // 上から見た面（サドルからハンドルまで）
+  const w = D.handleHalfWidth * 0.75;
+  b.quad([v(x0 + 0.2, D.rackY, -w * 0.6), v(x0 + 0.2, D.rackY, w * 0.6), v(x1 - 0.1, D.basketY[1] - 0.05, w), v(x1 - 0.1, D.basketY[1] - 0.05, -w)], 'frame');
+  // 前から見た面（かご）
+  const bw = D.basketHalfWidth;
+  b.quad([v(D.basketX[1], D.basketY[0] - 0.2, bw), v(D.basketX[1], D.basketY[0] - 0.2, -bw), v(D.basketX[1], D.basketY[1], -bw), v(D.basketX[1], D.basketY[1], bw)], PART_COLORS.basketFar);
+  return b.build();
+}
+
+/** 点景の形状（10 三角形以下）。`BicycleField` の点景の層が使う。 */
+export function createBicycleDotGeometry(): BufferGeometry {
+  return buildDot();
+}
+
+/** 点景の三角形数の上限。 */
+export const DOT_TRIANGLE_BUDGET = 10;
+
 /** 遠景の車輪の外径と内径（五角形の外接円の半径）。 */
 const FAR_WHEEL = { outer: 0.36, inner: 0.3 } as const;
 
