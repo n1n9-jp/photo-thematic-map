@@ -116,9 +116,9 @@ const SCENE5_VIEW = { azimuthDeg: 105, heightM: 34, horizontalM: 165, targetAltM
 /** 場面7: 東京駅前の山に寄る（西北西の斜め上から、山の斜面の自転車が1台ずつ見える距離）。 */
 const SCENE7_VIEW = { azimuthDeg: 118, heightM: 24, horizontalM: 62, targetAltM: pile5.heightM * 0.45, shiftM: 12 } as const;
 /**
- * 場面6: 新宿中央公園の西（高さ 110m）から東南東を向く。山の右後ろに都庁第一本庁舎（高さ 243m）。
+ * 場面6: 新宿中央公園の西の上空（高さ 230m、周りの高層ビルの上）から東を向く。山の右後ろに都庁第一本庁舎（高さ 243m）。
  */
-const SCENE6_VIEW = { azimuthDeg: 98, heightM: 110, horizontalM: 560, targetAltM: pile6.heightM * 0.9, shiftM: 80 } as const;
+const SCENE6_VIEW = { azimuthDeg: 95, heightM: 230, horizontalM: 600, targetAltM: pile6.heightM * 0.9, shiftM: 110 } as const;
 
 function pileCamera(site: { lat: number; lon: number }, v: { azimuthDeg: number; heightM: number; horizontalM: number; targetAltM: number; shiftM: number }): StoryCameraKeyframe {
   return cameraFrom(offsetLatLon(site, v.azimuthDeg - 90, v.shiftM), v);
