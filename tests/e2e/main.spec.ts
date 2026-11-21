@@ -60,6 +60,20 @@ async function goToScene(page: Page, i: number): Promise<number> {
   return Date.now() - t0;
 }
 
+/** 画面に見えているカード（薄くなって消えたものを除く）の長方形。 */
+async function visibleCards(page: Page): Promise<{ x: number; y: number; width: number; height: number }[]> {
+  return page.evaluate(() => {
+    const out: { x: number; y: number; width: number; height: number }[] = [];
+    for (const c of document.querySelectorAll<HTMLElement>('.story-card')) {
+      const r = c.getBoundingClientRect();
+      if (Number(getComputedStyle(c).opacity) > 0.05 && r.bottom > 0 && r.top < window.innerHeight) {
+        out.push({ x: r.x, y: r.y, width: r.width, height: r.height });
+      }
+    }
+    return out;
+  });
+}
+
 interface SceneMetric {
   scene: number;
   id: string;
@@ -73,7 +87,7 @@ test('8場面を順にスクロールすると、場面が進み、カメラが�
   const tOpen = Date.now();
   await open(page);
   await expect(page.locator('canvas')).toHaveCount(1);
-  await expect(page.locator('.story-card')).toHaveCount(SCRIPT.length);
+  await expect(page.locator('.story-step')).toHaveCount(SCRIPT.length);
 
   // 出典表示（2行、語ごとのリンク、ページ内リンク）
   const attribution = page.locator('.ptm-site-attribution');
@@ -125,19 +139,86 @@ test('スマートフォン幅（390×844）で場面2と場面5が読める', a
   await open(page);
   for (const i of [1, 4]) {
     await goToScene(page, i);
-    const card = page.locator('.story-card').nth(i);
-    const box = await card.boundingBox();
-    expect(box).not.toBeNull();
-    // カードが画面の幅に収まり、画面の中に入っている
-    expect(box!.x).toBeGreaterThanOrEqual(0);
-    expect(box!.x + box!.width).toBeLessThanOrEqual(390);
-    expect(box!.y).toBeGreaterThanOrEqual(0);
-    expect(box!.y + box!.height).toBeLessThanOrEqual(844);
+    // 場面の最初のカードが止まっている位置（カードとカードのあいだは何も出ない）で、カードが画面の幅と高さに収まっている
+    await page.evaluate((i) => window.scrollTo({ top: window.__MAIN__!.scrollYFor(i, 0.01), behavior: 'instant' }), i);
+    await page.waitForFunction(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => r(true)))));
+    const boxes = await visibleCards(page);
+    expect(boxes.length).toBeGreaterThan(0);
+    for (const box of boxes) {
+      expect(box.x).toBeGreaterThanOrEqual(0);
+      expect(box.x + box.width).toBeLessThanOrEqual(390);
+      expect(box.y).toBeGreaterThanOrEqual(0);
+      expect(box.y + box.height).toBeLessThanOrEqual(844);
+    }
     await page.screenshot({ path: `screenshots/main-mobile-${i + 1}.png` });
   }
   // 出典のリンクがタップできる大きさ（高さ 24px 以上）
   const link = page.locator('.ptm-site-attribution a').first();
   const lb = await link.boundingBox();
   expect(lb!.height).toBeGreaterThanOrEqual(24);
+  expect(errors).toEqual([]);
+});
+
+test('スマートフォン幅（390×844）で、場面2・5・6の上半分にカードが重ならず、注視点が上側の範囲にある', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const errors = collectErrors(page);
+  await open(page);
+  for (const i of [1, 4, 5]) {
+    await goToScene(page, i);
+    // 場面を通して（カメラが止まっている区間の全体）、見えているカードは画面の下半分にある
+    const hold = await page.evaluate((i) => window.__MAIN__!.holds()[i] ?? 0.4, i);
+    let seen = 0;
+    for (let k = 0; k <= 20; k++) {
+      await page.evaluate(
+        ([i, p]) => window.scrollTo({ top: window.__MAIN__!.scrollYFor(i!, p!), behavior: 'instant' }),
+        [i, (hold * k) / 20],
+      );
+      await page.waitForFunction(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => r(true)))));
+      for (const c of await visibleCards(page)) {
+        seen++;
+        expect(c.y, `場面${i + 1} 進捗${((hold * k) / 20).toFixed(2)}`).toBeGreaterThanOrEqual(844 / 2 - 1);
+        expect(c.height).toBeLessThanOrEqual(844 * 0.4);
+      }
+    }
+    expect(seen).toBeGreaterThan(0);
+    // 注視点（主役）は、カードの通らない上側にある
+    await goToScene(page, i);
+    const target = await page.evaluate(() => window.__MAIN__!.targetOnScreen());
+    expect(target.y).toBeLessThan(844 / 2);
+    expect(target.y).toBeGreaterThan(844 * 0.1);
+    expect(Math.abs(target.x - 390 / 2)).toBeLessThan(390 * 0.03);
+    // 出典表示は画面の下端にあり、カードより下
+    const attribution = await page.locator('.ptm-site-attribution').boundingBox();
+    expect(attribution!.y + attribution!.height).toBeLessThanOrEqual(844);
+    for (const c of await visibleCards(page)) expect(c.y + c.height).toBeLessThanOrEqual(attribution!.y);
+    await page.screenshot({ path: `screenshots/main-layout-mobile-${i + 1}.png` });
+  }
+  expect(errors).toEqual([]);
+});
+
+test('PC 幅で、場面5・6の注視点がカードの列の右側にあり、出典表示と「地図を動かす」ボタンが重ならない', async ({ page }) => {
+  const errors = collectErrors(page);
+  await open(page);
+  for (const i of [4, 5, 7]) {
+    await goToScene(page, i);
+    const cards = await visibleCards(page);
+    expect(cards.length).toBeGreaterThan(0);
+    const columnRight = Math.max(...(await page.evaluate(() => [...document.querySelectorAll('.story-card')].map((c) => c.getBoundingClientRect().right))));
+    const columnWidth = await page.evaluate(() => (document.querySelector('.story-card') as HTMLElement).offsetWidth);
+    expect(columnWidth).toBeGreaterThanOrEqual(360);
+    expect(columnWidth).toBeLessThanOrEqual(400);
+    const target = await page.evaluate(() => window.__MAIN__!.targetOnScreen());
+    expect(target.x).toBeGreaterThan(columnRight);
+    expect(Math.abs(target.x - (columnRight + 1280) / 2)).toBeLessThan(1280 * 0.08);
+    // 出典表示は右下で、カードの列に重ならない
+    const attribution = await page.locator('.ptm-site-attribution').boundingBox();
+    expect(attribution!.x).toBeGreaterThan(columnRight);
+    const toggle = page.locator('.story-free-toggle');
+    if (await toggle.isVisible()) {
+      const tb = (await toggle.boundingBox())!;
+      expect(tb.y + tb.height).toBeLessThanOrEqual(attribution!.y);
+    }
+    await page.screenshot({ path: `screenshots/main-layout-desktop-${i + 1}.png` });
+  }
   expect(errors).toEqual([]);
 });

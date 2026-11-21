@@ -21,12 +21,26 @@
 .story {
   --story-ink: #1d1d1b;
   --story-ink-soft: #55534e;
-  --story-paper: rgba(250, 248, 243, 0.9);
+  --story-paper: rgba(250, 248, 243, 0.8);
   --story-rule: rgba(29, 29, 27, 0.16);
   --story-accent: #b8321f;
   --story-sans: 'Hiragino Kaku Gothic ProN', 'Hiragino Sans', 'Yu Gothic UI', 'Yu Gothic', 'Meiryo',
     'Noto Sans JP', 'IPAexGothic', 'IPAPGothic', sans-serif;
   --story-serif: 'Hiragino Mincho ProN', 'Yu Mincho', 'Noto Serif JP', 'IPAexMincho', 'IPAPMincho', serif;
+
+  /*
+   * カードの配置。JS（storyCards.ts / createStory.ts）もこの値を読む。
+   * bottom: 画面の下寄りに、画面の高さの4割以下の小さなカードが並ぶ。上側は 3D の主役のための空き。
+   * side: 画面の左に、細い列でカードが流れる。右側が 3D の主役のための空き。
+   */
+  --story-layout: bottom;
+  --story-gutter: 16px;
+  /* カードの下の余白。出典表示（本編だけ。高さは --ptm-attribution-height）に重ならないようにする。 */
+  --story-zone-bottom: calc(var(--ptm-attribution-height, 0px) + max(6px, env(safe-area-inset-bottom, 0px)) + 10px);
+  /* カードが止まって読まれる間のスクロール量。 */
+  --story-dwell: max(26vh, 180px);
+  /* カードとカードのあいだの、何も出ない間隔（スクロール量）。 */
+  --story-gap: 70vh;
 
   position: relative;
   z-index: 1;
@@ -38,45 +52,69 @@
 
 .story-step {
   box-sizing: border-box;
-  min-height: 130vh;
-  /*
-   * 上端が画面中央に来たとき、カードの上端もそこに来る（段階の進捗 0）。
-   * カードが画面より高くても、カードを読み終えてからカメラが移る区間が残るよう、下に余白を取る。
-   */
-  padding: 0 16px 60vh;
-  display: flex;
-  align-items: flex-start;
 }
 
-/* 最初のセクションは上端がページ先頭にあり進捗の開始がスクロール位置 0 になるため、他と同じスクロール量になるよう長くする。 */
-.story-step:first-child {
-  min-height: 180vh;
-  /* 読み込み直後は、カードが画面中央から始まる。 */
-  padding-top: 50vh;
+/* 子の margin が場面のセクションの外へ漏れないようにする（場面の上端 = 進捗 0 の位置がずれないように）。 */
+.story-step {
+  display: flow-root;
 }
 
-.story-step--last {
-  min-height: 100vh;
-  padding-bottom: 0;
+/*
+ * 拍: カード1枚と、カードが止まっている間のスクロール量（dwell）。次の拍までは何も出ない。
+ * --story-card-h（カードの高さ）は JS が拍に書く。
+ */
+.story-beat {
+  position: relative;
+  margin-bottom: var(--story-gap);
+}
+
+/*
+ * 場面の最初のカードは、場面の進捗が 0（セクションの上端が画面中央）になったとき、止まる位置に着いて読まれはじめる。
+ * そのぶん、セクションの上端から離して置く。
+ */
+.story-step .story-beat:first-child {
+  margin-top: max(0px, calc(100vh - var(--story-zone-bottom) - var(--story-card-h, 0px) - 50vh));
+  margin-top: max(0px, calc(100dvh - var(--story-zone-bottom) - var(--story-card-h, 0px) - 50vh));
+}
+
+/* 最初の場面は、読み込み直後（スクロール位置 0 が進捗 0）から、最初のカードが止まる位置にある。 */
+.story-step:first-child .story-beat:first-child {
+  margin-top: calc(100vh - var(--story-zone-bottom) - var(--story-card-h, 0px));
+  margin-top: calc(100dvh - var(--story-zone-bottom) - var(--story-card-h, 0px));
+}
+
+.story-beat__dwell {
+  height: var(--story-dwell);
 }
 
 .story-card {
+  /* 画面に入ると、この位置まで上がって止まる。高さは JS が --story-card-h に書く。下端が画面の下の余白に揃う。 */
+  position: sticky;
+  top: calc(100vh - var(--story-zone-bottom) - var(--story-card-h, 0px));
+  top: calc(100dvh - var(--story-zone-bottom) - var(--story-card-h, 0px));
   pointer-events: auto;
-  transition: opacity 0.25s ease;
   box-sizing: border-box;
-  width: 100%;
+  width: calc(100% - var(--story-gutter) * 2);
   max-width: 28rem;
-  padding: 20px 20px 22px;
+  margin-left: var(--story-gutter);
+  padding: 14px 16px 16px;
+  /* 止まり終えるころに JS が薄くする（--story-alpha）。 */
+  opacity: var(--story-alpha, 1);
   background: var(--story-paper);
-  -webkit-backdrop-filter: blur(6px);
-  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
   border-top: 3px solid var(--story-accent);
   border-radius: 2px;
-  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.18);
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.16);
+}
+
+/* 薄くなって見えないカードは、ポインタも受けない。 */
+.story-card--gone {
+  pointer-events: none;
 }
 
 .story-card__index {
-  margin: 0 0 8px;
+  margin: 0 0 6px;
   font-size: 0.72rem;
   letter-spacing: 0.12em;
   color: var(--story-ink-soft);
@@ -84,18 +122,18 @@
 }
 
 .story-card__heading {
-  margin: 0 0 12px;
+  margin: 0;
   font-family: var(--story-serif);
-  font-size: 1.4rem;
+  font-size: 1.3rem;
   font-weight: 700;
   line-height: 1.4;
   letter-spacing: 0.02em;
 }
 
 .story-card__body {
-  margin: 0 0 0.9em;
-  font-size: 0.95rem;
-  line-height: 1.9;
+  margin: 0;
+  font-size: 0.92rem;
+  line-height: 1.75;
   letter-spacing: 0.02em;
   /* 日本語の折り返しを自然にする（対応ブラウザのみ）。 */
   word-break: auto-phrase;
@@ -103,8 +141,8 @@
 }
 
 .story-stat {
-  margin: 14px 0 0;
-  padding-top: 12px;
+  margin: 10px 0 0;
+  padding-top: 8px;
   border-top: 1px solid var(--story-rule);
   display: flex;
   flex-wrap: wrap;
@@ -114,7 +152,7 @@
 
 .story-stat__value {
   font-family: var(--story-serif);
-  font-size: clamp(2.6rem, 11vw, 3.8rem);
+  font-size: clamp(2.2rem, 10vw, 3.4rem);
   font-weight: 700;
   line-height: 1.1;
   letter-spacing: -0.01em;
@@ -129,22 +167,27 @@
 
 .story-stat__label {
   flex-basis: 100%;
-  margin-top: 4px;
-  font-size: 0.78rem;
-  line-height: 1.6;
+  margin-top: 2px;
+  font-size: 0.76rem;
+  line-height: 1.5;
   color: var(--story-ink-soft);
 }
 
 /* 自由操作の間は、カードを薄くして地図を見せ、ドラッグを canvas へ通す。 */
 .story--free .story-card {
-  opacity: 0.35;
+  opacity: calc(var(--story-alpha, 1) * 0.35);
   pointer-events: none;
+  transition: opacity 0.25s ease;
 }
 
+/*
+ * 「地図を動かす」ボタン。画面の下寄りの配置では、下はカードと出典表示の場所なので、右上に置く
+ * （3D の主役は上側の範囲の中央にあり、右の端は空いている）。
+ */
 .story-free-toggle {
   position: fixed;
-  right: max(16px, env(safe-area-inset-right));
-  bottom: max(16px, env(safe-area-inset-bottom));
+  top: max(12px, env(safe-area-inset-top));
+  right: max(12px, env(safe-area-inset-right));
   z-index: 2;
   min-height: 44px;
   padding: 10px 18px;
@@ -187,29 +230,127 @@
   border: 0;
 }
 
+/* 幅が広い画面（PC・スマートフォンの横向き）: 左の細い列にカードが流れる。右側は 3D の主役のために空ける。 */
 @media (min-width: 768px) {
-  .story-step {
-    padding-left: clamp(24px, 6vw, 96px);
-    padding-right: 24px;
+  .story {
+    --story-layout: side;
+    --story-zone-bottom: 24px;
+    --story-gap: 45vh;
+  }
+
+  .story-step .story-beat:first-child {
+    margin-top: max(0px, calc((100vh - var(--story-card-h, 0px)) / 2 - 50vh));
+    margin-top: max(0px, calc((100dvh - var(--story-card-h, 0px)) / 2 - 50vh));
+  }
+
+  .story-step:first-child .story-beat:first-child {
+    margin-top: calc((100vh - var(--story-card-h, 0px)) / 2);
+    margin-top: calc((100dvh - var(--story-card-h, 0px)) / 2);
   }
 
   .story-card {
-    padding: 28px 32px 30px;
+    /* 縦は画面の中ほどで止まる。 */
+    top: calc((100vh - var(--story-card-h, 0px)) / 2);
+    top: calc((100dvh - var(--story-card-h, 0px)) / 2);
+    width: clamp(360px, 30vw, 400px);
+    max-width: none;
+    margin-left: clamp(16px, 3vw, 40px);
+    padding: 22px 26px 24px;
   }
 
   .story-card__heading {
-    font-size: 1.7rem;
+    font-size: 1.55rem;
   }
 
   .story-card__body {
-    font-size: 1rem;
+    font-size: 0.98rem;
+    line-height: 1.85;
+  }
+
+  .story-stat__value {
+    font-size: 3.4rem;
+  }
+
+  /* 右下: 出典表示（本編）の上。 */
+  .story-free-toggle {
+    top: auto;
+    right: max(16px, env(safe-area-inset-right));
+    bottom: calc(max(16px, env(safe-area-inset-bottom)) + var(--ptm-attribution-height, 0px));
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
+/* 高さが低い画面（スマートフォンの横向き）: 文字と余白を詰め、カードが画面に収まるようにする。 */
+@media (min-width: 768px) and (max-height: 560px) {
   .story-card {
+    width: clamp(340px, 34vw, 400px);
+    padding: 12px 16px 14px;
+  }
+
+  .story-card__index {
+    margin-bottom: 2px;
+  }
+
+  .story-card__heading {
+    font-size: 1.2rem;
+  }
+
+  .story-card__body {
+    font-size: 0.86rem;
+    line-height: 1.65;
+  }
+
+  .story-stat {
+    margin-top: 6px;
+    padding-top: 6px;
+  }
+
+  .story-stat__value {
+    font-size: 2.2rem;
+  }
+}
+
+/* 狭い画面（幅 360px 未満）: 文字を少し小さくして、カードが画面の高さの4割に収まるようにする。 */
+@media (max-width: 359px) {
+  .story {
+    --story-gutter: 12px;
+  }
+
+  .story-card {
+    padding: 12px 14px 14px;
+  }
+
+  .story-card__heading {
+    font-size: 1.15rem;
+  }
+
+  .story-card__body {
+    font-size: 0.86rem;
+    line-height: 1.7;
+  }
+
+  .story-stat__label {
+    font-size: 0.72rem;
+  }
+}
+
+/* ぼかしを使えない・使わない環境では、背景の透け方を減らして文字を読みやすくする。 */
+@media (prefers-reduced-motion: reduce) {
+  .story {
+    --story-paper: rgba(250, 248, 243, 0.92);
+  }
+
+  .story--free .story-card {
     transition: none;
+  }
+
+  .story-card {
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
+  }
+}
+
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .story {
+    --story-paper: rgba(250, 248, 243, 0.92);
   }
 }

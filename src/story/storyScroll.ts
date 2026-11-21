@@ -3,6 +3,7 @@
  * 現在の段階の番号と段階内の進捗をリスナーへ通知する。
  *
  * 段階 i の進捗は、セクションの上端が画面中央に来た時点を 0、下端が画面中央に来た時点を 1 とする
+ * （セクションには、その段階の本文カードがすべて入っている。進捗はすべてのカードを通して数える）
  * （最初の段階だけ、上端の代わりにスクロール位置 0 を 0 とし、最後の段階だけ、下端の代わりにページ末尾を 1 とする）。
  *
  * リサイズや画面の回転でレイアウトが変わったときは、変わる前の位置（段階の番号と進捗）を記録しておき、
@@ -27,7 +28,7 @@ export interface StoryScroll {
    */
   refresh(): void;
   /**
-   * 段階ごとの「カメラが止まっている割合」。段階 i の本文カードの下端が画面の中央に来る進捗。
+   * 段階ごとの「カメラが止まっている割合」。段階 i の最後の本文カードが止まり終える進捗（`holdScrollY` を渡さなければ、カードの下端が画面の中央に来る進捗）。
    * これより先の進捗で、カメラはつぎの段階のキーフレームへ移る。レイアウトの計算し直しのたびに更新される。
    */
   getHolds(): readonly number[];
@@ -39,6 +40,11 @@ export interface StoryScroll {
 export interface StoryScrollOptions {
   /** セクションの中で「本文カード」とみなす要素。既定は `.story-card`（無ければセクション自身）。 */
   cardOf?: (section: HTMLElement) => HTMLElement;
+  /**
+   * 段階のセクションについて、カメラが次の段階へ動き出してよいスクロール位置(px)。
+   * 指定すると `cardOf` の代わりに使われる（カードが複数あり、止まる位置が画面の中央とは限らないとき）。
+   */
+  holdScrollY?: (section: HTMLElement, index: number) => number;
   /** カードの下端が画面中央に来る前でも、この割合を超えたら動き出す（カードが極端に長いときの上限）。既定 0.9。 */
   maxHold?: number;
 }
@@ -119,10 +125,11 @@ export function createStoryScroll(
       if (!t) return 0;
       const span = t.end - t.start;
       if (span <= 0) return 0;
-      const rect = cardOf(section).getBoundingClientRect();
-      const cardBottom = rect.bottom + window.scrollY;
-      // カードの下端が画面中央に来るスクロール位置。
-      return Math.min(clamp01((cardBottom - half - t.start) / span), maxHold);
+      // 既定: カードの下端が画面中央に来るスクロール位置。
+      const y = options.holdScrollY
+        ? options.holdScrollY(section, i)
+        : cardOf(section).getBoundingClientRect().bottom + window.scrollY - half;
+      return Math.min(clamp01((y - t.start) / span), maxHold);
     });
   }
 

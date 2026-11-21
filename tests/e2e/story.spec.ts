@@ -101,12 +101,12 @@ test('スクロールで段階が進み、カメラが引いていく', async ({
     expect(heights[i] as number).toBeGreaterThan((heights[i - 1] as number) * 3);
   }
 
-  // カードは見出しで名前がつく
-  const article = page.locator('.story-step').nth(1).locator('article');
-  const labelledBy = await article.getAttribute('aria-labelledby');
+  // 場面のセクションは見出しで名前がつく
+  const section = page.locator('.story-step').nth(1);
+  const labelledBy = await section.getAttribute('aria-labelledby');
   expect(labelledBy).toBeTruthy();
   await expect(page.locator(`[id="${labelledBy}"]`)).toHaveText('100m上空から');
-  await expect(page.getByRole('article', { name: '100m上空から' })).toHaveCount(1);
+  await expect(page.getByRole('region', { name: '100m上空から' })).toHaveCount(1);
   expect(errors).toEqual([]);
 });
 
@@ -257,10 +257,10 @@ test.describe('幅 390px のスマートフォン', () => {
 
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
     expect(overflow).toBeLessThanOrEqual(0);
-    const box = await page.locator('.story-step').nth(2).locator('.story-card').boundingBox();
-    expect(box).not.toBeNull();
-    expect(box!.x).toBeGreaterThanOrEqual(0);
-    expect(box!.x + box!.width).toBeLessThanOrEqual(390);
+    for (const box of await cardBoxes(page, 2)) {
+      expect(box.x).toBeGreaterThanOrEqual(0);
+      expect(box.x + box.width).toBeLessThanOrEqual(390);
+    }
 
     await page.screenshot({ path: 'screenshots/story-mobile.png' });
     expect(errors).toEqual([]);
@@ -274,9 +274,9 @@ test.describe('幅 390px のスマートフォン', () => {
     // カメラが止まりきってから（修正前は、ここで自由操作に切り替わり canvas がスワイプを奪っていた）
     await page.waitForTimeout(1500);
     // カードの外（canvas の上）を下へスワイプ → 上へスクロールする
-    const card = await page.locator('.story-step').nth(3).locator('.story-card').boundingBox();
     const y0 = await getScrollY(page);
-    const above = Math.max(40, card!.y - 300);
+    // カードは画面の下寄りにしかない。上側は canvas。
+    const above = 40;
     await swipe(page, { x: 30, y: above }, { x: 30, y: above + 250 });
     expect(await getScrollY(page)).toBeLessThan(y0 - 50);
 
@@ -315,46 +315,202 @@ test.describe('幅 390px のスマートフォン', () => {
 test.describe('幅 320px・長い本文', () => {
   test.use({ viewport: { width: 320, height: 568 } });
 
-  test('数値は画面に入ってから数え上がり、カメラはカードの下端が画面中央を過ぎるまで止まる', async ({ page }) => {
+  test('数値は画面に入ってから数え上がり、カメラは最後のカードが止まり終えるまで止まる', async ({ page }) => {
     const errors = collectErrors(page);
     await openStory(page, '?long=1');
     const stat = page.locator('.story-step').nth(1).locator('.story-stat__value');
+    // 長い本文は、段落ごとに別のカードになる（最初のカード + 5段落）
+    await expect(page.locator('.story-step').nth(1).locator('.story-card')).toHaveCount(6);
 
-    // カードの下端が画面中央に来る段階内の進捗
-    const cardBottomProgress = await page.evaluate(() => {
-      const s = document.querySelectorAll<HTMLElement>('.story-step')[1]!;
-      const card = s.querySelector<HTMLElement>('.story-card')!;
-      const half = window.innerHeight / 2;
-      const top = s.getBoundingClientRect().top + window.scrollY;
-      const start = top - half;
-      const end = top + s.offsetHeight - half;
-      const cardBottom = card.getBoundingClientRect().bottom + window.scrollY;
-      return (cardBottom - half - start) / (end - start);
-    });
-    expect(cardBottomProgress).toBeGreaterThan(0.5);
+    const hold = (await page.evaluate(() => window.__STORY__!.getHolds()))[1] as number;
+    expect(hold).toBeGreaterThan(0.5);
 
-    // 段階に入った直後: 数値は画面の外。数え上がらない
-    await scrollToStage(page, 1, 0.3);
+    // 段階に入った直後: 数値のあるカードは画面の下端から入ってきたところ。
+    await scrollToStage(page, 1, 0.02);
     await expectCameraHeight(page, EXPECTED_HEIGHT[1] as number);
-    await expect(stat).not.toBeInViewport();
-    await page.waitForTimeout(1500);
-    await expect(stat).toHaveText('0');
+    await expect(stat).toHaveText('1,200');
     await page.screenshot({ path: 'screenshots/story-long-320.png' });
 
-    // 本文を読んでいる途中（カードの下端はまだ画面中央より下）: カメラは止まったまま
-    await scrollToStage(page, 1, cardBottomProgress - 0.05);
+    // 本文を読んでいる途中（最後のカードが止まり終えるより前）: カメラは止まったまま
+    await scrollToStage(page, 1, hold - 0.05);
     await page.waitForTimeout(1000);
     await expectCameraHeight(page, EXPECTED_HEIGHT[1] as number);
-
-    // 数値が画面に入ると数え上がる
-    await stat.scrollIntoViewIfNeeded();
-    await expect(stat).toBeInViewport();
-    await expect(stat).toHaveText('1,200');
     expect((await getState(page)).stage).toBe(1);
 
-    // カードの下端が画面中央を過ぎると、次の場面へ動き出す
-    await scrollToStage(page, 1, Math.min(cardBottomProgress + 0.1, 0.98));
+    // 最後のカードが止まり終えたあと、次の場面へ動き出す
+    await scrollToStage(page, 1, Math.min(hold + 0.15, 0.98));
     await expect.poll(() => getCameraY(page), { timeout: 10_000 }).toBeGreaterThan((EXPECTED_HEIGHT[1] as number) * 1.2);
     expect(errors).toEqual([]);
   });
 });
+
+/** 場面 index のカードの、画面上の長方形のうち見えているもの（薄くなって消えたカードを除く）。 */
+async function cardBoxes(page: Page, index: number): Promise<{ x: number; y: number; width: number; height: number }[]> {
+  return page.evaluate((i) => {
+    const out: { x: number; y: number; width: number; height: number }[] = [];
+    for (const c of document.querySelectorAll<HTMLElement>(`.story-step:nth-child(${i + 1}) .story-card`)) {
+      const r = c.getBoundingClientRect();
+      if (Number(getComputedStyle(c).opacity) > 0.05 && r.bottom > 0 && r.top < window.innerHeight) {
+        out.push({ x: r.x, y: r.y, width: r.width, height: r.height });
+      }
+    }
+    return out;
+  }, index);
+}
+
+/** 画面に見えているカードすべての長方形。 */
+async function visibleCards(page: Page): Promise<{ x: number; y: number; width: number; height: number }[]> {
+  return page.evaluate(() => {
+    const out: { x: number; y: number; width: number; height: number }[] = [];
+    for (const c of document.querySelectorAll<HTMLElement>('.story-card')) {
+      const r = c.getBoundingClientRect();
+      if (Number(getComputedStyle(c).opacity) > 0.05 && r.bottom > 0 && r.top < window.innerHeight) {
+        out.push({ x: r.x, y: r.y, width: r.width, height: r.height });
+      }
+    }
+    return out;
+  });
+}
+
+const SIZES = [
+  { name: 'phone-390x844', width: 390, height: 844, layout: 'bottom' },
+  { name: 'phone-320x568', width: 320, height: 568, layout: 'bottom' },
+  { name: 'landscape-844x390', width: 844, height: 390, layout: 'side' },
+  { name: 'desktop-1280x720', width: 1280, height: 720, layout: 'side' },
+] as const;
+
+for (const size of SIZES) {
+  test.describe(`本文カードの配置 ${size.name}`, () => {
+    test.use({ viewport: { width: size.width, height: size.height } });
+
+    test('カードは小さく分かれて流れ、画面の端と主役の範囲を避ける', async ({ page }) => {
+      const errors = collectErrors(page);
+      await openStory(page);
+      const { width: W, height: H } = size;
+      await expect.poll(() => page.evaluate(() => getComputedStyle(document.querySelector('.story')!).getPropertyValue('--story-layout').trim())).toBe(size.layout);
+
+      // 場面1は、最初のカード + 段落2つ。数値は最初のカードにある。
+      const first = page.locator('.story-step').first();
+      await expect(first.locator('.story-card')).toHaveCount(3);
+      await expect(first.locator('.story-card').first().locator('.story-stat__value')).toHaveCount(1);
+      await expect(first.locator('.story-card').nth(1).locator('.story-stat__value')).toHaveCount(0);
+
+      // すべてのカード: 画面の幅に収まる。縦向きの幅では、高さが画面の4割以下。
+      const sizes = await page.evaluate(() =>
+        [...document.querySelectorAll<HTMLElement>('.story-card')].map((c) => ({ w: c.offsetWidth, h: c.offsetHeight })),
+      );
+      for (const c of sizes) {
+        expect(c.w).toBeLessThanOrEqual(W);
+        if (size.layout === 'bottom') expect(c.h).toBeLessThanOrEqual(H * 0.4);
+        else expect(c.h).toBeLessThanOrEqual(H * 0.7);
+      }
+      if (size.layout === 'side') {
+        const w = sizes[0]!.w;
+        // PC 幅は 360〜400px。高さの低い横向きの画面だけ、少し狭くしてカードを低く保つ（340px〜）。
+        expect(w).toBeGreaterThanOrEqual(H <= 560 ? 340 : 360);
+        expect(w).toBeLessThanOrEqual(400);
+      }
+      expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(0);
+
+      // 場面を通してスクロールし、見えているカードの位置を調べる。
+      const total = await page.evaluate(() => document.documentElement.scrollHeight - window.innerHeight);
+      let visibleSamples = 0;
+      let emptyRun = 0;
+      let longestEmptyRun = 0;
+      const step = Math.max(Math.round(H / 20), 8);
+      const freeBottom = H / 2; // 縦向きでは、上半分にカードは出ない
+      for (let y = 0; y <= total; y += step) {
+        await page.evaluate((y) => window.scrollTo({ top: y, left: 0, behavior: 'instant' }), y);
+        await page.waitForFunction(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => r(true)))));
+        const cards = await visibleCards(page);
+        if (cards.length === 0) {
+          emptyRun += step;
+          longestEmptyRun = Math.max(longestEmptyRun, emptyRun);
+        } else {
+          emptyRun = 0;
+          visibleSamples++;
+        }
+        for (const c of cards) {
+          expect(c.x).toBeGreaterThanOrEqual(0);
+          expect(c.x + c.width).toBeLessThanOrEqual(W);
+          if (size.layout === 'bottom') expect(c.y, `y=${y}`).toBeGreaterThanOrEqual(freeBottom - 1);
+        }
+        // 2枚以上同時に見えるとき、重なっていない
+        for (let i = 0; i < cards.length; i++) {
+          for (let j = i + 1; j < cards.length; j++) {
+            const a = cards[i]!;
+            const b = cards[j]!;
+            expect(a.y + a.height <= b.y + 1 || b.y + b.height <= a.y + 1, `y=${y} overlap`).toBe(true);
+          }
+        }
+      }
+      expect(visibleSamples).toBeGreaterThan(10);
+      // 縦向きでは、カードとカードのあいだに、3D が遮られずに見える間隔（画面の高さの半分以上）がある。
+      // 横の配置では、主役はカードの列の外にあるので、間隔は要らない。
+      if (size.layout === 'bottom') expect(longestEmptyRun).toBeGreaterThanOrEqual(H * 0.5);
+      expect(errors).toEqual([]);
+    });
+
+    test('注視点が、カードに覆われていない範囲の中央に来る', async ({ page }) => {
+      const errors = collectErrors(page);
+      await openStory(page);
+      const { width: W, height: H } = size;
+      for (const stageIndex of [1, 3]) {
+        await scrollToStage(page, stageIndex, 0.05);
+        await expectCameraHeight(page, EXPECTED_HEIGHT[stageIndex] as number);
+        await page.waitForTimeout(200);
+        const target = await page.evaluate(() => window.__STORY__!.targetOnScreen());
+        const info = await page.evaluate(() => {
+          const cards = [...document.querySelectorAll<HTMLElement>('.story-card')];
+          return {
+            columnRight: Math.max(...cards.map((c) => c.getBoundingClientRect().right)),
+            coverTop: Math.min(...cards.map((c) => Number.parseFloat(getComputedStyle(c).top))),
+          };
+        });
+        if (size.layout === 'side') {
+          expect(target.x).toBeGreaterThan(info.columnRight);
+          expect(Math.abs(target.x - (info.columnRight + W) / 2)).toBeLessThan(W * 0.08);
+          expect(Math.abs(target.y - H / 2)).toBeLessThan(H * 0.05);
+        } else {
+          expect(target.y).toBeLessThan(info.coverTop);
+          expect(Math.abs(target.x - W / 2)).toBeLessThan(W * 0.03);
+          expect(target.y).toBeGreaterThan(H * 0.1);
+        }
+      }
+      // 自由操作の間も、注視点の位置は変わらない
+      const before = await page.evaluate(() => window.__STORY__!.targetOnScreen());
+      const toggle = page.locator('.story-free-toggle');
+      await expect(toggle).toBeVisible();
+      const tb = await toggle.boundingBox();
+      expect(tb!.x).toBeGreaterThanOrEqual(0);
+      expect(tb!.x + tb!.width).toBeLessThanOrEqual(W);
+      expect(tb!.y).toBeGreaterThanOrEqual(0);
+      expect(tb!.y + tb!.height).toBeLessThanOrEqual(H);
+      await toggle.click();
+      await expect.poll(() => isFree(page)).toBe(true);
+      await page.waitForTimeout(400);
+      const during = await page.evaluate(() => window.__STORY__!.targetOnScreen());
+      expect(Math.hypot(during.x - before.x, during.y - before.y)).toBeLessThan(2);
+      await page.screenshot({ path: `screenshots/story-layout-${size.name}-free.png` });
+      await toggle.click();
+      await expect.poll(() => isFree(page)).toBe(false);
+      expect(errors).toEqual([]);
+    });
+
+    test('スクリーンショット', async ({ page }) => {
+      const errors = collectErrors(page);
+      await openStory(page);
+      for (const [stageIndex, p] of [
+        [0, 0],
+        [1, 0.05],
+        [3, 0.05],
+      ] as const) {
+        await scrollToStage(page, stageIndex, p);
+        await expectCameraHeight(page, EXPECTED_HEIGHT[stageIndex] as number);
+        await page.waitForTimeout(300);
+        await page.screenshot({ path: `screenshots/story-layout-${size.name}-${stageIndex + 1}.png` });
+      }
+      expect(errors).toEqual([]);
+    });
+  });
+}

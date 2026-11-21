@@ -80,6 +80,14 @@ const SITE_ATTRIBUTION_CSS = `
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
 }
 .ptm-site-attribution p { margin: 0; }
+/* 幅が広い画面では、本文カードが左の列を流れるので、出典表示は右下に置く。 */
+@media (min-width: 768px) {
+  .ptm-site-attribution {
+    left: auto;
+    right: max(8px, env(safe-area-inset-right));
+    text-align: right;
+  }
+}
 .ptm-site-attribution a {
   display: inline-block;
   /* タップしやすいよう、文字の上下に余白を取って高さ 24px 以上にする */
@@ -93,8 +101,8 @@ const SITE_ATTRIBUTION_CSS = `
 `;
 
 /**
- * 本編用の出典表示。画面の左下に常時表示する。行は `siteAttributionLines()` の形で渡す。
- * 要素の高さを CSS 変数 `--ptm-attribution-height` として document に書き出す（ほかの固定表示を避けるため）。
+ * 本編用の出典表示。画面の下端に常時表示する（幅が広い画面では右下。左の列を本文カードが流れるため）。行は `siteAttributionLines()` の形で渡す。
+ * 要素の高さを CSS 変数 `--ptm-attribution-height` として document に書き出す（本文カードや「地図を動かす」ボタンが避けるため）。
  */
 export function addSiteAttribution(
   parent: HTMLElement = document.body,

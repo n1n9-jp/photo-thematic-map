@@ -1,9 +1,11 @@
 /**
  * スクロール連動の語りの確認ページ。仮の本文で4段階（箱の接写 → 100m → 1km → 10km 上空）を定義する。
- * `?long=1` を付けると、2番目の段階の本文を長くする（狭い画面でカードが画面より高くなる場合の確認用）。
+ * 本文は、段階ごとに小さなカード（最初は見出しと数値、つづいて段落を1つずつ）に分かれて流れる。
+ * `?long=1` を付けると、2番目の段階の本文を長くする（カードが多い場面の確認用）。
  */
 import {
   BoxGeometry,
+  ConeGeometry,
   DataTexture,
   Fog,
   LinearMipmapLinearFilter,
@@ -17,6 +19,7 @@ import {
   UnsignedByteType,
 } from 'three';
 import { ORIGIN } from '../config';
+import { latLonToLocal } from '../geo/enu';
 import { createScene } from '../scene/createScene';
 import { createStory } from '../story/createStory';
 import { distanceForHeight } from '../story/cameraPath';
@@ -29,6 +32,8 @@ declare global {
     __STORY__?: {
       getState(): { stage: number; progress: number; position: number };
       getCameraPosition(): { x: number; y: number; z: number };
+      /** 注視点の画面上の位置（canvas の左上を原点とする CSS px）。 */
+      targetOnScreen(): { x: number; y: number };
       isFree(): boolean;
       scrollYFor(stage: number, progress: number): number;
       getHolds(): readonly number[];
@@ -140,6 +145,17 @@ const stages: StoryStage[] = [
   },
 ];
 
+// 画面上での注視点の位置の目印（赤い円錐）。最後の場面だけ注視点が箱の位置から外れているので、そこに立てる。
+{
+  const last = stages[stages.length - 1];
+  if (last) {
+    const p = latLonToLocal({ ...last.camera.target, alt: 0 });
+    const cone = new Mesh(new ConeGeometry(250, 900, 16), new MeshStandardMaterial({ color: 0xc8402b, roughness: 0.7 }));
+    cone.position.set(p.x, 450 - 3, p.z);
+    ctx.scene.add(cone);
+  }
+}
+
 const LONG_PARAGRAPHS = [
   'これは仮の長い本文です。狭い画面では、本文カードが画面の高さを超えることがあります。そのときも、数値はカードの下の方にあり、読み進めて画面に入ってから数え上がります。',
   'カメラは、本文を読んでいる間は止まっています。カードの下端が画面の中央より上に来て、カード全体が画面の上へ抜けはじめてから、次の場面へ動き出します。',
@@ -169,6 +185,11 @@ window.__STORY__ = {
   getCameraPosition: () => {
     const { x, y, z } = ctx.camera.position;
     return { x, y, z };
+  },
+  targetOnScreen: () => {
+    ctx.camera.updateMatrixWorld();
+    const v = ctx.controls!.target.clone().project(ctx.camera);
+    return { x: ((v.x + 1) / 2) * ctx.renderer.domElement.clientWidth, y: ((1 - v.y) / 2) * ctx.renderer.domElement.clientHeight };
   },
   isFree: () => story.rig.isFree,
   scrollYFor: (stage, progress) => story.scroll.scrollYFor(stage, progress),

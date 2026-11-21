@@ -1,20 +1,56 @@
 /**
  * 本文カードの DOM を作り、大きな数値を数え上げる。
  *
+ * 1つの場面（段階）の本文は、複数の小さなカードに分ける。最初のカードは「場面の番号・見出し・大きな数値」、
+ * つづくカードは段落を1つずつ。カードは「拍」(`.story-beat`)の中に1枚ずつ入り、スクロールで画面に入ると、
+ * 決まった位置（`story.css` の `top`）で止まって読まれ、そのあと外れていく。拍と拍のあいだは何も出ず、3D の画面が見える。
+ * 場面の進み具合は、場面のセクション全体（すべての拍）を通して数える。
+ *
+ * 画面の下寄りに並ぶ配置（`--story-layout: bottom`）では、カードは止まっている間の終わりに、その場で薄くなって消える
+ * （画面の上半分へ押し上げられて重なることがない）。左の列の配置（`side`）では、そのまま上へ流れて出ていく。
+ *
  * 数え上げは、数値の要素が画面に入ったときに始め、`COUNT_DURATION_MS` かけて最終値まで上がる。
  * 通り過ぎた段階は最終値、まだの段階で画面の外にあるものは 0 に戻す（もう一度入ったら数え直す）。
  */
 import { COUNT_DURATION_MS, countValue, formatCount } from './countUp';
+import { clamp01 } from './cameraPath';
+import type { StoryLayout } from './layout';
 import { prefersReducedMotion } from './motion';
 import type { StoryStage, StoryState } from './types';
+
+/** カードの配置の測定結果。 */
+export interface StoryCardsLayout {
+  layout: StoryLayout;
+  /** すべてのカードの右端の x の最大(px)。 */
+  columnRight: number;
+  /** すべてのカードの「止まる位置」の上端 y の最小(px)。いちばん高いカードの上端。 */
+  coverTop: number;
+}
 
 export interface StoryCards {
   /** 段階ごとのセクション（`createStoryScroll` に渡す）。 */
   sections: HTMLElement[];
   /** 現在の状態を表示へ反映する。 */
   update(state: StoryState): void;
+  /**
+   * カードの高さを測って、拍の CSS 変数 `--story-card-h` に書く（カードを画面の下端に揃えるため）。
+   * レイアウトが変わったとき（リサイズ・フォントの読み込み後）に呼ぶ。位置を求める前にも呼ばれる。
+   */
+  measure(): void;
+  /**
+   * セクション `section` の最後のカードが止まり終える（カメラが次の場面へ動き出してよい）スクロール位置(px)。
+   * 最後のカードの「拍」の下端が、カードの下端に届く位置。
+   */
+  holdScrollY(section: HTMLElement): number;
+  /** カードの配置の測定結果。 */
+  layoutInfo(): StoryCardsLayout;
   dispose(): void;
 }
+
+/** 止まり終えるまでの残りのスクロール量がこの値以下になると、カードは薄くなりはじめる(px)。 */
+const FADE_DISTANCE_PX = 96;
+/** この透明度以下のカードは、ポインタを受けない（見えないカードが背後の操作を邪魔しない）。 */
+const GONE_ALPHA = 0.05;
 
 function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
@@ -51,22 +87,34 @@ export function renderStoryCards(
   const prefix = `story-${++idSeq}`;
 
   const slots: (StatSlot | null)[] = [];
+  /** 拍ごとの（拍・カード）。 */
+  const beats: { beat: HTMLElement; card: HTMLElement }[] = [];
+  /** セクションごとの、最後の拍。 */
+  const lastBeat = new Map<HTMLElement, { beat: HTMLElement; card: HTMLElement }>();
+
+  const addBeat = (section: HTMLElement, card: HTMLElement): void => {
+    const beat = el('div', 'story-beat');
+    beat.append(card, el('div', 'story-beat__dwell'));
+    section.append(beat);
+    const entry = { beat, card };
+    beats.push(entry);
+    lastBeat.set(section, entry);
+  };
+
   const sections = stages.map((stage, i) => {
     const section = el('section', 'story-step');
     section.dataset.stageId = stage.id;
     section.dataset.stageIndex = String(i);
     if (i === stages.length - 1) section.classList.add('story-step--last');
-
-    const card = el('article', 'story-card');
     const headingId = `${prefix}-heading-${i}`;
-    card.setAttribute('aria-labelledby', headingId);
-    card.append(el('p', 'story-card__index', `${String(i + 1).padStart(2, '0')} / ${String(stages.length).padStart(2, '0')}`));
+    section.setAttribute('aria-labelledby', headingId);
+
+    // 最初のカード: 場面の番号・見出し・大きな数値
+    const intro = el('div', 'story-card story-card--intro');
+    intro.append(el('p', 'story-card__index', `${String(i + 1).padStart(2, '0')} / ${String(stages.length).padStart(2, '0')}`));
     const heading = el('h2', 'story-card__heading', stage.text.heading);
     heading.id = headingId;
-    card.append(heading);
-    for (const paragraph of stage.text.paragraphs) {
-      card.append(el('p', 'story-card__body', paragraph));
-    }
+    intro.append(heading);
 
     const stat = stage.text.stat;
     if (stat) {
@@ -83,7 +131,7 @@ export function renderStoryCards(
         box.append(unit);
       }
       if (stat.label) box.append(el('span', 'story-stat__label', stat.label));
-      card.append(box);
+      intro.append(box);
       slots.push({
         node: value,
         value: stat.value,
@@ -96,8 +144,15 @@ export function renderStoryCards(
     } else {
       slots.push(null);
     }
+    addBeat(section, intro);
 
-    section.append(card);
+    // つづくカード: 段落を1つずつ
+    for (const paragraph of stage.text.paragraphs) {
+      const card = el('div', 'story-card story-card--body');
+      card.append(el('p', 'story-card__body', paragraph));
+      addBeat(section, card);
+    }
+
     root.append(section);
     return section;
   });
@@ -159,6 +214,72 @@ export function renderStoryCards(
     });
   }
 
+  // --- カードの配置（高さの測定・薄くする・止まる位置の問い合わせ） ---
+
+  function layoutKind(): StoryLayout {
+    return getComputedStyle(root).getPropertyValue('--story-layout').trim() === 'side' ? 'side' : 'bottom';
+  }
+
+  function stickyTop(card: HTMLElement): number {
+    const top = Number.parseFloat(getComputedStyle(card).top);
+    return Number.isFinite(top) ? top : 0;
+  }
+
+  const measuredHeights: number[] = [];
+  function measure(): void {
+    beats.forEach(({ beat, card }, k) => {
+      const h = card.offsetHeight;
+      if (measuredHeights[k] === h) return;
+      measuredHeights[k] = h;
+      beat.style.setProperty('--story-card-h', `${h}px`);
+    });
+  }
+
+  /** 画面の下寄りの配置で、止まる位置の終わりに近づいたカードを薄くする。 */
+  function updateFade(): void {
+    const bottom = layoutKind() === 'bottom';
+    const viewport = window.innerHeight;
+    for (const { beat, card } of beats) {
+      let alpha = 1;
+      if (bottom) {
+        const b = beat.getBoundingClientRect();
+        if (b.bottom > -viewport && b.top < viewport * 2) {
+          // 拍の下端とカードの下端の差 = 止まっていられる残りのスクロール量
+          alpha = clamp01((b.bottom - card.getBoundingClientRect().bottom) / FADE_DISTANCE_PX);
+        }
+      }
+      const text = alpha >= 1 ? '' : alpha.toFixed(3);
+      if (card.style.getPropertyValue('--story-alpha') !== text) {
+        if (text) card.style.setProperty('--story-alpha', text);
+        else card.style.removeProperty('--story-alpha');
+      }
+      card.classList.toggle('story-card--gone', alpha <= GONE_ALPHA);
+    }
+  }
+
+  let fadeRaf = 0;
+  function scheduleFade(): void {
+    if (fadeRaf || disposed) return;
+    fadeRaf = requestAnimationFrame(() => {
+      fadeRaf = 0;
+      if (!disposed) updateFade();
+    });
+  }
+  window.addEventListener('scroll', scheduleFade, { passive: true });
+  window.addEventListener('resize', scheduleFade);
+
+  // カードの大きさが変わったら（リサイズ・フォントの読み込み）高さを測り直す。
+  const sizeObserver =
+    typeof ResizeObserver === 'function'
+      ? new ResizeObserver(() => {
+          measure();
+          scheduleFade();
+        })
+      : null;
+  for (const { card } of beats) sizeObserver?.observe(card);
+  measure();
+  updateFade();
+
   const observer =
     typeof IntersectionObserver === 'function'
       ? new IntersectionObserver((entries) => {
@@ -177,8 +298,28 @@ export function renderStoryCards(
 
   return {
     sections,
+    measure,
+    holdScrollY(section) {
+      measure();
+      const entry = lastBeat.get(section);
+      if (!entry) return section.getBoundingClientRect().bottom + window.scrollY;
+      const beatBottom = entry.beat.getBoundingClientRect().bottom + window.scrollY;
+      // 拍の下端がカードの下端に届く（カードが押し上げられはじめる）スクロール位置。
+      return beatBottom - (stickyTop(entry.card) + entry.card.offsetHeight);
+    },
+    layoutInfo() {
+      measure();
+      let columnRight = 0;
+      let coverTop = Number.POSITIVE_INFINITY;
+      for (const { card } of beats) {
+        columnRight = Math.max(columnRight, card.getBoundingClientRect().right);
+        coverTop = Math.min(coverTop, stickyTop(card));
+      }
+      return { layout: layoutKind(), columnRight, coverTop: Number.isFinite(coverTop) ? coverTop : window.innerHeight };
+    },
     update(state) {
       current = state;
+      scheduleFade();
       if (!observer) {
         slots.forEach((slot, i) => {
           if (slot) slot.visible = i <= state.stage;
@@ -189,7 +330,11 @@ export function renderStoryCards(
     dispose() {
       disposed = true;
       observer?.disconnect();
+      sizeObserver?.disconnect();
+      window.removeEventListener('scroll', scheduleFade);
+      window.removeEventListener('resize', scheduleFade);
       if (raf) cancelAnimationFrame(raf);
+      if (fadeRaf) cancelAnimationFrame(fadeRaf);
     },
   };
 }

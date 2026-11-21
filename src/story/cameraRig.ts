@@ -61,6 +61,14 @@ export interface CameraRig {
    * 戻り値はカメラが動いた（描画が必要）か。カメラが目標に収束していて操作もなければ false。
    */
   update(dtSec: number): boolean;
+  /**
+   * 注視点の画面上の位置を、画面の中心からずらす（カメラの向きは変えず、投影の中心だけをずらす）。
+   * x, y は画面の幅・高さに対する割合で、x が正なら右へ、y が正なら下へずれる（`layout.ts` の `viewShiftFor`）。
+   * 割合なので、画面の大きさが変わっても保たれる。自由操作の間も保たれる。
+   */
+  setViewShift(shift: { x: number; y: number }): void;
+  /** いまのずらし量。 */
+  readonly viewShift: { x: number; y: number };
   /** OrbitControls を有効にしている最中か。 */
   readonly isFree: boolean;
   /** 現在のカメラ姿勢。 */
@@ -104,6 +112,7 @@ export function createCameraRig(
   };
 
   let position = 0;
+  let shift = { x: 0, y: 0 };
   let current: CameraPose = poses[0] as CameraPose;
   let free = false;
   let disposed = false;
@@ -170,6 +179,15 @@ export function createCameraRig(
     }
   }
 
+  /** 投影の中心のずらしをカメラへ当てる。画面の大きさに依らないよう、全体を 1×1 の単位で表す。 */
+  function applyShift(): void {
+    if (Math.abs(shift.x) < 1e-5 && Math.abs(shift.y) < 1e-5) {
+      if (camera.view?.enabled) camera.clearViewOffset();
+    } else {
+      camera.setViewOffset(1, 1, -shift.x, -shift.y, 1, 1);
+    }
+  }
+
   controls.enabled = false;
   controls.enableZoom = false;
   // 真上（仰角 90°）を避ける。極角 = 90° - 仰角。
@@ -195,6 +213,15 @@ export function createCameraRig(
     },
     setFreeOrbit(on) {
       setFree(on);
+    },
+    setViewShift(next) {
+      if (disposed || (next.x === shift.x && next.y === shift.y)) return;
+      shift = { x: next.x, y: next.y };
+      applyShift();
+      dirty = true;
+    },
+    get viewShift() {
+      return shift;
     },
     update(dtSec) {
       if (disposed) return false;
@@ -235,6 +262,7 @@ export function createCameraRig(
       controls.minPolarAngle = original.minPolarAngle;
       Object.assign(controls.touches, original.touches);
       controls.target.copy(original.target);
+      if (camera.view?.enabled) camera.clearViewOffset();
       if (autoClip) {
         camera.near = original.near;
         camera.far = original.far;

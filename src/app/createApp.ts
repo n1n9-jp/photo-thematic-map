@@ -55,6 +55,8 @@ export interface MainDebugApi {
   target(): { lat: number; lon: number; heightAboveGround: number };
   /** カメラの位置（緯度経度と地表からの高さ）。 */
   camera(): { lat: number; lon: number; heightAboveGround: number };
+  /** 注視点の画面上の位置（canvas の左上を原点とする CSS px）。 */
+  targetOnScreen(): { x: number; y: number };
   status(): AppStatus;
   /** 街並みが出そろい、カメラも止まり、中身の初期化も済んだか。 */
   isSettled(): boolean;
@@ -247,6 +249,12 @@ export async function createApp(options: CreateAppOptions): Promise<App> {
     holds: () => story.scroll.getHolds(),
     target: () => heightAt(controls.target.x, controls.target.y, controls.target.z),
     camera: () => heightAt(camera.position.x, camera.position.y, camera.position.z),
+    targetOnScreen: () => {
+      camera.updateMatrixWorld();
+      const v = controls.target.clone().project(camera);
+      const canvas = renderer.domElement;
+      return { x: ((v.x + 1) / 2) * canvas.clientWidth, y: ((1 - v.y) / 2) * canvas.clientHeight };
+    },
     status: () => ({
       state: story.scroll.getState(),
       city: city.status(),

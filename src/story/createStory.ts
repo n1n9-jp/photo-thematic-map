@@ -9,6 +9,7 @@ import { localToLatLon } from '../geo/enu';
 import type { SceneContext } from '../scene/createScene';
 import { defaultGroundY, type GroundYAt } from './cameraPath';
 import { createCameraRig, type CameraRig, type CameraRigOptions } from './cameraRig';
+import { freeRegionFor, viewShiftFor } from './layout';
 import { renderStoryCards } from './storyCards';
 import { createStoryScroll, type StoryScroll } from './storyScroll';
 import type { StoryStage } from './types';
@@ -32,6 +33,11 @@ export interface CreateStoryOptions {
    * `createScene` の `stableViewport` を使う。
    */
   stableViewport?: boolean;
+  /**
+   * 注視点を「本文カードに覆われていない範囲」の中央に置く（投影の中心だけをずらす。カメラの向きは変えない）。既定 true。
+   * 左に列で出る配置では、列を除いた右側の中央。画面の下寄りに出る配置では、カードの上の範囲の中央。
+   */
+  centerInFreeRegion?: boolean;
   /** 自由操作のボタンの文言。 */
   labels?: { explore?: string; resume?: string };
 }
@@ -55,6 +61,7 @@ export function createStory(options: CreateStoryOptions): Story {
   const { scene, stages, root } = options;
   const groundY = options.groundY ?? defaultGroundY;
   const stableViewport = options.stableViewport ?? true;
+  const centerInFreeRegion = options.centerInFreeRegion ?? true;
   const canvas = scene.renderer.domElement;
   const backdrop = canvas.parentElement;
   let disposed = false;
@@ -66,7 +73,7 @@ export function createStory(options: CreateStoryOptions): Story {
   if (stableViewport) backdrop?.classList.add('story-backdrop--stable');
 
   const cards = renderStoryCards(root, stages, { reducedMotion: options.rig?.reducedMotion });
-  const scroll = createStoryScroll(cards.sections, stages);
+  const scroll = createStoryScroll(cards.sections, stages, { holdScrollY: (section) => cards.holdScrollY(section) });
   const rig = createCameraRig(scene, stages, {
     ...options.rig,
     groundY,
@@ -76,6 +83,26 @@ export function createStory(options: CreateStoryOptions): Story {
     },
     hold: scroll.getHolds(),
   });
+
+  /** 注視点を、カードに覆われていない範囲の中央へ置く。レイアウトが変わるたびに計算し直す。 */
+  function syncViewShift(): void {
+    if (!centerInFreeRegion || disposed) return;
+    const info = cards.layoutInfo();
+    const width = canvas.clientWidth || document.documentElement.clientWidth;
+    const height = canvas.clientHeight || window.innerHeight;
+    if (width <= 0 || height <= 0) return;
+    const region = freeRegionFor({
+      layout: info.layout,
+      width,
+      height,
+      visibleHeight: window.innerHeight,
+      columnRight: info.columnRight,
+      coverTop: info.coverTop,
+    });
+    rig.setViewShift(viewShiftFor(region, width, height));
+    dirty = true;
+  }
+  syncViewShift();
 
   // 自由操作のボタン。freeOrbit の段階でだけ表示し、自由操作の間は「読み進める」になる。
   const labels = { explore: '地図を動かす', resume: '読み進める', ...options.labels };
@@ -116,6 +143,8 @@ export function createStory(options: CreateStoryOptions): Story {
     if (nextHolds !== holds) {
       holds = nextHolds;
       rig.setHolds(holds);
+      // 位置を計算し直したあと（リサイズ・フォントの読み込み後を含む）は、カードの配置も変わっている。
+      syncViewShift();
     }
     rig.setPosition(state.position, first);
     const allowed = stages[state.stage]?.freeOrbit === true;
@@ -128,12 +157,17 @@ export function createStory(options: CreateStoryOptions): Story {
   // リサイズ（描画バッファの大きさは createScene が合わせる）の後は描画し直す。
   const onResize = (): void => {
     dirty = true;
+    // カードの高さと列の幅が変わるので、画面の向きが変わった直後にもずらし量を合わせる。
+    cards.measure();
+    syncViewShift();
   };
   window.addEventListener('resize', onResize);
 
   // フォントや画像の読み込みでレイアウトが動くので、読み込み後に位置を計算し直す。
   void document.fonts?.ready.then(() => {
-    if (!disposed) scroll.refresh();
+    if (disposed) return;
+    scroll.refresh();
+    syncViewShift();
   });
 
   return {
