@@ -308,6 +308,7 @@ uniform float uDeepShade;
 uniform int uMaskWidth;
 uniform int uRevealWidth;
 uniform float uMaskLevel;
+uniform float uFrameFill;
 uniform vec3 uTone;
 vec3 bikeRotate(vec4 q, vec3 v) {
   return v + 2.0 * cross(q.xyz, cross(q.xyz, v) + q.w * v);
@@ -418,10 +419,10 @@ interface FieldUniforms {
  * 自転車の材質。maskLevel はセル状態テクスチャの値（1=近景・中景・遠景、0.5=点景）で、
  * この値のセルの自転車だけを描く（近景・中景の層はセル状態の0番 = 1 を参照する）。
  */
-function createBicycleMaterial(uniforms: FieldUniforms, maskLevel = 1): MeshLambertMaterial {
+function createBicycleMaterial(uniforms: FieldUniforms, maskLevel = 1, frameFill: { value: number } = { value: 0 }): MeshLambertMaterial {
   const mat = new MeshLambertMaterial({ vertexColors: true, side: DoubleSide });
   mat.onBeforeCompile = (shader) => {
-    Object.assign(shader.uniforms, uniforms, { uMaskLevel: { value: maskLevel } });
+    Object.assign(shader.uniforms, uniforms, { uMaskLevel: { value: maskLevel }, uFrameFill: frameFill });
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', VERTEX_HEADER)
       .replace(
@@ -445,7 +446,8 @@ float bikeLum = dot(bikeFc, vec3(0.2126, 0.7152, 0.0722));
 bikeFc = max(mix(vec3(bikeLum), bikeFc, uTone.y), 0.0);
 bikeFc = mix(bikeFc, max(bikeFc / max(max(bikeFc.r, max(bikeFc.g, bikeFc.b)), 1e-3) * 0.35, vec3(0.35)), uTone.x * (1.0 - smoothstep(0.02, 0.3, bikeLum)));
 float bikeTone = uTone.z + (1.0 - uTone.z) * iColor.a * bikeShade;
-vColor.rgb = color * mix(vec3(1.0), bikeFc, frameMask) * bikeTone;`,
+float bikeFill = mix(frameMask, 1.0, uFrameFill);
+vColor.rgb = mix(color, vec3(1.0), uFrameFill * (1.0 - frameMask)) * mix(vec3(1.0), bikeFc, bikeFill) * bikeTone;`,
       )
       .replace('#include <project_vertex>', VERTEX_HIDE);
   };
@@ -540,6 +542,9 @@ export class BicycleField {
   /** シーンに加えるルート。 */
   readonly object = new Group();
   readonly material: MeshLambertMaterial;
+  /** 遠景の材質（近景・中景と同じシェーダーで、部品の色をフレーム色に寄せる量だけ違う）。 */
+  private readonly farMaterial: MeshLambertMaterial;
+  private readonly farFill = { value: 0 };
   /** 点景の材質（点景を使うときだけ）。 */
   private readonly dotMaterial: MeshLambertMaterial | null;
   private readonly dotBase: BufferGeometry | null;
@@ -634,9 +639,10 @@ export class BicycleField {
       uTone: { value: new Vector3(0, 1, 0) },
     };
     this.material = createBicycleMaterial(this.uniforms);
+    this.farMaterial = createBicycleMaterial(this.uniforms, 1, this.farFill);
     this.dotBase = this.dotThreshold > 0 ? createBicycleDotGeometry() : null;
     this.dotTriangles = this.dotBase ? triangleCount(this.dotBase) : 0;
-    this.dotMaterial = this.dotBase ? createBicycleMaterial(this.uniforms, 0.5) : null;
+    this.dotMaterial = this.dotBase ? createBicycleMaterial(this.uniforms, 0.5, this.farFill) : null;
     this.dynamic = [this.createDynamicLayer(0, 256), this.createDynamicLayer(1, 1024)];
     this.stats = {
       total: 0,
@@ -664,6 +670,17 @@ export class BicycleField {
   }
   set tone(t: BicycleTone) {
     this.uniforms.uTone.value.set(t.lift, t.saturation, t.shadeFloor);
+  }
+
+  /**
+   * 遠景・点景で、部品（車輪・かごなど）の色をフレーム色に寄せる量（0〜1、既定 0）。
+   * 遠くでは1台が数ピクセルになり、面積の大きい車輪の暗い色で山全体が灰色に見えるので、フレーム色を見せる。
+   */
+  get farFrameFill(): number {
+    return this.farFill.value;
+  }
+  set farFrameFill(v: number) {
+    this.farFill.value = Math.min(1, Math.max(0, v));
   }
 
   /** 動きを減らす設定（prefers-reduced-motion）。true なら落下を省いてその場に現れる。 */
@@ -991,6 +1008,7 @@ export class BicycleField {
     this.uniforms.uReveal.value.dispose();
     this.dummySurface.dispose();
     this.material.dispose();
+    this.farMaterial.dispose();
     this.dotMaterial?.dispose();
     this.object.removeFromParent();
   }
@@ -1298,7 +1316,7 @@ export class BicycleField {
         }
         return list;
       };
-      const ranges = makeRanges(this.bases[2], this.material, 'BicycleLOD2');
+      const ranges = makeRanges(this.bases[2], this.farMaterial, 'BicycleLOD2');
       const dotRanges = this.dotBase && this.dotMaterial ? makeRanges(this.dotBase, this.dotMaterial, 'BicycleDot') : [];
       this.regions.push({ anchor, center, radius, cellBegin: regionCells[r]!, cellEnd: regionCells[r + 1]!, instances: n, f32, u8, fbuf, cbuf, e32, ebuf, ranges, dotRanges, dirty: true });
     }

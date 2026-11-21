@@ -139,7 +139,9 @@ export const PILE_SHELL_COLOR = 0x5a5550;
  * 山の自転車の色の調子。遠くから見ると、黒・紺のフレームと影が重なって暗い塊に見えるので、
  * 暗いフレーム色を持ち上げ、彩度を上げ、陰影の暗い側を浅くする。
  */
-export const PILE_TONE: BicycleTone = { lift: 0.55, saturation: 1.35, shadeFloor: 0.3 };
+export const PILE_TONE: BicycleTone = { lift: 0.6, saturation: 1.5, shadeFloor: 0.4 };
+/** 遠景・点景で部品の色をフレーム色に寄せる量（`BicycleField.farFrameFill`）。 */
+export const PILE_FAR_FRAME_FILL = 0.65;
 /** 表面から深い自転車の明るさ（BicycleField の既定 0.45 より浅くする）。 */
 export const PILE_DEEP_SHADE = 0.6;
 /** 'surface' の遅れ（降り直しの着地の基準）の追いかけ。 */
@@ -201,6 +203,7 @@ export function createPileSceneFromResult(
   const field = new BicycleField(options.field);
   field.tone = options.tone ?? PILE_TONE;
   field.deepShade = options.deepShade ?? PILE_DEEP_SHADE;
+  field.farFrameFill = PILE_FAR_FRAME_FILL;
   field.reducedMotion = options.reducedMotion ?? prefersReducedMotion();
   field.setPileSurface({ texture, rect });
   const dropHeight = options.dropHeight ?? (mode === 'full' ? 60 : 70);
