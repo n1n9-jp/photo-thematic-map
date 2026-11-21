@@ -14,6 +14,14 @@ import{$ as e,$t as t,A as n,At as r,B as i,Bt as a,Ct as o,D as s,E as c,Et as 
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
 }
 .ptm-site-attribution p { margin: 0; }
+/* 幅が広い画面では、本文カードが左の列を流れるので、出典表示は右下に置く。 */
+@media (min-width: 768px) {
+  .ptm-site-attribution {
+    left: auto;
+    right: max(8px, env(safe-area-inset-right));
+    text-align: right;
+  }
+}
 .ptm-site-attribution a {
   display: inline-block;
   /* タップしやすいよう、文字の上下に余白を取って高さ 24px 以上にする */
