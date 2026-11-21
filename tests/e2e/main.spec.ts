@@ -11,7 +11,8 @@ import { checkPileScene, PILE_SCENES, type PileMetric } from './pileHelpers';
 // ソフトウェア描画（SwiftShader）では PLATEAU の読み込みと描画に時間がかかる
 test.setTimeout(2_700_000);
 
-const SETTLE_TIMEOUT_MS = 240_000;
+// 場面5・6 は山と街並み（建物 約 700 万三角形）を同時に描くので、ソフトウェア描画では出そろうまで 4 分を超えることがある
+const SETTLE_TIMEOUT_MS = 600_000;
 
 function collectErrors(page: Page): string[] {
   const errors: string[] = [];

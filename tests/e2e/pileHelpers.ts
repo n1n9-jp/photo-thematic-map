@@ -27,7 +27,8 @@ export interface PileMetric {
   readyAtMs: number | null;
 }
 
-const SETTLE_TIMEOUT_MS = 240_000;
+// 場面5・6 は山と街並み（建物 約 700 万三角形）を同時に描くので、ソフトウェア描画では出そろうまで 4 分を超えることがある
+const SETTLE_TIMEOUT_MS = 600_000;
 
 function status(page: Page, key: string): Promise<PileDebugStatus> {
   return page.evaluate((k) => window.__PILES__!.status(k)!, key);
