@@ -21,3 +21,6 @@ data/raw/bicycles/*.xlsx
 data/raw/bicycles/*.pdf
 data/raw/bicycles/*.html
 data/raw/bicycles/extracts/
+
+# 変換済みの建物（npm run data:buildings が生成。公開用のビルドと E2E の前に作る）
+public/data/buildings/

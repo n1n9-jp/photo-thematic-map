@@ -3,7 +3,9 @@
  *
  * - 語りの地表の高さ `groundY` は国土地理院の標高。起動時に各場面の注視点とカメラの位置の標高タイルを読んでおき、
  *   同期で引く（読み込む前の地点は近くの既知の値）。カメラが地面に潜らないようにするため。
- * - 建物を読む場所は、カメラが向かっている場面の `place` に合わせて切り替える（場面を離れて動き出した時点で
+ * - 建物は既定で変換済みのデータ（`public/data/buildings/`）を読み、カメラと注視点の位置に応じて必要なチャンクだけを読む。
+ *   URL に `?buildings=live` を付けると、PLATEAU の配信サーバーから直接読む（見え方の比較用）。
+ * - 直接読むときの建物を読む場所は、カメラが向かっている場面の `place` に合わせて切り替える（場面を離れて動き出した時点で
  *   次の場面の場所を読み始める）。自由操作の間は注視点に合わせて動かす。
  * - 描画は必要なフレームだけ行う（カメラが動いた・街並みを読み込み中・中身から要求があった・リサイズした）。
  */
@@ -11,6 +13,7 @@ import { localToLatLon, latLonToLocal } from '../geo/enu';
 import { createScene, type DepthMode, type SceneContext } from '../scene/createScene';
 import { addSiteAttribution } from '../scene/plateau/attribution';
 import { loadPlateauCatalog } from '../scene/plateau/catalog';
+import { buildingSourceFromUrl } from '../scene/plateau/bakedBuildings';
 import { PlateauCity, type PlateauCityStatus } from '../scene/plateau/stage';
 import { poseToCameraPosition, keyframeToPose } from '../story/cameraPath';
 import { SCRIPT, type ScriptScene } from '../story/content/script';
@@ -30,8 +33,10 @@ export interface CreateAppOptions {
   modules?: Record<string, SceneModuleFactory>;
   /** 深度バッファの方式。既定 'logarithmic'。 */
   depth?: DepthMode;
-  /** 建物の画面上の許容誤差(px)。既定は PlateauCity の既定値。 */
+  /** 建物の画面上の許容誤差(px)。直接読むとき（'live'）だけ。既定は PlateauCity の既定値。 */
   buildingErrorTarget?: number;
+  /** 建物の読み方。既定は URL の `?buildings=live` があれば 'live'、なければ 'baked'（変換済みのデータ）。 */
+  buildings?: 'baked' | 'live';
 }
 
 export interface AppStatus {
@@ -105,10 +110,20 @@ export async function createApp(options: CreateAppOptions): Promise<App> {
   const indicator = createLoadingIndicator(document.body);
   indicator.set(true);
 
-  const catalog = await loadPlateauCatalog();
+  const buildings = options.buildings ?? buildingSourceFromUrl();
+  const catalog = buildings === 'live' ? await loadPlateauCatalog() : undefined;
   const firstPlace = script.find((s) => s.place)?.place;
   if (!firstPlace) throw new Error('台本に場所がありません');
-  const city = new PlateauCity({ scene, camera, renderer, catalog, focus: firstPlace, errorTarget: options.buildingErrorTarget });
+  const city = new PlateauCity({
+    scene,
+    camera,
+    renderer,
+    catalog,
+    buildings,
+    lookAt: () => controls.target,
+    focus: firstPlace,
+    errorTarget: options.buildingErrorTarget,
+  });
   const elevation = new ElevationCache(city.ground.elevation);
 
   // 場面の注視点と（低い場面は）カメラの位置の標高を先に読む。キーフレームはこの標高で決まる。

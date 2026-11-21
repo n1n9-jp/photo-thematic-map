@@ -13,10 +13,11 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "test": "vitest run",
-    "test:e2e": "npm run build && playwright test",
+    "test:e2e": "npm run data:buildings && npm run build && playwright test",
     "data:bicycles": "node scripts/data/build-bicycles.ts",
     "data:plateau": "node --use-env-proxy scripts/plateau/build-catalog.ts",
     "data:grids": "node --import ./scripts/bake/register.ts scripts/bake/index.ts",
+    "data:buildings": "node --import ./scripts/bake/register.ts scripts/bake/buildings.ts",
     "data:grids:pile": "node --experimental-transform-types --no-warnings=ExperimentalWarning --import ./scripts/bake/register.ts scripts/bake/pileTrial.ts"
   },
   "dependencies": {

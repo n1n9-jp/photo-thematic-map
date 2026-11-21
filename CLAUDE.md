@@ -16,8 +16,9 @@ Vite + TypeScript(strict) / three@0.187.0 / 3d-tiles-renderer@0.5.4 / vitest / e
 | `npm run typecheck` | `tsc --noEmit` |
 | `npm run lint` | eslint |
 | `npm test` | vitest（`tests/unit/`） |
-| `npm run test:e2e` | ビルド → preview 起動 → Playwright（`tests/e2e/`）。スクリーンショットは `screenshots/`（Playwright の `outputDir` である `test-results/` は実行開始時に消去されるため別にしている） |
+| `npm run test:e2e` | 建物の事前変換（`data:buildings`）→ ビルド → preview 起動 → Playwright（`tests/e2e/`）。スクリーンショットは `screenshots/`（Playwright の `outputDir` である `test-results/` は実行開始時に消去されるため別にしている） |
 | `npm run data:plateau` | PLATEAU データカタログから23区の建物 3D Tiles の URL を `public/data/plateau/tilesets.json` に書き出す |
+| `npm run data:buildings` | 建物の事前変換。台本のカメラが巡る3か所の PLATEAU の建物・橋梁を、本編の座標の軽いチャンクにして `public/data/buildings/`（Git の管理外）に書き出す。入力（変換のコード・設定・台本のカメラ）が変わっていなければ何もしない。`-- --force` で作り直す。初回は PLATEAU からタイル（約5GB、数分）を取り `node_modules/.cache/ptm-bake/` にキャッシュする。`scripts/deploy/gh-pages.sh` と `test:e2e` が先に実行する |
 | `npm run data:bicycles` | 放置自転車の統計から `public/data/bicycles/*.json` を作る（原本の取得方法は `data/raw/bicycles/SOURCES.md`） |
 
 E2E は `/opt/pw-browsers/chromium` を使う。preview サーバーのポートは環境変数 `E2E_PORT`（既定 4173）で変えられ、既存のサーバーは再利用しない。別の場所の Chrome を使うときは環境変数 `CHROMIUM_PATH` で指定する。ヘッドレス WebGL は SwiftShader のソフトウェア描画（起動オプションは `playwright.config.ts`）。
@@ -25,12 +26,13 @@ E2E は `/opt/pw-browsers/chromium` を使う。preview サーバーのポート
 ## ディレクトリ構成
 
 - `src/scene/` 描画（renderer・シーン・カメラ・PLATEAU 表示）
-  - `src/scene/plateau/` PLATEAU の街並み。`stage.ts`（舞台一式）、`buildings.ts`（建物 3D Tiles）、`ground.ts`（航空写真の地面）、`elevation.ts`（標高）、`catalog.ts`（tileset 一覧）、`attribution.ts`（出典表示）、`tileFetch.ts`（タイル取得の再試行と失敗の集計）、`budget.ts`（端末に合わせたメモリの上限）
+  - `src/scene/plateau/` PLATEAU の街並み。`stage.ts`（舞台一式）、`bakedBuildings.ts`（変換済みの建物。本編の既定）、`buildings.ts`（建物 3D Tiles を直接読む。確認ページ demos/plateau と本編の `?buildings=live`）、`ground.ts`（航空写真の地面）、`elevation.ts`（標高）、`catalog.ts`（tileset 一覧）、`attribution.ts`（出典表示）、`tileFetch.ts`（タイル取得の再試行と失敗の集計）、`budget.ts`（端末に合わせたメモリの上限）
+- `src/data/` 生成データの形式と読み込み（`grids.ts` 街の高さ格子、`buildings.ts` 変換済みの建物のチャンク）
 - `src/geo/` 座標変換（`enu.ts`）
 - `src/sim/` 堆積計算（描画に依存しない純粋ロジック）
 - `src/story/` スクロール連動
 - `src/config.ts` 共有定数（座標原点など）
-- `scripts/` データ取得スクリプト（Node 実行。成果物は `public/` 等へ出力）
+- `scripts/` データ取得スクリプト（Node 実行。成果物は `public/` 等へ出力）。`scripts/bake/` は PLATEAU のタイルの取得・復号（`tiles.ts`・`cache.ts`）と、街の高さ格子（`index.ts`）・建物の事前変換（`buildings.ts`）
 - `tests/unit/` vitest、`tests/e2e/` Playwright
 - `public/` 静的アセット
 

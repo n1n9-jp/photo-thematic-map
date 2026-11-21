@@ -1,9 +1,12 @@
 /**
  * PLATEAU の街並み（建物 3D Tiles ＋ 航空写真の地面）を表示する舞台一式。
  *
- * - `PlateauCity`: 既存のシーンに足す街並み。建物は LOD2 テクスチャなし（lod2_no_texture）だけを読み、白で描く
- *   （写真テクスチャは使わない）。詳細度は画面上の誤差で選ぶので、遠くの建物は粗いタイルで済む。
- *   `setFocus()` で読み込む区を差し替えられる（本編はカメラの注視点＝場面の場所に合わせて切り替える）。
+ * - `PlateauCity`: 既存のシーンに足す街並み。建物は白で描く（写真テクスチャは使わない）。建物の読み方は 2 つ:
+ *   - `buildings: 'baked'`（本編の既定）: 変換済みの建物（`public/data/buildings/`。`npm run data:buildings`）を
+ *     `BakedBuildings` で読む。カメラの位置に応じて必要なチャンクだけを読む。
+ *   - `buildings: 'live'`（既定。確認ページ demos/plateau と、本編の `?buildings=live`）: PLATEAU の配信サーバーから
+ *     LOD2 テクスチャなし（lod2_no_texture）の 3D Tiles を直接読む。詳細度は画面上の誤差で選ぶので、遠くの建物は粗いタイルで済む。
+ *     `setFocus()` で読み込む区を差し替えられる（本編はカメラの注視点＝場面の場所に合わせて切り替える）。
  *   地面の半径と建物の表示はカメラの高さに合わせて変える（高さ 28km の俯瞰では建物を描かず、地面を23区全体に敷く）。
  * - `createPlateauStage`: renderer・カメラ・OrbitControls まで含めた単独の舞台（確認ページ demos/plateau 用）。
  */
@@ -20,6 +23,7 @@ import { DRACO_GLTF_CONFIG, DRACOLoader } from 'three/examples/jsm/loaders/DRACO
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { latLonToLocal } from '../../geo/enu';
 import { addAttribution } from './attribution';
+import { BakedBuildings, type BakedBuildingsStats } from './bakedBuildings';
 import { PlateauBuildings, createBuildingLruCache } from './buildings';
 import { loadPlateauCatalog, selectTilesets } from './catalog';
 import type { PlateauCatalog } from './catalog';
@@ -37,8 +41,13 @@ export interface PlateauCityOptions {
   scene: Scene;
   camera: PerspectiveCamera;
   renderer: WebGLRenderer;
-  catalog: PlateauCatalog;
+  /** PLATEAU の tileset 一覧。`buildings: 'live'` のときに要る。 */
+  catalog?: PlateauCatalog;
   focus: PlateauFocus;
+  /** 建物の読み方。'baked' は変換済みのデータ、'live' は PLATEAU から直接。既定 'live'。 */
+  buildings?: 'baked' | 'live';
+  /** 'baked' のとき、この点（注視点）の周りも詳細にする。 */
+  lookAt?: () => { x: number; z: number } | null;
   /** 建物の画面上の許容誤差(px)。大きいほど読む量が減る。既定 24。 */
   errorTarget?: number;
   /** カメラの高さ（ローカル Y）がこれを超えると建物を描かず、読み込みもしない(m)。既定 7000。 */
@@ -79,8 +88,12 @@ function sameFocus(a: ResolvedFocus, b: ResolvedFocus): boolean {
 
 export interface PlateauCityStatus {
   focus: ResolvedFocus;
-  /** 読み込んでいる区の数。 */
+  /** 建物の読み方。 */
+  buildingSource: 'baked' | 'live';
+  /** 読み込んでいる区の数（'live'）。 */
   wards: number;
+  /** 変換済みの建物の状態（'baked'）。 */
+  baked: BakedBuildingsStats | null;
   buildingsVisible: boolean;
   buildingsLoading: boolean;
   groundLoading: boolean;
@@ -99,6 +112,8 @@ export class PlateauCity {
   private readonly lruCache = createBuildingLruCache();
   /** tileset の URL（区）ごとの層。 */
   private readonly layers = new Map<string, PlateauBuildings>();
+  /** 変換済みの建物（'baked'）。 */
+  private readonly baked: BakedBuildings | null = null;
   private current: ResolvedFocus;
   private quietFrames = 0;
   private wasVisible: boolean | null = null;
@@ -114,8 +129,20 @@ export class PlateauCity {
     });
     options.scene.add(this.ground.group);
     this.current = resolveFocus(options.focus);
-    this.applyFocus(this.current);
-    this.ready = Promise.all([this.ground.ready, ...[...this.layers.values()].map((l) => l.ready)]).then(() => undefined);
+    if (options.buildings === 'baked') {
+      const camera = options.camera;
+      this.baked = new BakedBuildings({
+        camera,
+        lookAt: options.lookAt,
+        maxDistanceM: () => bakedBuildingsMaxDistanceForHeight(camera.position.y),
+      });
+      this.baked.group.visible = this.buildingsVisible;
+      options.scene.add(this.baked.group);
+    } else {
+      if (!options.catalog) throw new Error('PlateauCity: buildings が live のときは catalog が要ります');
+      this.applyFocus(this.current);
+    }
+    this.ready = Promise.all([this.ground.ready, ...[...this.layers.values()].map((l) => l.ready), this.baked?.ready]).then(() => undefined);
   }
 
   /** 今の場所。 */
@@ -128,7 +155,7 @@ export class PlateauCity {
     const next = resolveFocus(focus);
     if (sameFocus(next, this.current)) return false;
     this.current = next;
-    this.applyFocus(next);
+    if (!this.baked) this.applyFocus(next);
     this.quietFrames = 0;
     return true;
   }
@@ -144,6 +171,10 @@ export class PlateauCity {
     for (const layer of this.layers.values()) {
       layer.group.visible = visible;
       if (visible) layer.update();
+    }
+    if (this.baked) {
+      this.baked.group.visible = visible;
+      if (visible) this.baked.update();
     }
     if (visible !== this.wasVisible) this.quietFrames = 0;
     this.wasVisible = visible;
@@ -167,7 +198,7 @@ export class PlateauCity {
 
   /** 取得できなかったタイルの数（建物・航空写真・標高）。 */
   get failedTileCount(): { buildings: number; ground: number; elevation: number } {
-    let buildings = 0;
+    let buildings = this.baked?.failedCount ?? 0;
     for (const layer of this.layers.values()) buildings += layer.failedTileCount;
     return { buildings, ground: this.ground.failedTileCount, elevation: this.ground.failedElevationTileCount };
   }
@@ -183,7 +214,9 @@ export class PlateauCity {
     const visible = this.buildingsVisible;
     return {
       focus: this.current,
+      buildingSource: this.baked ? 'baked' : 'live',
       wards: this.layers.size,
+      baked: this.baked?.stats() ?? null,
       buildingsVisible: visible,
       buildingsLoading: visible && this.buildingsLoading,
       groundLoading: this.ground.isLoading,
@@ -195,6 +228,7 @@ export class PlateauCity {
   dispose(): void {
     for (const layer of this.layers.values()) layer.dispose();
     this.layers.clear();
+    this.baked?.dispose();
     this.ground.dispose();
     this.draco.dispose();
   }
@@ -205,11 +239,17 @@ export class PlateauCity {
 
   private get buildingsLoading(): boolean {
     for (const layer of this.layers.values()) if (layer.isLoading) return true;
-    return false;
+    return this.baked?.isLoading ?? false;
+  }
+
+  /** 変換済みの建物の層（'baked' のとき）。 */
+  get bakedBuildings(): BakedBuildings | null {
+    return this.baked;
   }
 
   private applyFocus(f: ResolvedFocus): void {
     const { catalog, camera, renderer, scene } = this.options;
+    if (!catalog) return;
     const urls = selectTilesets(catalog, f.lat, f.lon, f.radiusM, 'lod2_no_texture');
     const wanted = new Set(urls);
     for (const [url, layer] of this.layers) {
@@ -242,6 +282,16 @@ export class PlateauCity {
 export function buildingsMaxDistanceForHeight(heightM: number): number {
   const { near, far } = fogRangeForHeight(heightM);
   return near + (far - near) * 0.35;
+}
+
+/**
+ * 変換済みの建物（'baked'）の遠景を読む距離の上限(m)。霧が 6 割掛かる距離（地上で約 4.2km）。
+ * 遠景は高い建物の箱だけで軽いので、直接読む経路（{@link buildingsMaxDistanceForHeight}）より遠くまで読み、
+ * 地平線の近くまで街並みが続いて見えるようにする。変換した範囲（manifest の levels.far.viewDistanceM）でも制限される。
+ */
+export function bakedBuildingsMaxDistanceForHeight(heightM: number): number {
+  const { near, far } = fogRangeForHeight(heightM);
+  return near + (far - near) * 0.6;
 }
 
 /** カメラの高さ(m)に合わせた霧の範囲。俯瞰でも街が霞みすぎず、地平線の近くでは地面の端を隠す。 */
