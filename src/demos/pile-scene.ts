@@ -85,7 +85,9 @@ const pilePromise = createPileScene({
     if (infoEl) infoEl.textContent = `山を計算中… ${p.phase} ${Math.round(p.fraction * 100)}%`;
   },
 });
-const stagePromise = createPlateauStage({ container, center: { lat: trial.lat, lon: trial.lon }, detailRadiusM: siteName === 'shinjuku' ? 400 : 300 });
+// 建物は写真テクスチャを使わず白くする（テクスチャ付きの層の半径を 0 にして、すべてテクスチャなしの層で読む）。
+// 近景で建物が粗くならないよう、外側の許容誤差を既定（32px）より細かくする。
+const stagePromise = createPlateauStage({ container, center: { lat: trial.lat, lon: trial.lon }, detailRadiusM: 0, outerErrorTarget: viewName === 'wide' ? 24 : 12 });
 const [pile, stage] = await Promise.all([pilePromise, stagePromise]);
 const wallMs = performance.now() - tStart;
 void computeProgress;

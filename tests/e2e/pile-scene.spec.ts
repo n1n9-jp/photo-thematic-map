@@ -1,7 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 
 // PLATEAU のタイルをネットワークから読み、数十万台の自転車をソフトウェア描画で描くので、十分に待つ
-test.describe.configure({ timeout: 600_000 });
+test.describe.configure({ timeout: 1_200_000 });
 
 const SHOTS = [
   { site: 'marunouchi', view: 'wide', t: 1 },
@@ -27,7 +27,7 @@ for (const shot of SHOTS) {
   test(`山の場面: ${shot.site} ${shot.view} t=${shot.t}`, async ({ page }) => {
     const errors = collectErrors(page);
     await page.goto(`/demos/pile-scene.html?site=${shot.site}&view=${shot.view}&t=${shot.t}`);
-    await page.waitForFunction(() => window.__APP_READY__ === true, undefined, { timeout: 480_000 });
+    await page.waitForFunction(() => window.__APP_READY__ === true, undefined, { timeout: 900_000 });
     await expect(page.locator('canvas')).toHaveCount(1);
     await expect(page.locator('.ptm-attribution')).toContainText('出典：国土交通省 Project PLATEAU');
     // 描画が落ち着くまで待つ
