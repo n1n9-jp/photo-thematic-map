@@ -66,7 +66,9 @@ export const FACTS = {
   wardsShare: fact(94, '％', SOURCES.full, { note: '23区の駅の放置自転車が全体に占める割合' }),
   totalInflow: fact(545_983, '台', SOURCES.summary),
   totalParkedRate: fact(2.5, '％', SOURCES.summary, { fractionDigits: 1 }),
-  stationsVacancyExceeds: fact(425, '駅', `${CALC}（駅別の表の収容能力 − 実収容台数 と放置台数の比較）`),
+  stationsVacancyExceeds: fact(425, '駅', `${CALC}（駅別の表の収容能力 − 実収容台数 と放置台数の比較）`, {
+    note: '駅別の表の行の単位。放置自転車が1台以上ある530行のうち、収容能力 − 実収容台数 ≧ 放置台数 の行。柱は同じ場所の行をまとめた489か所で、その単位では398か所（単体テストで固定）',
+  }),
   parkingLots: fact(2_943, 'か所', SOURCES.summary),
   parkingCapacity: fact(897_461, '台', SOURCES.summary),
   parkingOccupancy: fact(549_491, '台', SOURCES.summary),

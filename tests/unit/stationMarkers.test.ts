@@ -65,7 +65,7 @@ describe('aggregateStationSites（stations.json）', () => {
     const tokyo = sites.filter((s) => s.stationNames.includes('東京'));
     expect(tokyo).toHaveLength(1);
     expect(tokyo[0]!.bicycles).toBe(151);
-    expect(tokyo[0]!.shortName).toBe('東京ほか');
+    expect(tokyo[0]!.shortName).toBe('東京・大手町ほか');
     const stadium = sites.filter((s) => s.stationNames.includes('国立競技場'));
     expect(stadium).toHaveLength(1);
     expect(stadium[0]!.bicycles).toBe(30);
@@ -123,7 +123,18 @@ describe('aggregateStationSites（小さな入力）', () => {
   });
 
   it('mergeNearbySites は全体が0台でも位置を求められる', () => {
-    const a: StationSite = { name: 'a', shortName: 'a', municipality: 'x', lat: 35.7, lon: 139.7, bicycles: 0, stationNames: ['A'] };
+    const a: StationSite = {
+      name: 'a',
+      shortName: 'a',
+      municipality: 'x',
+      lat: 35.7,
+      lon: 139.7,
+      bicycles: 0,
+      capacity: 0,
+      occupancy: 0,
+      vacancyCoversParked: true,
+      stationNames: ['A'],
+    };
     const b: StationSite = { ...a, name: 'b', lat: 35.7, lon: 139.7006 };
     const [m] = mergeNearbySites([a, b], 300);
     expect(m!.lon).toBeCloseTo(139.7003, 9);
@@ -131,11 +142,11 @@ describe('aggregateStationSites（小さな入力）', () => {
 });
 
 describe('印の大きさ', () => {
-  it('柱: 高さは台数に比例し、1km＝100台', () => {
-    expect(COLUMN_BICYCLES_PER_KM).toBe(100);
-    expect(markerSize('column', 100).height).toBeCloseTo(1000, 9);
-    expect(markerSize('column', 462).height).toBeCloseTo(4620, 9);
-    expect(markerSize('column', 1).height).toBeCloseTo(10, 9);
+  it('柱: 高さは台数に比例し、1km＝50台', () => {
+    expect(COLUMN_BICYCLES_PER_KM).toBe(50);
+    expect(markerSize('column', 50).height).toBeCloseTo(1000, 9);
+    expect(markerSize('column', 462).height).toBeCloseTo(9240, 9);
+    expect(markerSize('column', 1).height).toBeCloseTo(20, 9);
     expect(markerSize('column', 50).radius).toBe(markerSize('column', 400).radius);
   });
 
@@ -152,7 +163,7 @@ describe('印の大きさ', () => {
   });
 
   it('凡例の文言は定数から作る', () => {
-    expect(markerScaleText('column')).toBe('柱の高さ 1km ＝ 100台');
+    expect(markerScaleText('column')).toBe('柱の高さ 1km ＝ 50台');
     expect(markerScaleText('cone')).toContain('山の体積 1km³ ＝ 500台');
   });
 });
@@ -221,6 +232,19 @@ describe('layoutLabels', () => {
     const [p] = layoutLabels([{ id: 'a', ax: 200, ay: 300, w: 60, h: 28 }], viewport);
     expect(p!.leader).toBe(false);
     expect(Math.hypot(p!.x - 200, p!.y + p!.h / 2 - 300)).toBeLessThan(60);
+  });
+
+  it('bounds を指定すると、ラベルはその範囲の外に出ない', () => {
+    const bounds: Rect = { x: 200, y: 0, w: 190, h: 300 };
+    const requests: LabelRequest[] = Array.from({ length: 6 }, (_, i) => ({ id: String(i), ax: 260 + i * 20, ay: 120 + i * 20, w: 70, h: 30 }));
+    const placed = layoutLabels(requests, viewport, [], { bounds });
+    expect(placed.length).toBeGreaterThan(0);
+    for (const p of placed) {
+      expect(p.x).toBeGreaterThanOrEqual(bounds.x);
+      expect(p.y).toBeGreaterThanOrEqual(bounds.y);
+      expect(p.x + p.w).toBeLessThanOrEqual(bounds.x + bounds.w);
+      expect(p.y + p.h).toBeLessThanOrEqual(bounds.y + bounds.h);
+    }
   });
 
   it('置き場がなければ出さない（重ねない）', () => {

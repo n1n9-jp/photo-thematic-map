@@ -222,3 +222,190 @@ test('PC 幅で、場面5・6の注視点がカードの列の右側にあり、
   }
   expect(errors).toEqual([]);
 });
+
+// ---------------------------------------------------------------------------
+// 場面3・4（都内の駅ごとの放置自転車。489か所の柱）
+// ---------------------------------------------------------------------------
+
+interface Box {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+const hit = (a: Box, b: Box): boolean => a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
+
+/** 場面 i の、進捗が「カメラが止まっている区間 × frac」の位置へスクロールし、描画が落ち着くのを待つ。 */
+async function goToStationScene(page: Page, i: number, frac: number): Promise<void> {
+  await page.evaluate(
+    ([i, frac]) => {
+      const api = window.__MAIN__!;
+      const hold = api.holds()[i!] ?? 0.4;
+      window.scrollTo({ top: api.scrollYFor(i!, hold * frac!), behavior: 'instant' });
+    },
+    [i, frac],
+  );
+  await expect.poll(() => page.evaluate(() => window.__MAIN__!.getState().stage)).toBe(i);
+  await page.waitForFunction(() => window.__MAIN__!.isSettled(), undefined, { timeout: SETTLE_TIMEOUT_MS, polling: 250 });
+  // 表示・色の切り替えのアニメーションが終わるのを待つ
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const s = window.__STATIONS_MAIN__!.read();
+        const target = s.active === 'parking-vacancy' ? 1 : 0;
+        return s.visibility === 1 && s.colorBlend === target;
+      }),
+    )
+    .toBe(true);
+  await page.waitForFunction(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => r(true)))));
+}
+
+/** いま画面に出ているラベルと凡例の長方形。 */
+async function overlayBoxes(page: Page): Promise<{ labels: { name: string; box: Box }[]; legend: Box }> {
+  return page.evaluate(() => {
+    const labels: { name: string; box: Box }[] = [];
+    for (const el of document.querySelectorAll<HTMLElement>('.sm-label')) {
+      if (getComputedStyle(el).display === 'none') continue;
+      const r = el.getBoundingClientRect();
+      labels.push({ name: el.querySelector('.sm-label-name')!.textContent ?? '', box: { x: r.x, y: r.y, width: r.width, height: r.height } });
+    }
+    const l = document.querySelector('.sm-legend')!.getBoundingClientRect();
+    return { labels, legend: { x: l.x, y: l.y, width: l.width, height: l.height } };
+  });
+}
+
+/** ラベルと凡例が、画面内で、互いに・見えている本文カードに重ならず、出典表示にも重ならない。ラベルの数を返す。 */
+async function expectOverlayClear(page: Page, viewport: { width: number; height: number }): Promise<number> {
+  const { labels, legend } = await overlayBoxes(page);
+  const cards = await visibleCards(page);
+  const attribution = (await page.locator('.ptm-site-attribution').boundingBox())!;
+  const covers: Box[] = [...cards, attribution];
+  const all = [...labels.map((l) => l.box), legend];
+  for (const b of all) {
+    expect(b.x).toBeGreaterThanOrEqual(0);
+    expect(b.y).toBeGreaterThanOrEqual(0);
+    expect(b.x + b.width).toBeLessThanOrEqual(viewport.width);
+    expect(b.y + b.height).toBeLessThanOrEqual(viewport.height);
+    for (const c of covers) expect(hit(b, c), `重なり ${JSON.stringify(b)} と ${JSON.stringify(c)}`).toBe(false);
+  }
+  for (let i = 0; i < labels.length; i++) {
+    expect(hit(labels[i]!.box, legend)).toBe(false);
+    for (let j = i + 1; j < labels.length; j++) expect(hit(labels[i]!.box, labels[j]!.box)).toBe(false);
+  }
+  return labels.length;
+}
+
+const LEGEND_SCALE = '柱の高さ 1km ＝ 50台';
+const LEGEND_SURVEY = '2025年10月、晴天の平日の午前11時頃に数えた台数';
+
+test('場面3・4（PC 幅）: 柱が伸びて489か所・合計13,394台が立ち、場面4で色分けが切り替わり、場面を離れると消える', async ({ page }) => {
+  const errors = collectErrors(page);
+  await open(page);
+  const read = (): Promise<{ sites: number; total: number; growth: number; visibility: number; colorBlend: number; active: string | null; labels: number }> =>
+    page.evaluate(() => window.__STATIONS_MAIN__!.read());
+
+  // 場面3: 進捗に合わせて柱が伸びている途中（ラベルはまだ出ない）
+  await goToStationScene(page, 2, 0.04);
+  const early = await read();
+  expect(early.growth).toBeLessThan(0.1);
+  await goToStationScene(page, 2, 0.3);
+  const growing = await read();
+  expect(growing.sites).toBe(489);
+  expect(growing.total).toBe(13_394);
+  expect(growing.growth).toBeGreaterThan(0.2);
+  expect(growing.growth).toBeLessThan(0.8);
+  expect(growing.growth).toBeGreaterThan(early.growth);
+  await page.screenshot({ path: 'screenshots/main-3-growing.png' });
+
+  // カメラが止まっている区間の中で、伸びきる
+  await goToStationScene(page, 2, 0.8);
+  const grown = await read();
+  expect(grown.growth).toBe(1);
+  expect(grown.active).toBe('tokyo-13394');
+  const legend = page.locator('.sm-legend');
+  await expect(legend).toContainText('合計 13,394台（489か所）');
+  await expect(legend).toContainText(LEGEND_SURVEY);
+  await expect(page.locator('.sm-legend-scale')).toHaveText(LEGEND_SCALE);
+  await expect(page.locator('.sm-legend-steps:not(.sm-legend-vacancy)')).toBeVisible();
+  await expect(page.locator('.sm-legend-vacancy')).toBeHidden();
+  const vp = { width: 1280, height: 720 };
+  const labelCount = await expectOverlayClear(page, vp);
+  expect(labelCount).toBeGreaterThanOrEqual(8);
+  const { labels } = await overlayBoxes(page);
+  expect(labels.map((l) => l.name)).toContain('秋葉原');
+  expect(labels.map((l) => l.name)).toContain('東京・大手町ほか');
+  // ラベルは本文カードの列の右側（カードに覆われていない範囲）にある
+  const columnRight = Math.max(...(await page.evaluate(() => [...document.querySelectorAll('.story-card')].map((c) => c.getBoundingClientRect().right))));
+  for (const l of labels) expect(l.box.x).toBeGreaterThan(columnRight);
+  expect((await overlayBoxes(page)).legend.x).toBeGreaterThan(columnRight);
+  await page.screenshot({ path: 'screenshots/main-3.png' });
+
+  // 場面4: 柱は伸びきったまま、色分けが「空きが放置台数以上／未満」に切り替わる
+  await goToStationScene(page, 3, 0.5);
+  const vacancy = await read();
+  expect(vacancy).toMatchObject({ sites: 489, total: 13_394, growth: 1, colorBlend: 1, active: 'parking-vacancy' });
+  await expect(page.locator('.sm-legend-vacancy')).toBeVisible();
+  await expect(page.locator('.sm-legend-vacancy')).toContainText('駐輪場の空きが放置台数以上');
+  await expect(page.locator('.sm-legend-vacancy')).toContainText('駐輪場の空きが放置台数未満');
+  await expect(page.locator('.sm-legend-steps:not(.sm-legend-vacancy)')).toBeHidden();
+  await expect(legend).toContainText('合計 13,394台（489か所）');
+  await expect(legend).toContainText(LEGEND_SURVEY);
+  expect(await expectOverlayClear(page, vp)).toBeGreaterThanOrEqual(8);
+  await page.screenshot({ path: 'screenshots/main-4.png' });
+
+  // 場面4から場面3へ戻っても、柱は伸びきったまま（色は台数の段階に戻る）
+  await goToStationScene(page, 2, 0.8);
+  expect(await read()).toMatchObject({ growth: 1, colorBlend: 0, active: 'tokyo-13394' });
+
+  // 場面を離れる（場面2へ戻る）と、柱・ラベル・凡例は消える
+  await page.evaluate(() => window.scrollTo({ top: window.__MAIN__!.scrollYFor(1, 0.3), behavior: 'instant' }));
+  await expect.poll(async () => (await read()).visibility, { timeout: 15_000 }).toBe(0);
+  await expect(legend).toBeHidden();
+  expect(errors).toEqual([]);
+});
+
+test('場面3・4（スマートフォン幅 390×844）: ラベルは上位5か所以内で、凡例とともに画面の上側に収まり、本文カードと重ならない', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const errors = collectErrors(page);
+  await open(page);
+  const vp = { width: 390, height: 844 };
+
+  for (const [i, file] of [
+    [2, 'screenshots/main-mobile-3.png'],
+    [3, 'screenshots/main-mobile-4.png'],
+  ] as const) {
+    // カードが出ている位置を含む複数の位置で、ラベル・凡例がカードに重ならない
+    for (const frac of [0.01, 0.4, 0.95]) {
+      await goToStationScene(page, i, frac);
+      const n = await expectOverlayClear(page, vp);
+      expect(n).toBeLessThanOrEqual(5);
+      const { labels, legend } = await overlayBoxes(page);
+      // 凡例は画面の上側の隅に小さく置かれる
+      expect(legend.y).toBeLessThan(40);
+      expect(legend.x).toBeLessThan(20);
+      expect(legend.width).toBeLessThan(260);
+      expect(legend.y + legend.height).toBeLessThan(844 / 2);
+      for (const l of labels) expect(l.box.y + l.box.height).toBeLessThan(844 / 2 + 40);
+    }
+    // 柱が伸びきっていて、本文カードも出ている位置（カードとカードのあいだは何も出ない）でスクリーンショットを撮る
+    let withCard = false;
+    for (const frac of [0.62, 0.64, 0.88, 0.9, 0.6, 0.32]) {
+      await goToStationScene(page, i, frac);
+      const growth = await page.evaluate(() => window.__STATIONS_MAIN__!.read().growth);
+      if (growth === 1 && (await visibleCards(page)).length > 0) {
+        withCard = true;
+        break;
+      }
+    }
+    expect(withCard).toBe(true);
+    const s = await page.evaluate(() => window.__STATIONS_MAIN__!.read());
+    expect(s).toMatchObject({ sites: 489, total: 13_394, growth: 1 });
+    expect(await expectOverlayClear(page, vp)).toBeGreaterThanOrEqual(3);
+    await expect(page.locator('.sm-legend')).toContainText('合計 13,394台（489か所）');
+    await expect(page.locator('.sm-legend')).toContainText(LEGEND_SURVEY);
+    await expect(page.locator('.sm-legend-scale')).toHaveText(LEGEND_SCALE);
+    await page.screenshot({ path: file });
+  }
+  expect(errors).toEqual([]);
+});

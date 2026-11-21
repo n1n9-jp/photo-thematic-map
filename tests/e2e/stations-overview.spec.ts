@@ -60,7 +60,7 @@ for (const shot of SHOTS) {
     expect(await expectLabelsReadable(page)).toBeGreaterThanOrEqual(8);
     await expect(page.locator('.sm-legend')).toContainText('合計 13,394台');
     await expect(page.locator('.sm-legend')).toContainText('2025年10月、晴天の平日の午前11時頃に数えた台数');
-    await expect(page.locator('.sm-legend-scale')).toContainText(shot.shape === 'column' ? '柱の高さ 1km ＝ 100台' : '山の体積 1km³ ＝ 500台');
+    await expect(page.locator('.sm-legend-scale')).toContainText(shot.shape === 'column' ? '柱の高さ 1km ＝ 50台' : '山の体積 1km³ ＝ 500台');
     if (shot.view === 'wards') {
       expect(result.cameraHeight).toBeGreaterThan(20_000);
       expect(result.cameraHeight).toBeLessThan(40_000);

@@ -13,6 +13,8 @@
  *
  * 色は台数の段階（`COLOR_STEPS`）で決める。少ない駅は淡い黄、多い駅は濃い赤。
  * 全体の表示は `setVisibility(0〜1)` で滑らかに切り替えられる（場面の切り替えのフェード用）。
+ * 柱の伸び（`setGrowth(0〜1)`）と、色の切り替え（`setColorBlend(0〜1)`: 0 は台数の段階、1 は駐輪場の空きの有無）も
+ * 外から動かせる（本編の場面3・4）。
  *
  * ラベルと凡例は DOM で重ねる（`mountOverlay`）。ラベルは台数の多い上位の駅に付け、
  * 画面上で重ならない位置を `layoutLabels` が決める（画面外の駅は数えず、画面内の上位から選ぶ）。
@@ -31,6 +33,7 @@ import {
 } from 'three';
 import type { StationSite } from '../data/stations';
 import { latLonToLocal } from '../geo/enu';
+import { smoothstep } from '../story/cameraPath';
 
 export type MarkerShape = 'column' | 'cone';
 
@@ -39,9 +42,9 @@ export type MarkerShape = 'column' | 'cone';
 // ---------------------------------------------------------------------------
 
 /** 柱: 高さ 1km あたりの台数。柱の高さ(m) = 台数 / COLUMN_BICYCLES_PER_KM × 1000。 */
-export const COLUMN_BICYCLES_PER_KM = 100;
+export const COLUMN_BICYCLES_PER_KM = 50;
 /** 柱の半径(m)。台数によらず一定（遠くからでも点として見えるように、高さに比べて太め）。 */
-export const COLUMN_RADIUS_M = 110;
+export const COLUMN_RADIUS_M = 140;
 
 /** 山: 体積 1km³ あたりの台数。円錐の体積(m³) = 台数 / CONE_BICYCLES_PER_KM3 × 1e9。 */
 export const CONE_BICYCLES_PER_KM3 = 500;
@@ -102,6 +105,18 @@ export const COLOR_STEPS: readonly ColorStep[] = [
   { min: 200, max: null, color: 0x6a1b9a, label: '200以上' },
 ];
 
+/** 駐輪場の空きで色分けするときの色。空きが放置台数以上の駅は青、未満の駅は橙。 */
+export const VACANCY_COLORS = { enough: 0x2f8cff, short: 0xff5a1f } as const;
+
+/** 色分けの凡例（駐輪場の空き）。 */
+export const VACANCY_LEGEND: readonly { color: number; label: string }[] = [
+  { color: VACANCY_COLORS.enough, label: '駐輪場の空きが放置台数以上' },
+  { color: VACANCY_COLORS.short, label: '駐輪場の空きが放置台数未満' },
+];
+
+/** 凡例の色の意味。count: 台数の段階、vacancy: 駐輪場の空きの有無。 */
+export type ColorMode = 'count' | 'vacancy';
+
 /** 台数が入る色の段階の番号。 */
 export function colorStepIndex(bicycles: number): number {
   for (let i = COLOR_STEPS.length - 1; i >= 0; i--) {
@@ -146,6 +161,8 @@ export interface LayoutOptions {
   gap?: number;
   /** 印からラベルまでの距離の候補(px)。近い順。 */
   distances?: readonly number[];
+  /** ラベルを置ける範囲。省略時は画面全体（`viewport`）。 */
+  bounds?: Rect;
 }
 
 const DEFAULT_DISTANCES = [8, 26, 50, 78, 110, 150, 200];
@@ -166,6 +183,7 @@ export function layoutLabels(
   const margin = options.margin ?? 4;
   const gap = options.gap ?? 3;
   const distances = options.distances ?? DEFAULT_DISTANCES;
+  const bounds: Rect = options.bounds ?? { x: 0, y: 0, w: viewport.width, h: viewport.height };
   const keepOut: Rect[] = [
     ...obstacles,
     ...requests.map((r) => ({ x: r.ax - 3, y: r.ay - 3, w: 6, h: 6 })),
@@ -188,7 +206,7 @@ export function layoutLabels(
       ];
       let found: PlacedLabel | undefined;
       for (const [x, y] of candidates) {
-        if (x < margin || y < margin || x + w > viewport.width - margin || y + h > viewport.height - margin) continue;
+        if (x < bounds.x + margin || y < bounds.y + margin || x + w > bounds.x + bounds.w - margin || y + h > bounds.y + bounds.h - margin) continue;
         const rect: Rect = { x, y, w, h };
         if (placed.some((p) => overlaps(rect, p, gap))) continue;
         if (keepOut.some((o) => overlaps(rect, o, gap))) continue;
@@ -220,9 +238,24 @@ export interface StationMarkersOptions {
   topLabels?: number;
 }
 
+/** ラベルと凡例を置く範囲（`container` 左上が原点の px）。 */
+export interface OverlayLayout {
+  /** ラベルを置ける範囲。凡例もこの範囲の隅に置く。 */
+  region: Rect;
+  /** true なら凡例を小さくして範囲の左上に置く（スマートフォン）。false なら範囲の左下。 */
+  compact: boolean;
+  /** 範囲の中でラベルを重ねたくない矩形（出典表示など）。 */
+  obstacles?: readonly Rect[];
+}
+
 export interface OverlayOptions {
   /** 凡例を出すか（既定 true）。 */
   legend?: boolean;
+  /**
+   * フレームごとに、ラベルと凡例の範囲を返す。省略時は container 全体（凡例は左下、スマートフォン幅では下端いっぱい）。
+   * null を返したフレームは前回の配置のまま。
+   */
+  layout?: () => OverlayLayout | null;
 }
 
 interface Placement {
@@ -246,7 +279,8 @@ export class StationMarkers {
   readonly sites: readonly StationSite[];
 
   private readonly mesh: InstancedMesh;
-  private readonly material = new MeshLambertMaterial({ color: 0xffffff });
+  // 遠景の霧で色が褪せないよう、霧は受けない
+  private readonly material = new MeshLambertMaterial({ color: 0xffffff, fog: false });
   private readonly geometries: Record<MarkerShape, BufferGeometry>;
   private readonly placements: Placement[];
   /** 台数の多い順の `sites` の添字。 */
@@ -254,6 +288,9 @@ export class StationMarkers {
   private readonly groundY: (lat: number, lon: number) => number;
   private shapeName: MarkerShape;
   private visibilityValue = 1;
+  private growthValue = 1;
+  private colorBlendValue = 0;
+  private legendModeValue: ColorMode = 'count';
   private topLabelCount: number;
   private overlay: Overlay | null = null;
 
@@ -274,10 +311,7 @@ export class StationMarkers {
     this.mesh.count = sites.length;
     this.mesh.frustumCulled = false;
     this.mesh.name = 'station-markers';
-    const color = new Color();
-    sites.forEach((s, i) => {
-      this.mesh.setColorAt(i, color.setHex(COLOR_STEPS[colorStepIndex(s.bicycles)]!.color));
-    });
+    this.applyColors();
     this.applyShape();
     this.object.add(this.mesh);
   }
@@ -310,17 +344,60 @@ export class StationMarkers {
     this.overlay?.setOpacity(v);
   }
 
+  get growth(): number {
+    return this.growthValue;
+  }
+
+  /** 印の伸び（0 で高さ 0、1 で台数どおりの高さ）。ラベルは伸びきる手前から現れる。 */
+  setGrowth(value: number): void {
+    const g = Math.min(1, Math.max(0, value));
+    if (g === this.growthValue) return;
+    this.growthValue = g;
+    this.applyShape();
+    this.overlay?.invalidate();
+  }
+
+  get colorBlend(): number {
+    return this.colorBlendValue;
+  }
+
+  /** 色の切り替え（0: 台数の段階、1: 駐輪場の空きが放置台数以上かどうか）。途中の値は2色の中間色。 */
+  setColorBlend(value: number): void {
+    const t = Math.min(1, Math.max(0, value));
+    if (t === this.colorBlendValue) return;
+    this.colorBlendValue = t;
+    this.applyColors();
+  }
+
+  get legendMode(): ColorMode {
+    return this.legendModeValue;
+  }
+
+  /** 凡例の色の意味を切り替える。 */
+  setLegendMode(mode: ColorMode): void {
+    if (mode === this.legendModeValue) return;
+    this.legendModeValue = mode;
+    this.overlay?.setLegendMode(mode);
+  }
+
   /** ラベルを付ける駅の数を変える。 */
   setTopLabels(count: number): void {
-    this.topLabelCount = Math.max(0, Math.floor(count));
+    const n = Math.max(0, Math.floor(count));
+    if (n === this.topLabelCount) return;
+    this.topLabelCount = n;
     this.overlay?.invalidate();
+  }
+
+  /** いま画面に出ているラベルの数（確認用）。 */
+  get visibleLabelCount(): number {
+    return this.overlay?.visibleLabelCount ?? 0;
   }
 
   /** 印の頂点（ラベルの位置）のワールド座標。`siteIndex` は `sites` の添字。 */
   anchor(siteIndex: number, target = new Vector3()): Vector3 {
     const p = this.placements[siteIndex]!;
     const { height } = markerSize(this.shapeName, this.sites[siteIndex]!.bicycles);
-    return target.set(p.x, p.y + height, p.z);
+    return target.set(p.x, p.y + height * this.growthValue, p.z);
   }
 
   /** 印の底（地表）のワールド座標。 */
@@ -332,8 +409,9 @@ export class StationMarkers {
   /** ラベルと凡例を `container` に重ねる。`container` は position が static 以外にしておく。 */
   mountOverlay(container: HTMLElement, options: OverlayOptions = {}): void {
     this.overlay?.dispose();
-    this.overlay = new Overlay(this, container, options.legend ?? true);
+    this.overlay = new Overlay(this, container, options);
     this.overlay.setOpacity(this.visibilityValue);
+    this.overlay.setLegendMode(this.legendModeValue);
   }
 
   /**
@@ -365,13 +443,28 @@ export class StationMarkers {
 
   private applyShape(): void {
     const m = new Matrix4();
+    const g = Math.max(this.growthValue, 1e-4);
     this.sites.forEach((s, i) => {
       const p = this.placements[i]!;
       const { height, radius } = markerSize(this.shapeName, s.bicycles);
-      m.makeScale(radius, height, radius).setPosition(p.x, p.y, p.z);
+      m.makeScale(radius, height * g, radius).setPosition(p.x, p.y, p.z);
       this.mesh.setMatrixAt(i, m);
     });
     this.mesh.instanceMatrix.needsUpdate = true;
+  }
+
+  private applyColors(): void {
+    const byCount = new Color();
+    const byVacancy = new Color();
+    this.sites.forEach((s, i) => {
+      byCount.setHex(COLOR_STEPS[colorStepIndex(s.bicycles)]!.color);
+      if (this.colorBlendValue > 0) {
+        byVacancy.setHex(s.vacancyCoversParked ? VACANCY_COLORS.enough : VACANCY_COLORS.short);
+        byCount.lerp(byVacancy, this.colorBlendValue);
+      }
+      this.mesh.setColorAt(i, byCount);
+    });
+    if (this.mesh.instanceColor) this.mesh.instanceColor.needsUpdate = true;
   }
 }
 
@@ -384,6 +477,7 @@ const FONT = '"Hiragino Sans","Noto Sans JP","Yu Gothic","Meiryo","WenQuanYi Zen
 
 const CSS = `
 .sm-overlay{position:absolute;inset:0;overflow:hidden;pointer-events:none;font-family:${FONT};color:#fff}
+.sm-labels{position:absolute;inset:0}
 .sm-lines{position:absolute;left:0;top:0;width:100%;height:100%;overflow:visible}
 .sm-lines line{stroke:rgba(255,255,255,.9);stroke-width:1}
 .sm-lines circle{fill:#fff;stroke:rgba(0,0,0,.6);stroke-width:1}
@@ -400,6 +494,9 @@ const CSS = `
 .sm-legend-steps{display:flex;flex-wrap:wrap;gap:3px 9px;margin:7px 0 0;padding:0;list-style:none;font-size:11px}
 .sm-legend-steps li{display:flex;align-items:center;gap:4px;white-space:nowrap}
 .sm-legend-steps i{display:inline-block;width:11px;height:11px;border-radius:2px;border:1px solid rgba(255,255,255,.55)}
+.sm-legend-steps[hidden]{display:none}
+.sm-legend-vacancy{flex-direction:column;gap:3px;font-size:12px}
+.sm-legend-vacancy[hidden]{display:none}
 .sm-legend-total{margin-top:7px;font-size:13px;font-weight:700;font-variant-numeric:tabular-nums}
 .sm-legend-note{margin-top:2px;font-size:10.5px;color:#d6dbe2}
 @media (max-width:480px){
@@ -412,10 +509,20 @@ const CSS = `
   .sm-legend-total{margin-top:5px;font-size:12px}
   .sm-legend-note{font-size:10px}
 }
+.sm-legend.sm-legend--compact{width:218px;padding:6px 8px 5px;font-size:10.5px;line-height:1.35}
+.sm-legend--compact .sm-legend-title{font-size:11.5px;margin-bottom:2px}
+.sm-legend--compact .sm-legend-key svg{display:none}
+.sm-legend--compact .sm-legend-scale{font-size:10.5px}
+.sm-legend--compact .sm-legend-steps{margin-top:3px;font-size:10px;gap:1px 6px}
+.sm-legend--compact .sm-legend-steps i{width:9px;height:9px}
+.sm-legend--compact .sm-legend-vacancy{font-size:10px;gap:2px}
+.sm-legend--compact .sm-legend-total{margin-top:3px;font-size:11px}
+.sm-legend--compact .sm-legend-note{font-size:9px}
 `;
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const fmt = (n: number): string => n.toLocaleString('en-US');
+const hex = (color: number): string => `#${color.toString(16).padStart(6, '0')}`;
 
 function ensureStyle(): void {
   if (document.getElementById(STYLE_ID)) return;
@@ -434,8 +541,8 @@ const svgEl = <K extends keyof SVGElementTagNameMap>(name: K, attrs: Record<stri
 /** 凡例に描く、大きさの見本の台数。 */
 const SAMPLE_COUNTS = [20, 100, 400] as const;
 
-/** 大きさの見本（台数に比例した相対的な大きさ）を描く SVG。 */
-function sampleGlyphs(shape: MarkerShape): SVGSVGElement {
+/** 大きさの見本（台数に比例した相対的な大きさ）を描く SVG。色の意味が台数でないときは、見本は白。 */
+function sampleGlyphs(shape: MarkerShape, mode: ColorMode): SVGSVGElement {
   const maxH = 46;
   const sizes = SAMPLE_COUNTS.map((n) => markerSize(shape, n));
   const scale = maxH / sizes[sizes.length - 1]!.height;
@@ -445,7 +552,7 @@ function sampleGlyphs(shape: MarkerShape): SVGSVGElement {
   const svg = svgEl('svg', { width, height: maxH + 17, viewBox: `0 0 ${width} ${maxH + 17}` });
   SAMPLE_COUNTS.forEach((n, i) => {
     const cx = colW * i + colW / 2;
-    const color = `#${COLOR_STEPS[colorStepIndex(n)]!.color.toString(16).padStart(6, '0')}`;
+    const color = mode === 'count' ? hex(COLOR_STEPS[colorStepIndex(n)]!.color) : '#cfd6de';
     const s = sizes[i]!;
     const h = Math.max(1, s.height * scale);
     const attrs = { fill: color, stroke: 'rgba(255,255,255,.7)', 'stroke-width': 0.8 };
@@ -464,27 +571,40 @@ function sampleGlyphs(shape: MarkerShape): SVGSVGElement {
   return svg;
 }
 
+const rectKey = (r: Rect): string => `${r.x | 0},${r.y | 0},${r.w | 0},${r.h | 0}`;
+
 class Overlay {
   private readonly root = document.createElement('div');
+  private readonly labelsHost = document.createElement('div');
   private readonly lines: SVGSVGElement;
   private readonly labels = new Map<number, HTMLDivElement>();
   private readonly legend: HTMLDivElement | null;
   private readonly keyHost: HTMLDivElement | null = null;
   private readonly scaleText: HTMLDivElement | null = null;
+  private readonly steps: HTMLUListElement | null = null;
+  private readonly vacancy: HTMLUListElement | null = null;
+  private readonly layout: (() => OverlayLayout | null) | undefined;
+  private lastLayout: OverlayLayout | null = null;
+  private legendKey = '';
+  private mode: ColorMode = 'count';
   private lastKey = '';
+  private shownLabels = 0;
   private readonly v = new Vector3();
 
   constructor(
     private readonly markers: StationMarkers,
     container: HTMLElement,
-    withLegend: boolean,
+    options: OverlayOptions,
   ) {
     ensureStyle();
+    this.layout = options.layout;
     this.root.className = 'sm-overlay';
+    this.labelsHost.className = 'sm-labels';
     this.lines = svgEl('svg', { class: 'sm-lines' });
-    this.root.appendChild(this.lines);
+    this.labelsHost.appendChild(this.lines);
+    this.root.appendChild(this.labelsHost);
 
-    if (withLegend) {
+    if (options.legend ?? true) {
       const legend = document.createElement('div');
       legend.className = 'sm-legend';
       const title = document.createElement('div');
@@ -499,9 +619,19 @@ class Overlay {
       for (const step of COLOR_STEPS) {
         const li = document.createElement('li');
         const sw = document.createElement('i');
-        sw.style.background = `#${step.color.toString(16).padStart(6, '0')}`;
+        sw.style.background = hex(step.color);
         li.append(sw, `${step.label}台`);
         steps.appendChild(li);
+      }
+      const vacancy = document.createElement('ul');
+      vacancy.className = 'sm-legend-steps sm-legend-vacancy';
+      vacancy.hidden = true;
+      for (const item of VACANCY_LEGEND) {
+        const li = document.createElement('li');
+        const sw = document.createElement('i');
+        sw.style.background = hex(item.color);
+        li.append(sw, item.label);
+        vacancy.appendChild(li);
       }
       const total = document.createElement('div');
       total.className = 'sm-legend-total';
@@ -511,12 +641,14 @@ class Overlay {
       const note = document.createElement('div');
       note.className = 'sm-legend-note';
       note.textContent = '2025年10月、晴天の平日の午前11時頃に数えた台数';
-      legend.append(title, key, steps, total, note);
+      legend.append(title, key, steps, vacancy, total, note);
       this.root.appendChild(legend);
       this.legend = legend;
       this.keyHost = key;
       this.scaleText = scale;
-      key.append(sampleGlyphs(markers.shape), scale);
+      this.steps = steps;
+      this.vacancy = vacancy;
+      key.append(sampleGlyphs(markers.shape, this.mode), scale);
       scale.textContent = markerScaleText(markers.shape);
     } else {
       this.legend = null;
@@ -524,10 +656,25 @@ class Overlay {
     container.appendChild(this.root);
   }
 
+  get visibleLabelCount(): number {
+    return this.shownLabels;
+  }
+
   setShape(shape: MarkerShape): void {
     if (this.keyHost && this.scaleText) {
-      this.keyHost.replaceChildren(sampleGlyphs(shape), this.scaleText);
+      this.keyHost.replaceChildren(sampleGlyphs(shape, this.mode), this.scaleText);
       this.scaleText.textContent = markerScaleText(shape);
+    }
+    this.invalidate();
+  }
+
+  setLegendMode(mode: ColorMode): void {
+    if (mode === this.mode) return;
+    this.mode = mode;
+    if (this.keyHost && this.scaleText && this.steps && this.vacancy) {
+      this.keyHost.replaceChildren(sampleGlyphs(this.markers.shape, mode), this.scaleText);
+      this.steps.hidden = mode !== 'count';
+      this.vacancy.hidden = mode !== 'vacancy';
     }
     this.invalidate();
   }
@@ -541,19 +688,49 @@ class Overlay {
     this.lastKey = '';
   }
 
+  /** 範囲に合わせて凡例を置く（範囲の左下、`compact` なら左上）。 */
+  private placeLegend(layout: OverlayLayout, rootHeight: number): void {
+    if (!this.legend) return;
+    const { region, compact } = layout;
+    const key = `${rectKey(region)}|${compact}|${rootHeight}`;
+    if (key === this.legendKey) return;
+    this.legendKey = key;
+    const s = this.legend.style;
+    this.legend.classList.toggle('sm-legend--compact', compact);
+    s.right = 'auto';
+    s.left = `${Math.round(region.x + (compact ? 8 : 12))}px`;
+    if (compact) {
+      s.top = `${Math.round(region.y + 8)}px`;
+      s.bottom = 'auto';
+      s.width = '';
+    } else {
+      s.top = 'auto';
+      s.bottom = `${Math.round(rootHeight - (region.y + region.h) + 12)}px`;
+      s.width = '292px';
+    }
+  }
+
   update(camera: PerspectiveCamera, extraObstacles: readonly Rect[]): void {
     const width = this.root.clientWidth;
     const height = this.root.clientHeight;
     if (width === 0 || height === 0) return;
 
+    const layout = this.layout ? (this.layout() ?? this.lastLayout) : null;
+    this.lastLayout = layout;
+    if (layout) this.placeLegend(layout, height);
+
     const rootBox = this.root.getBoundingClientRect();
-    const obstacles: Rect[] = [...extraObstacles];
+    const obstacles: Rect[] = [...extraObstacles, ...(layout?.obstacles ?? [])];
     if (this.legend) {
       const b = this.legend.getBoundingClientRect();
       obstacles.push({ x: b.left - rootBox.left, y: b.top - rootBox.top, w: b.width, h: b.height });
     }
+    const bounds: Rect = layout?.region ?? { x: 0, y: 0, w: width, h: height };
 
     camera.updateMatrixWorld();
+    const growth = this.markers.growth;
+    // 柱が伸びきる手前から、ラベルが現れる
+    this.labelsHost.style.opacity = String(smoothstep((growth - 0.55) / 0.45));
     const key = [
       width,
       height,
@@ -561,12 +738,14 @@ class Overlay {
       camera.matrixWorld.elements.join(','),
       this.markers.shape,
       this.markers.labelLimit,
-      obstacles.map((o) => `${o.x | 0},${o.y | 0},${o.w | 0},${o.h | 0}`).join(';'),
+      growth,
+      rectKey(bounds),
+      obstacles.map(rectKey).join(';'),
     ].join('|');
     if (key === this.lastKey) return;
     this.lastKey = key;
 
-    // 画面内にある台数の多い駅から、ラベルを付ける駅を選ぶ
+    // 範囲の中にある台数の多い駅から、ラベルを付ける駅を選ぶ
     const picks: Array<{ index: number; ax: number; ay: number }> = [];
     for (const index of this.markers.labelCandidates()) {
       if (picks.length >= this.markers.labelLimit) break;
@@ -574,7 +753,7 @@ class Overlay {
       if (this.v.z < -1 || this.v.z > 1) continue;
       const ax = ((this.v.x + 1) / 2) * width;
       const ay = ((1 - this.v.y) / 2) * height;
-      if (ax < 0 || ax > width || ay < 0 || ay > height) continue;
+      if (ax < bounds.x || ax > bounds.x + bounds.w || ay < bounds.y || ay > bounds.y + bounds.h) continue;
       picks.push({ index, ax, ay });
     }
 
@@ -583,11 +762,12 @@ class Overlay {
       el.style.display = 'block';
       return { id: String(index), ax, ay, w: el.offsetWidth, h: el.offsetHeight };
     });
-    const placed = layoutLabels(requests, { width, height }, obstacles);
+    const placed = layoutLabels(requests, { width, height }, obstacles, { bounds });
     const placedIds = new Set(placed.map((p) => p.id));
     for (const [index, el] of this.labels) {
       if (!placedIds.has(String(index))) el.style.display = 'none';
     }
+    this.shownLabels = placed.length;
 
     this.lines.replaceChildren();
     for (const p of placed) {
@@ -621,7 +801,7 @@ class Overlay {
       count.className = 'sm-label-count';
       count.textContent = `${fmt(site.bicycles)}台`;
       el.append(name, count);
-      this.root.appendChild(el);
+      this.labelsHost.appendChild(el);
       this.labels.set(index, el);
     }
     return el;

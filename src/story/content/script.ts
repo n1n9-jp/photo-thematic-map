@@ -45,10 +45,11 @@ export const PLACES = {
   /** 秋葉原駅 電気街口の駅前広場（総武線の高架の北、山手線の西）。場面1・8 の注視点、仮の目印を置く場所。 */
   akihabaraSidewalk: { lat: 35.698815, lon: 139.772664 },
   /**
-   * 23区の俯瞰の注視点。23区の中心（35.69, 139.75 付近）より少し西にずらし、PC 幅で左に出る本文カードの右側に
-   * 新宿・渋谷・池袋から上野・秋葉原・東京までが入るようにした。
+   * 23区の俯瞰の注視点。注視点は本文カードに覆われない範囲の中央に置かれる（`story/layout.ts`）ので、西にずらす必要はない。
+   * スマートフォンの縦長の画面では、横に 12km ほどしか入らない（高さ 28km のとき）。駅の多い都心（新宿・渋谷・池袋から
+   * 上野・秋葉原・東京まで）が収まるよう、23区の中心（35.69, 139.75 付近）より少し西の経度 139.74 に置く。
    */
-  wards: { lat: 35.69, lon: 139.705 },
+  wards: { lat: 35.69, lon: 139.74 },
   /** 東京駅 丸の内口の駅前広場の中央。2024年度の撤去台数の山を置く。 */
   tokyoPlaza: { lat: 35.68163, lon: 139.76539 },
   /** 新宿中央公園の北側の開けた場所（都庁前）。15年の累計の山を置く。 */
@@ -148,7 +149,7 @@ export const SCRIPT: readonly ScriptScene[] = [
       heading: '駐輪場には空きがあった',
       paragraphs: [
         `秋葉原駅周辺の駐輪場の収容能力は、自転車${nu(F.akihabaraCapacity)}。調査のときに止まっていたのは${nu(F.akihabaraOccupancy)}で、${nu(F.akihabaraVacancy)}が空いていた。`,
-        `放置自転車があった${nu(F.stationsWithParked)}のうち${nu(F.stationsVacancyExceeds)}では、駐輪場の空きが放置自転車の台数を上回っていた。`,
+        `放置自転車があった${nu(F.stationsWithParked)}のうち${nu(F.stationsVacancyExceeds)}では、駐輪場の空きが放置自転車の台数以上あった。`,
         `都内の駅周辺の駐輪場は${nu(F.parkingLots)}、収容能力は${nu(F.parkingCapacity)}。調査のときに止まっていたのは${nu(F.parkingOccupancy)}だった。`,
       ],
       stat: stat(F.akihabaraVacancy, '秋葉原駅周辺の駐輪場の空き'),
