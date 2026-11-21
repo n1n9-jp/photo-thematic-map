@@ -113,8 +113,8 @@ const pile6 = PILES.removed15Years;
  * 注視点は山の中心から左手（北北東）へずらし、山を画面の右に寄せる。
  */
 const SCENE5_VIEW = { azimuthDeg: 105, heightM: 34, horizontalM: 165, targetAltM: pile5.heightM * 0.45, shiftM: 32 } as const;
-/** 場面7: 東京駅前の山に寄る（西北西の斜め上から、山の斜面の自転車が1台ずつ見える距離）。 */
-const SCENE7_VIEW = { azimuthDeg: 118, heightM: 24, horizontalM: 62, targetAltM: pile5.heightM * 0.45, shiftM: 12 } as const;
+/** 場面7: 東京駅前の山に寄る（北西の斜め上から。斜面の自転車が1台ずつ見え、後ろに駅舎の北側が入る距離）。 */
+const SCENE7_VIEW = { azimuthDeg: 125, heightM: 30, horizontalM: 105, targetAltM: pile5.heightM * 0.4, shiftM: 22 } as const;
 /**
  * 場面6: 新宿中央公園の西の上空（高さ 230m、周りの高層ビルの上）から東を向く。山の右後ろに都庁第一本庁舎（高さ 243m）。
  */
