@@ -102,6 +102,8 @@ export interface PileDebugStatus {
   falling: number;
   /** 落下・降り直しの途中か（'surface' の降り直しを含む）。 */
   animating: boolean;
+  /** 最後に落下・降り直しの途中だった時刻（ページを開いてからの ms）。描画の遅い環境で、途中の状態を見逃さずに確かめるため。 */
+  lastAnimatingAtMs: number | null;
   triangles: number;
   perLod: [number, number, number];
   dots: number;
@@ -133,6 +135,7 @@ class SharedPile {
   private readonly owners = new Set<PileModule>();
   private driver: PileModule | null = null;
   private frozen = false;
+  private lastAnimatingAtMs: number | null = null;
   private readonly listeners = new Set<() => void>();
 
   constructor(
@@ -250,6 +253,7 @@ class SharedPile {
     if (!scene || !ctx || !this.visible) return false;
     const canvas = ctx.renderer.domElement;
     scene.update(ctx.camera, canvas.height / ctx.renderer.getPixelRatio());
+    if (scene.animating) this.lastAnimatingAtMs = performance.now();
     return scene.animating;
   }
 
@@ -270,6 +274,7 @@ class SharedPile {
       shown: st?.shown ?? 0,
       falling: st?.falling ?? 0,
       animating: s?.animating ?? false,
+      lastAnimatingAtMs: this.lastAnimatingAtMs,
       triangles: st?.triangles ?? 0,
       perLod: st ? [...st.field.perLod] : [0, 0, 0],
       dots: st?.field.dots ?? 0,

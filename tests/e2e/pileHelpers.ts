@@ -63,10 +63,13 @@ export async function checkPileScene(page: Page, i: number, viewport: string, fa
     // 場面の途中: 山は育ちかけで、上空から自転車が降っている（'surface' は表面が上がるたびに降り直す）
     await scrollTo(page, i, 0.15);
     await settle(page, spec.key);
+    const before = await page.evaluate(() => performance.now());
     await scrollTo(page, i, 0.4);
-    await expect
-      .poll(async () => ((st) => st.falling > 0 || st.animating)(await status(page, spec.key)), { timeout: 30_000, intervals: [50] })
-      .toBe(true);
+    // 1 フレームが数十秒かかることがあるので、途中だった時刻の記録で確かめる
+    await page.waitForFunction(([k, t]) => (window.__PILES__!.status(k)!.lastAnimatingAtMs ?? -1) > t, [spec.key, before] as const, {
+      timeout: SETTLE_TIMEOUT_MS,
+      polling: 250,
+    });
     const mid = await status(page, spec.key);
     expect(mid.represented).toBeGreaterThan(0);
     expect(mid.represented).toBeLessThan(spec.count);
