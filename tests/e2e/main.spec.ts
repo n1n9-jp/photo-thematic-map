@@ -9,10 +9,10 @@ import { SCRIPT } from '../../src/story/content/script';
 import { checkPileScene, PILE_SCENES, type PileMetric } from './pileHelpers';
 
 // ソフトウェア描画（SwiftShader）では PLATEAU の読み込みと描画に時間がかかる
-test.setTimeout(2_700_000);
+test.setTimeout(5_400_000);
 
-// 場面5・6 は山と街並み（建物 約 700 万三角形）を同時に描くので、ソフトウェア描画では出そろうまで 4 分を超えることがある
-const SETTLE_TIMEOUT_MS = 600_000;
+// 場面5・6 は山と街並み（建物 約 700 万三角形）を同時に描くので、ソフトウェア描画では出そろうまで 4 分を超え、ほかの E2E と並行すると 10 分を超えることがある
+const SETTLE_TIMEOUT_MS = 1_200_000;
 
 function collectErrors(page: Page): string[] {
   const errors: string[] = [];
