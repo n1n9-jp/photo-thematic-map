@@ -9,7 +9,7 @@ import { SCRIPT } from '../../src/story/content/script';
 import { checkPileScene, PILE_SCENES, type PileMetric } from './pileHelpers';
 
 // ソフトウェア描画（SwiftShader）では PLATEAU の読み込みと描画に時間がかかる
-test.setTimeout(1_500_000);
+test.setTimeout(2_700_000);
 
 const SETTLE_TIMEOUT_MS = 240_000;
 

@@ -140,7 +140,7 @@ export const PILE_SHELL_COLOR = 0x5a5550;
  * 山の自転車の色の調子。遠くから見ると、黒・紺のフレームと影が重なって暗い塊に見えるので、
  * 暗いフレーム色を持ち上げ、彩度を上げ、陰影の暗い側を浅くする。
  */
-export const PILE_TONE: BicycleTone = { lift: 0.6, saturation: 1.5, shadeFloor: 0.4 };
+export const PILE_TONE: BicycleTone = { lift: 0.65, saturation: 1.7, shadeFloor: 0.4 };
 /** 遠景・点景で部品の色をフレーム色に寄せる量（`BicycleField.farFrameFill`）。 */
 export const PILE_FAR_FRAME_FILL = 0.65;
 /** 表面から深い自転車の明るさ（BicycleField の既定 0.45 より浅くする）。 */
