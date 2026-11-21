@@ -49,7 +49,7 @@ async function scrollTo(page: Page, i: number, holdFactor: number): Promise<void
 /** 街並みが出そろい、落下も終わるのを待つ（ソフトウェア描画は 1 フレーム数秒で、落下は 1 フレーム最大 0.1 秒ずつしか進まない）。 */
 async function settle(page: Page, key: string): Promise<void> {
   await page.waitForFunction(() => window.__MAIN__!.isSettled(), undefined, { timeout: SETTLE_TIMEOUT_MS, polling: 250 });
-  await page.waitForFunction((k) => window.__PILES__!.status(k)!.falling === 0, key, { timeout: 300_000, polling: 250 });
+  await page.waitForFunction((k) => ((st) => st.falling === 0 && !st.animating)(window.__PILES__!.status(k)!), key, { timeout: 300_000, polling: 250 });
 }
 
 /**
@@ -60,11 +60,13 @@ export async function checkPileScene(page: Page, i: number, viewport: string, fa
   const spec = PILE_SCENES[i]!;
   await page.waitForFunction((k) => window.__PILES__?.status(k)?.state === 'ready', spec.key, { timeout: SETTLE_TIMEOUT_MS, polling: 250 });
   if (spec.grow) {
-    // 場面の途中: 山は育ちかけで、上空から自転車が降っている
+    // 場面の途中: 山は育ちかけで、上空から自転車が降っている（'surface' は表面が上がるたびに降り直す）
     await scrollTo(page, i, 0.15);
     await settle(page, spec.key);
     await scrollTo(page, i, 0.4);
-    await expect.poll(async () => (await status(page, spec.key)).falling, { timeout: 30_000, intervals: [50] }).toBeGreaterThan(0);
+    await expect
+      .poll(async () => ((st) => st.falling > 0 || st.animating)(await status(page, spec.key)), { timeout: 30_000, intervals: [50] })
+      .toBe(true);
     const mid = await status(page, spec.key);
     expect(mid.represented).toBeGreaterThan(0);
     expect(mid.represented).toBeLessThan(spec.count);

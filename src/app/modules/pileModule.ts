@@ -98,7 +98,10 @@ export interface PileDebugStatus {
   count: number;
   placed: number;
   shown: number;
+  /** 落下中の台数（'full' の順位による落下。'surface' の降り直しは含まない）。 */
   falling: number;
+  /** 落下・降り直しの途中か（'surface' の降り直しを含む）。 */
+  animating: boolean;
   triangles: number;
   perLod: [number, number, number];
   dots: number;
@@ -266,6 +269,7 @@ class SharedPile {
       placed: s?.info.placedCount ?? 0,
       shown: st?.shown ?? 0,
       falling: st?.falling ?? 0,
+      animating: s?.animating ?? false,
       triangles: st?.triangles ?? 0,
       perLod: st ? [...st.field.perLod] : [0, 0, 0],
       dots: st?.field.dots ?? 0,
