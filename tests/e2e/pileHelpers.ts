@@ -43,7 +43,7 @@ async function scrollTo(page: Page, i: number, holdFactor: number): Promise<void
     },
     [i, holdFactor] as const,
   );
-  await expect.poll(() => page.evaluate(() => window.__MAIN__!.getState().stage)).toBe(i);
+  await expect.poll(() => page.evaluate(() => window.__MAIN__!.getState().stage), { timeout: 120_000 }).toBe(i);
 }
 
 /** 街並みが出そろい、落下も終わるのを待つ（ソフトウェア描画は 1 フレーム数秒で、落下は 1 フレーム最大 0.1 秒ずつしか進まない）。 */

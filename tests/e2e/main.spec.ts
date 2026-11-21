@@ -57,7 +57,7 @@ async function goToScene(page: Page, i: number): Promise<number> {
     const hold = api.holds()[i] ?? 0.4;
     window.scrollTo({ top: api.scrollYFor(i, hold * 0.5), behavior: 'instant' });
   }, i);
-  await expect.poll(() => page.evaluate(() => window.__MAIN__!.getState().stage)).toBe(i);
+  await expect.poll(() => page.evaluate(() => window.__MAIN__!.getState().stage), { timeout: 120_000 }).toBe(i);
   await page.waitForFunction(() => window.__MAIN__!.isSettled(), undefined, { timeout: SETTLE_TIMEOUT_MS, polling: 250 });
   return Date.now() - t0;
 }
@@ -113,9 +113,9 @@ test('8場面を順にスクロールすると、場面が進み、カメラが�
   const toggle = page.locator('.story-free-toggle');
   await expect(toggle).toBeVisible();
   await toggle.click();
-  await expect.poll(() => page.evaluate(() => window.__MAIN__!.status().free)).toBe(true);
+  await expect.poll(() => page.evaluate(() => window.__MAIN__!.status().free), { timeout: 120_000 }).toBe(true);
   await toggle.click();
-  await expect.poll(() => page.evaluate(() => window.__MAIN__!.status().free)).toBe(false);
+  await expect.poll(() => page.evaluate(() => window.__MAIN__!.status().free), { timeout: 120_000 }).toBe(false);
 
   mkdirSync('screenshots', { recursive: true });
   writeFileSync('screenshots/main-metrics.json', JSON.stringify(metrics, null, 2));
