@@ -100,6 +100,7 @@ export function createStory(options: CreateStoryOptions): Story {
       coverTop: info.coverTop,
     });
     rig.setViewShift(viewShiftFor(region, width, height));
+    rig.setFitFrame({ canvasHeight: height, regionWidth: region.right - region.left, regionHeight: region.bottom - region.top });
     dirty = true;
   }
   syncViewShift();

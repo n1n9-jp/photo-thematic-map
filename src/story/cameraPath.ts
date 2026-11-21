@@ -8,7 +8,7 @@
  */
 import { ORIGIN } from '../config';
 import { latLonToLocal, type Vec3 } from '../geo/enu';
-import type { StoryCameraKeyframe } from './types';
+import type { StoryCameraFit, StoryCameraKeyframe } from './types';
 
 const DEG2RAD = Math.PI / 180;
 const RAD2DEG = 180 / Math.PI;
@@ -102,6 +102,59 @@ export function poseFromCamera(position: Vec3, target: Vec3): CameraPose {
 /** 高さ heightM(m) の位置から見下ろす仰角 elevationDeg のときの、注視点からの距離。 */
 export function distanceForHeight(heightM: number, elevationDeg: number): number {
   return heightM / Math.sin(clampElevation(elevationDeg) * DEG2RAD);
+}
+
+/** `distanceToFit` の入力。 */
+export interface FitFrame {
+  /** 縦の画角(度)。`PerspectiveCamera.fov`。 */
+  fovDeg: number;
+  /** canvas の高さ(CSS px)。焦点距離(px)は、この高さと縦の画角で決まる。 */
+  canvasHeight: number;
+  /** 本文カードに覆われていない範囲の幅・高さ(CSS px)。注視点はこの範囲の中央に投影される（`layout.ts` の `viewShiftFor`）。 */
+  regionWidth: number;
+  regionHeight: number;
+}
+
+/**
+ * 注視点を中心とする地表の長方形 `fit`（注視点の高さの水平面）の4隅が、画面の覆われていない範囲に収まる最小の距離(m)。
+ *
+ * 注視点から見て、隅 p の画面上の位置は、カメラの右・上方向の成分（x, y）を、奥行き（距離 d + 視線方向の成分 z）で割った値に
+ * 焦点距離(px)を掛けたもの。覆われていない範囲の中央が注視点なので、収まる条件は
+ * `|x|·f/(d+z) ≤ 幅/2` かつ `|y|·f/(d+z) ≤ 高さ/2`。隅ごとに d について解いて、最大を返す。
+ * 方位・仰角は変えない。透視投影の遠近（手前の隅が大きく写る）も入る。
+ */
+export function distanceToFit(
+  fit: StoryCameraFit,
+  angles: { azimuthDeg: number; elevationDeg: number },
+  frame: FitFrame,
+): number {
+  const az = angles.azimuthDeg * DEG2RAD;
+  const el = clampElevation(angles.elevationDeg) * DEG2RAD;
+  // ローカル座標（x=東, y=上, z=南）での、カメラの視線・右・上の単位ベクトル。
+  const f = { x: Math.sin(az) * Math.cos(el), y: -Math.sin(el), z: -Math.cos(az) * Math.cos(el) };
+  const r = { x: Math.cos(az), y: 0, z: Math.sin(az) };
+  const u = { x: r.y * f.z - r.z * f.y, y: r.z * f.x - r.x * f.z, z: r.x * f.y - r.y * f.x };
+  const focalPx = frame.canvasHeight / 2 / Math.tan((frame.fovDeg * DEG2RAD) / 2);
+  const halfW = Math.max(frame.regionWidth, 1) / 2;
+  const halfH = Math.max(frame.regionHeight, 1) / 2;
+  let need = 0;
+  for (const sx of [-1, 1]) {
+    for (const sy of [-1, 1]) {
+      const p = { x: (sx * fit.eastWestM) / 2, y: 0, z: -(sy * fit.northSouthM) / 2 };
+      const x = Math.abs(p.x * r.x + p.z * r.z);
+      const y = Math.abs(p.x * u.x + p.y * u.y + p.z * u.z);
+      const z = p.x * f.x + p.y * f.y + p.z * f.z;
+      need = Math.max(need, (x * focalPx) / halfW - z, (y * focalPx) / halfH - z);
+    }
+  }
+  return need;
+}
+
+/** キーフレームの姿勢に `fit` を反映する。距離は `distance`（下限）と `fit` から求めた距離の大きい方。 */
+export function applyFit(pose: CameraPose, fit: StoryCameraFit | undefined, frame: FitFrame | null): CameraPose {
+  if (!fit || !frame) return pose;
+  const d = distanceToFit(fit, pose, frame);
+  return d > pose.distance ? { ...pose, distance: d } : pose;
 }
 
 /** 度を [0, 360) に正規化する。 */

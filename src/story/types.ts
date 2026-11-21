@@ -15,6 +15,21 @@ export interface StoryCameraKeyframe {
   distance: number;
   azimuthDeg: number;
   elevationDeg: number;
+  /**
+   * 画面の「本文カードに覆われていない範囲」に収めたい地表の範囲。省略時は `distance` のまま。
+   * 指定すると、カメラリグが画面の縦横比と覆われていない範囲の大きさから、この範囲が収まる距離を求め、
+   * `distance` と比べて遠い方を使う（`distance` は「これより近づかない」下限）。
+   */
+  fit?: StoryCameraFit;
+}
+
+/**
+ * 注視点を中心とする、地表の長方形（東西・南北の幅(m)）。方位に関わらず、東西は東西、南北は南北の向きにとる。
+ * 注視点の高さの水平面にある長方形として扱い、その4隅が画面の覆われていない範囲に入る距離を求める。
+ */
+export interface StoryCameraFit {
+  eastWestM: number;
+  northSouthM: number;
 }
 
 /** 大きく表示する数値。段階内の進捗に合わせて 0 から `value` まで数え上がる。 */

@@ -242,8 +242,13 @@ export interface StationMarkersOptions {
 export interface OverlayLayout {
   /** ラベルを置ける範囲。凡例もこの範囲の隅に置く。 */
   region: Rect;
-  /** true なら凡例を小さくして範囲の左上に置く（スマートフォン）。false なら範囲の左下。 */
+  /** true なら凡例を小さくする（スマートフォン）。 */
   compact: boolean;
+  /**
+   * 凡例を置く隅。'top' なら範囲の左上、'bottom'（既定）なら範囲の左下。
+   * 俯瞰では、柱が集まる範囲の外（地図の上側の余白）に置くために 'top' にする。範囲が十分に広ければ、凡例は横に長い形になる。
+   */
+  legendCorner?: 'top' | 'bottom';
   /** 範囲の中でラベルを重ねたくない矩形（出典表示など）。 */
   obstacles?: readonly Rect[];
 }
@@ -509,6 +514,12 @@ const CSS = `
   .sm-legend-total{margin-top:5px;font-size:12px}
   .sm-legend-note{font-size:10px}
 }
+.sm-legend.sm-legend--wide{display:grid;grid-template-columns:auto 1fr;column-gap:16px;row-gap:3px;align-items:center;padding:8px 12px 7px}
+.sm-legend--wide .sm-legend-title{grid-column:1/-1;margin-bottom:0}
+.sm-legend--wide .sm-legend-key{grid-column:1;grid-row:2/4}
+.sm-legend--wide .sm-legend-steps{grid-column:2;grid-row:2;margin:0}
+.sm-legend--wide .sm-legend-total{grid-column:2;grid-row:3;margin:0}
+.sm-legend--wide .sm-legend-note{grid-column:1/-1;margin-top:1px}
 .sm-legend.sm-legend--compact{width:218px;padding:6px 8px 5px;font-size:10.5px;line-height:1.35}
 .sm-legend--compact .sm-legend-title{font-size:11.5px;margin-bottom:2px}
 .sm-legend--compact .sm-legend-key svg{display:none}
@@ -519,6 +530,10 @@ const CSS = `
 .sm-legend--compact .sm-legend-total{margin-top:3px;font-size:11px}
 .sm-legend--compact .sm-legend-note{font-size:9px}
 `;
+
+/** 凡例を横に長い形にする、範囲の幅(px)の下限と、そのときの凡例の幅。 */
+const WIDE_LEGEND_MIN_REGION_W = 480;
+const WIDE_LEGEND_WIDTH = 430;
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const fmt = (n: number): string => n.toLocaleString('en-US');
@@ -688,26 +703,29 @@ class Overlay {
     this.lastKey = '';
   }
 
-  /** 範囲に合わせて凡例を置く（範囲の左下、`compact` なら左上）。 */
+  /** 範囲に合わせて凡例を置く（`legendCorner` が 'top' なら範囲の左上、既定は左下。`compact` なら小さくする）。 */
   private placeLegend(layout: OverlayLayout, rootHeight: number): void {
     if (!this.legend) return;
     const { region, compact } = layout;
-    const key = `${rectKey(region)}|${compact}|${rootHeight}`;
+    const top = layout.legendCorner === 'top' || (layout.legendCorner === undefined && compact);
+    // 上の隅に置くときは、範囲が広ければ横に長い形にして高さを抑える（地図の上側の余白に収め、柱を隠さない）
+    const wide = top && !compact && region.w >= WIDE_LEGEND_MIN_REGION_W;
+    const key = `${rectKey(region)}|${compact}|${top}|${wide}|${rootHeight}`;
     if (key === this.legendKey) return;
     this.legendKey = key;
     const s = this.legend.style;
     this.legend.classList.toggle('sm-legend--compact', compact);
+    this.legend.classList.toggle('sm-legend--wide', wide);
     s.right = 'auto';
     s.left = `${Math.round(region.x + (compact ? 8 : 12))}px`;
-    if (compact) {
-      s.top = `${Math.round(region.y + 8)}px`;
+    if (top) {
+      s.top = `${Math.round(region.y + (compact ? 8 : 12))}px`;
       s.bottom = 'auto';
-      s.width = '';
     } else {
       s.top = 'auto';
       s.bottom = `${Math.round(rootHeight - (region.y + region.h) + 12)}px`;
-      s.width = '292px';
     }
+    s.width = compact ? '' : wide ? `${Math.min(WIDE_LEGEND_WIDTH, region.w - 24)}px` : '292px';
   }
 
   update(camera: PerspectiveCamera, extraObstacles: readonly Rect[]): void {

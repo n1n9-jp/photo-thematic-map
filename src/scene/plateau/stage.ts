@@ -5,6 +5,7 @@
  *   （写真テクスチャは使わない）。詳細度は画面上の誤差で選ぶので、遠くの建物は粗いタイルで済む。
  *   `setFocus()` で読み込む区を差し替えられる（本編はカメラの注視点＝場面の場所に合わせて切り替える）。
  *   地面の半径と建物の表示はカメラの高さに合わせて変える（高さ 28km の俯瞰では建物を描かず、地面を23区全体に敷く）。
+ *   航空写真の下には、広い範囲を覆う単色の地面と海（`baseGround.ts`）を敷き、航空写真のない範囲が空の色で抜けないようにする。
  * - `createPlateauStage`: renderer・カメラ・OrbitControls まで含めた単独の舞台（確認ページ demos/plateau 用）。
  */
 import {
@@ -23,6 +24,7 @@ import { addAttribution } from './attribution';
 import { PlateauBuildings, createBuildingLruCache } from './buildings';
 import { loadPlateauCatalog, selectTilesets } from './catalog';
 import type { PlateauCatalog } from './catalog';
+import { BaseGround } from './baseGround';
 import { PlateauGround } from './ground';
 
 /** 建物を読む場所。 */
@@ -91,6 +93,8 @@ export interface PlateauCityStatus {
 
 export class PlateauCity {
   readonly ground: PlateauGround;
+  /** 航空写真の下に敷く単色の地面と海（航空写真のない範囲を空の色で抜かさない）。 */
+  readonly baseGround: BaseGround;
   /** 建物と地面の初回読み込みが終わると解決する。 */
   readonly ready: Promise<void>;
   private readonly options: PlateauCityOptions;
@@ -113,9 +117,13 @@ export class PlateauCity {
       rootBounds: options.groundRootBounds ?? ORTHO_ROOT_BOUNDS,
     });
     options.scene.add(this.ground.group);
+    this.baseGround = new BaseGround();
+    options.scene.add(this.baseGround.group);
     this.current = resolveFocus(options.focus);
     this.applyFocus(this.current);
-    this.ready = Promise.all([this.ground.ready, ...[...this.layers.values()].map((l) => l.ready)]).then(() => undefined);
+    this.ready = Promise.all([this.ground.ready, this.baseGround.ready, ...[...this.layers.values()].map((l) => l.ready)]).then(
+      () => undefined,
+    );
   }
 
   /** 今の場所。 */
@@ -139,6 +147,7 @@ export class PlateauCity {
     const h = Math.max(camera.position.y, 0);
     this.ground.radiusM = Math.max(this.options.groundMinRadiusM ?? 6000, h * (this.options.groundRadiusPerHeight ?? 1.8));
     this.ground.update();
+    this.baseGround.update(camera);
 
     const visible = this.buildingsVisible;
     for (const layer of this.layers.values()) {
@@ -152,7 +161,7 @@ export class PlateauCity {
 
   /** 読み込み中のタイルがあれば true（俯瞰で建物を描いていないときは地面だけ）。 */
   get isLoading(): boolean {
-    return this.ground.isLoading || (this.buildingsVisible && this.buildingsLoading);
+    return this.ground.isLoading || this.baseGround.isLoading || (this.buildingsVisible && this.buildingsLoading);
   }
 
   /** 読み込み中か、読み込みが止まってまだ数フレームしか経っていない（描画を続けるべき）か。 */
@@ -196,6 +205,7 @@ export class PlateauCity {
     for (const layer of this.layers.values()) layer.dispose();
     this.layers.clear();
     this.ground.dispose();
+    this.baseGround.dispose();
     this.draco.dispose();
   }
 

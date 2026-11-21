@@ -55,11 +55,11 @@ export const PLACES = {
    */
   akihabaraBikesView: { lat: 35.698845, lon: 139.772803 },
   /**
-   * 23区の俯瞰の注視点。注視点は本文カードに覆われない範囲の中央に置かれる（`story/layout.ts`）ので、西にずらす必要はない。
-   * スマートフォンの縦長の画面では、横に 12km ほどしか入らない（高さ 28km のとき）。駅の多い都心（新宿・渋谷・池袋から
-   * 上野・秋葉原・東京まで）が収まるよう、23区の中心（35.69, 139.75 付近）より少し西の経度 139.74 に置く。
+   * 23区の俯瞰の注視点。23区の489か所のうち23区内の駅（410か所）の緯度経度の範囲（東西 139.568〜139.898、南北 35.541〜35.815）の
+   * 中央に近い。注視点は本文カードに覆われない範囲の中央に置かれる（`story/layout.ts`）ので、西にずらす必要はない。
+   * 距離は `WARDS_FIT`（この範囲が覆われていない範囲に収まる距離）で決まるので、画面の縦横比によらず23区の全体が見える。
    */
-  wards: { lat: 35.69, lon: 139.74 },
+  wards: { lat: 35.68, lon: 139.735 },
   /** 東京駅 丸の内口の駅前広場の中央。2024年度の撤去台数の山を置く。 */
   tokyoPlaza: { lat: 35.68163, lon: 139.76539 },
   /** 新宿中央公園の北側の開けた場所（都庁前）。15年の累計の山を置く。 */
@@ -110,9 +110,14 @@ const AKIHABARA_GROUND_AZIMUTH_DEG = 250;
  */
 const AKIHABARA_GROUND_TARGET_ALT_M = 2.4;
 
-/** 23区の俯瞰の高さ(m)と仰角(度)。 */
+/**
+ * 23区の俯瞰の距離の下限（高さ 28km・仰角 60° のときの距離）と仰角(度)。実際の距離は `WARDS_FIT` から求め、
+ * 画面が横長（PC 幅）でも縦長（スマートフォン）でも、23区の駅の範囲が本文カードに覆われていない範囲に収まるようにする。
+ */
 const WARDS_HEIGHT_M = 28_000;
 const WARDS_ELEVATION_DEG = 60;
+/** 収めたい範囲（注視点を中心とする東西・南北の幅(m)）。23区内の駅の範囲（約 30km 四方）に、柱が立つ分の余白を足した値。 */
+const WARDS_FIT = { eastWestM: 31_500, northSouthM: 33_000 } as const;
 
 export const SCRIPT: readonly ScriptScene[] = [
   {
@@ -161,6 +166,7 @@ export const SCRIPT: readonly ScriptScene[] = [
       distance: distanceForHeight(WARDS_HEIGHT_M, WARDS_ELEVATION_DEG),
       azimuthDeg: 0,
       elevationDeg: WARDS_ELEVATION_DEG,
+      fit: WARDS_FIT,
     },
     place: null,
   },
@@ -180,6 +186,7 @@ export const SCRIPT: readonly ScriptScene[] = [
       distance: distanceForHeight(WARDS_HEIGHT_M, WARDS_ELEVATION_DEG),
       azimuthDeg: 12,
       elevationDeg: WARDS_ELEVATION_DEG,
+      fit: WARDS_FIT,
     },
     place: null,
   },

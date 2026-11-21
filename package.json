@@ -15,6 +15,7 @@
     "test": "vitest run",
     "test:e2e": "npm run build && playwright test",
     "data:bicycles": "node scripts/data/build-bicycles.ts",
+    "data:landmask": "node --use-env-proxy --import ./scripts/bake/register.ts scripts/data/build-landmask.ts",
     "data:plateau": "node --use-env-proxy scripts/plateau/build-catalog.ts",
     "data:grids": "node --import ./scripts/bake/register.ts scripts/bake/index.ts",
     "data:grids:pile": "node --experimental-transform-types --no-warnings=ExperimentalWarning --import ./scripts/bake/register.ts scripts/bake/pileTrial.ts"

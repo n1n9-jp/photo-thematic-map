@@ -8,6 +8,7 @@
 import { TOUCH, type PerspectiveCamera } from 'three';
 import type { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import {
+  applyFit,
   clipPlanesFor,
   DEFAULT_HOLD,
   keyframeToPose,
@@ -19,6 +20,7 @@ import {
   poseToCameraPosition,
   samplePath,
   type CameraPose,
+  type FitFrame,
   type GroundHeightAt,
   type GroundYAt,
 } from './cameraPath';
@@ -69,6 +71,12 @@ export interface CameraRig {
   setViewShift(shift: { x: number; y: number }): void;
   /** いまのずらし量。 */
   readonly viewShift: { x: number; y: number };
+  /**
+   * 画面の大きさと、本文カードに覆われていない範囲の大きさ(CSS px)を伝える。キーフレームの `fit`（収めたい地表の範囲）が
+   * あるとき、この範囲が覆われていない範囲に収まる距離を求め直す。null か未設定の間は `fit` を使わず、`distance` のまま。
+   * 縦の画角はカメラの `fov` を使う。
+   */
+  setFitFrame(frame: { canvasHeight: number; regionWidth: number; regionHeight: number } | null): void;
   /** OrbitControls を有効にしている最中か。 */
   readonly isFree: boolean;
   /** 現在のカメラ姿勢。 */
@@ -95,8 +103,11 @@ export function createCameraRig(
   const groundAt: GroundHeightAt = options.groundHeightAt ?? (() => 0);
   const minClearance = options.minClearance ?? 1;
   const autoClip = options.autoClip ?? true;
-  const poses = stages.map((s) => keyframeToPose(s.camera, options.groundY));
-  if (poses.length === 0) throw new Error('stages が空です');
+  const basePoses = stages.map((s) => keyframeToPose(s.camera, options.groundY));
+  if (basePoses.length === 0) throw new Error('stages が空です');
+  let fitFrame: FitFrame | null = null;
+  const fitPoses = (): CameraPose[] => basePoses.map((p, i) => applyFit(p, stages[i]?.camera.fit, fitFrame));
+  let poses = fitPoses();
 
   // dispose で戻すため、触る設定の元の値を覚えておく。
   const original = {
@@ -184,7 +195,11 @@ export function createCameraRig(
     if (Math.abs(shift.x) < 1e-5 && Math.abs(shift.y) < 1e-5) {
       if (camera.view?.enabled) camera.clearViewOffset();
     } else {
+      // setViewOffset は aspect を fullWidth / fullHeight（ここでは 1）に書き換えるので、画面の縦横比を戻す。
+      const aspect = camera.aspect;
       camera.setViewOffset(1, 1, -shift.x, -shift.y, 1, 1);
+      camera.aspect = aspect;
+      camera.updateProjectionMatrix();
     }
   }
 
@@ -222,6 +237,22 @@ export function createCameraRig(
     },
     get viewShift() {
       return shift;
+    },
+    setFitFrame(next) {
+      if (disposed) return;
+      const frame = next ? { fovDeg: camera.fov, ...next } : null;
+      const same =
+        frame === null
+          ? fitFrame === null
+          : fitFrame !== null &&
+            frame.fovDeg === fitFrame.fovDeg &&
+            frame.canvasHeight === fitFrame.canvasHeight &&
+            frame.regionWidth === fitFrame.regionWidth &&
+            frame.regionHeight === fitFrame.regionHeight;
+      if (same) return;
+      fitFrame = frame;
+      poses = fitPoses();
+      dirty = true;
     },
     update(dtSec) {
       if (disposed) return false;

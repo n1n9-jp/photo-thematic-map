@@ -18,6 +18,7 @@ Vite + TypeScript(strict) / three@0.187.0 / 3d-tiles-renderer@0.5.4 / vitest / e
 | `npm test` | vitest（`tests/unit/`） |
 | `npm run test:e2e` | ビルド → preview 起動 → Playwright（`tests/e2e/`）。スクリーンショットは `screenshots/`（Playwright の `outputDir` である `test-results/` は実行開始時に消去されるため別にしている） |
 | `npm run data:plateau` | PLATEAU データカタログから23区の建物 3D Tiles の URL を `public/data/plateau/tilesets.json` に書き出す |
+| `npm run data:landmask` | 国土地理院の標高タイル（無効値＝海）から、海陸マスク `public/data/basemap/landmask.png` を作る（範囲は `src/geo/landmask.ts`。航空写真の下に敷く海の色の形に使う） |
 | `npm run data:bicycles` | 放置自転車の統計から `public/data/bicycles/*.json` を作る（原本の取得方法は `data/raw/bicycles/SOURCES.md`） |
 
 E2E は `/opt/pw-browsers/chromium` を使う。preview サーバーのポートは環境変数 `E2E_PORT`（既定 4173）で変えられ、既存のサーバーは再利用しない。別の場所の Chrome を使うときは環境変数 `CHROMIUM_PATH` で指定する。ヘッドレス WebGL は SwiftShader のソフトウェア描画（起動オプションは `playwright.config.ts`）。
@@ -25,7 +26,7 @@ E2E は `/opt/pw-browsers/chromium` を使う。preview サーバーのポート
 ## ディレクトリ構成
 
 - `src/scene/` 描画（renderer・シーン・カメラ・PLATEAU 表示）
-  - `src/scene/plateau/` PLATEAU の街並み。`stage.ts`（舞台一式）、`buildings.ts`（建物 3D Tiles）、`ground.ts`（航空写真の地面）、`elevation.ts`（標高）、`catalog.ts`（tileset 一覧）、`attribution.ts`（出典表示）、`tileFetch.ts`（タイル取得の再試行と失敗の集計）、`budget.ts`（端末に合わせたメモリの上限）
+  - `src/scene/plateau/` PLATEAU の街並み。`stage.ts`（舞台一式）、`buildings.ts`（建物 3D Tiles）、`ground.ts`（航空写真の地面）、`elevation.ts`（標高）、`catalog.ts`（tileset 一覧）、`baseGround.ts`（航空写真の下に敷く単色の地面と海。航空写真のない範囲を空の色で抜かさない）、`attribution.ts`（出典表示）、`tileFetch.ts`（タイル取得の再試行と失敗の集計）、`budget.ts`（端末に合わせたメモリの上限）
 - `src/geo/` 座標変換（`enu.ts`）
 - `src/sim/` 堆積計算（描画に依存しない純粋ロジック）
 - `src/story/` スクロール連動

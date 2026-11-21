@@ -7,8 +7,10 @@
  * - どちらの場面にもいないときは描かない（柱・ラベル・凡例をまとめて 0.35 秒でフェードする）。
  *
  * ラベルと凡例は、本文カードに覆われていない範囲（`story/layout.ts` の `freeRegionFor`）に収める。
- * PC 幅ではカードの列の右側（凡例は左下）、スマートフォン幅では画面の上側（凡例は小さくして左上）。
+ * PC 幅ではカードの列の右側、スマートフォン幅では画面の上側。凡例は、どちらも範囲の左上（スマートフォンでは小さくする）。
+ * 俯瞰のカメラは23区の駅の範囲を覆われていない範囲に収める（台本の `fit`）ので、範囲の上側の隅は柱のない余白になる。
  */
+import { Vector3 } from 'three';
 import { loadStationSites, type StationSite } from '../../data/stations';
 import { StationMarkers, type OverlayLayout, type Rect } from '../../scene/stationMarkers';
 import { smoothstep } from '../../story/cameraPath';
@@ -28,6 +30,18 @@ const COLOR_SEC = 0.5;
 const LABELS_WIDE = 10;
 const LABELS_NARROW = 5;
 
+/** 柱の画面上の位置（canvas の左上を原点とする CSS px）。E2E・確認用。 */
+export interface StationScreenPosition {
+  name: string;
+  municipality: string;
+  lat: number;
+  lon: number;
+  bicycles: number;
+  /** 柱の底（地表）と頂点。 */
+  base: { x: number; y: number };
+  top: { x: number; y: number };
+}
+
 export interface StationsDebug {
   /** 柱の数と、台数の合計。 */
   sites: number;
@@ -44,7 +58,7 @@ export interface StationsDebug {
 declare global {
   interface Window {
     /** E2E・確認用。 */
-    __STATIONS_MAIN__?: { read(): StationsDebug; sites(): readonly StationSite[] };
+    __STATIONS_MAIN__?: { read(): StationsDebug; sites(): readonly StationSite[]; screen(): StationScreenPosition[] };
   }
 }
 
@@ -78,6 +92,7 @@ export function readOverlayLayout(container: HTMLElement): OverlayLayout {
   return {
     region: { x: region.left, y: region.top, w: region.right - region.left, h: region.bottom - region.top },
     compact: !side,
+    legendCorner: 'top',
     obstacles,
   };
 }
@@ -136,6 +151,7 @@ class StationsController {
     window.__STATIONS_MAIN__ = {
       read: () => this.debug(),
       sites: () => sites,
+      screen: () => this.screenPositions(),
     };
     this.applyState();
     ctx.requestRender();
@@ -206,6 +222,29 @@ class StationsController {
     }
     if (this.visibility > 0) m.update(this.ctx.camera);
     return animating;
+  }
+
+  /** いまのカメラでの、柱の底と頂点の画面上の位置。 */
+  private screenPositions(): StationScreenPosition[] {
+    const m = this.markers;
+    const ctx = this.ctx;
+    if (!m || !ctx) return [];
+    const canvas = ctx.renderer.domElement;
+    ctx.camera.updateMatrixWorld();
+    const v = new Vector3();
+    const toScreen = (p: Vector3): { x: number; y: number } => {
+      v.copy(p).project(ctx.camera);
+      return { x: ((v.x + 1) / 2) * canvas.clientWidth, y: ((1 - v.y) / 2) * canvas.clientHeight };
+    };
+    return m.sites.map((s, i) => ({
+      name: s.shortName,
+      municipality: s.municipality,
+      lat: s.lat,
+      lon: s.lon,
+      bicycles: s.bicycles,
+      base: toScreen(m.base(i)),
+      top: toScreen(m.anchor(i)),
+    }));
   }
 
   private debug(): StationsDebug {

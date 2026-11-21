@@ -7,6 +7,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import { SCRIPT } from '../../src/story/content/script';
+import { freeRegionFor } from '../../src/story/layout';
 
 // ソフトウェア描画（SwiftShader）では PLATEAU の読み込みと描画に時間がかかる
 test.setTimeout(1_500_000);
@@ -339,6 +340,99 @@ async function expectOverlayClear(page: Page, viewport: { width: number; height:
   return labels.length;
 }
 
+interface ScreenStation {
+  name: string;
+  municipality: string;
+  lat: number;
+  lon: number;
+  bicycles: number;
+  base: { x: number; y: number };
+  top: { x: number; y: number };
+}
+
+/** 本文カードに覆われていない範囲（画面の座標）。アプリが使う `freeRegionFor` を、いまのカードの位置から求める。 */
+async function freeRegion(page: Page): Promise<{ left: number; top: number; right: number; bottom: number }> {
+  const info = await page.evaluate(() => {
+    let columnRight = 0;
+    let coverTop = Number.POSITIVE_INFINITY;
+    for (const card of document.querySelectorAll<HTMLElement>('.story-card')) {
+      columnRight = Math.max(columnRight, card.getBoundingClientRect().right);
+      const top = Number.parseFloat(getComputedStyle(card).top);
+      if (Number.isFinite(top)) coverTop = Math.min(coverTop, top);
+    }
+    const story = document.querySelector('.story')!;
+    return {
+      side: getComputedStyle(story).getPropertyValue('--story-layout').trim() === 'side',
+      width: window.innerWidth,
+      height: window.innerHeight,
+      columnRight,
+      coverTop: Number.isFinite(coverTop) ? coverTop : window.innerHeight,
+    };
+  });
+  return freeRegionFor({
+    layout: info.side ? 'side' : 'bottom',
+    width: info.width,
+    height: info.height,
+    visibleHeight: info.height,
+    columnRight: info.columnRight,
+    coverTop: info.coverTop,
+  });
+}
+
+const stationScreen = (page: Page): Promise<ScreenStation[]> => page.evaluate(() => window.__STATIONS_MAIN__!.screen());
+
+/**
+ * 23区の駅の柱が、本文カードに覆われていない範囲に収まっている。台数の上位40駅と、23区の外周（東西南北の端の各3駅）は、
+ * 柱の底も頂点もすべて入り、23区の駅の95%以上は柱の底が入る。
+ */
+async function expectWardsInFreeRegion(page: Page): Promise<void> {
+  const r = await freeRegion(page);
+  const inside = (p: { x: number; y: number }): boolean => p.x >= r.left && p.x <= r.right && p.y >= r.top && p.y <= r.bottom;
+  const wards = (await stationScreen(page)).filter((s) => s.municipality.endsWith('区'));
+  expect(wards.length).toBeGreaterThan(300);
+  const byBicycles = [...wards].sort((a, b) => b.bicycles - a.bicycles).slice(0, 40);
+  const byLon = [...wards].sort((a, b) => a.lon - b.lon);
+  const byLat = [...wards].sort((a, b) => a.lat - b.lat);
+  const outer = [...byLon.slice(0, 3), ...byLon.slice(-3), ...byLat.slice(0, 3), ...byLat.slice(-3)];
+  for (const s of [...byBicycles, ...outer]) {
+    expect(inside(s.base), `${s.name}（${s.bicycles}台）の柱の底が範囲外 ${JSON.stringify(s.base)} / ${JSON.stringify(r)}`).toBe(true);
+    expect(inside(s.top), `${s.name}（${s.bicycles}台）の柱の頂点が範囲外 ${JSON.stringify(s.top)} / ${JSON.stringify(r)}`).toBe(true);
+  }
+  expect(wards.filter((s) => inside(s.base)).length / wards.length).toBeGreaterThanOrEqual(0.95);
+}
+
+/** 凡例が、23区の駅の柱（底から頂点まで）を隠していない。 */
+async function expectLegendClearOfPillars(page: Page): Promise<void> {
+  const legend = (await overlayBoxes(page)).legend;
+  const wards = (await stationScreen(page)).filter((s) => s.municipality.endsWith('区'));
+  const hidden = wards.filter((s) =>
+    [0, 0.25, 0.5, 0.75, 1].some((t) => {
+      const x = s.base.x + (s.top.x - s.base.x) * t;
+      const y = s.base.y + (s.top.y - s.base.y) * t;
+      return x >= legend.x && x <= legend.x + legend.width && y >= legend.y && y <= legend.y + legend.height;
+    }),
+  );
+  expect(hidden.map((s) => `${s.name}（${s.bicycles}台）`)).toEqual([]);
+}
+
+/** 背景の空の色（`createApp` の skyColor）で描かれている画素の数。航空写真・単色の地面が敷かれていれば、俯瞰の画面には現れない。 */
+async function skyColoredPixels(page: Page): Promise<number> {
+  const png = await page.screenshot();
+  return page.evaluate(async (b64) => {
+    const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+    const bitmap = await createImageBitmap(new Blob([bytes], { type: 'image/png' }));
+    const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
+    const ctx = canvas.getContext('2d', { willReadFrequently: true })!;
+    ctx.drawImage(bitmap, 0, 0);
+    const { data } = ctx.getImageData(0, 0, bitmap.width, bitmap.height);
+    let n = 0;
+    for (let i = 0; i < data.length; i += 4) {
+      if (Math.abs(data[i]! - 0xbf) <= 2 && Math.abs(data[i + 1]! - 0xd9) <= 2 && Math.abs(data[i + 2]! - 0xee) <= 2) n++;
+    }
+    return n;
+  }, png.toString('base64'));
+}
+
 const LEGEND_SCALE = '柱の高さ 1km ＝ 50台';
 const LEGEND_SURVEY = '2025年10月、晴天の平日の午前11時頃に数えた台数';
 
@@ -381,7 +475,16 @@ test('場面3・4（PC 幅）: 柱が伸びて489か所・合計13,394台が立�
   // ラベルは本文カードの列の右側（カードに覆われていない範囲）にある
   const columnRight = Math.max(...(await page.evaluate(() => [...document.querySelectorAll('.story-card')].map((c) => c.getBoundingClientRect().right))));
   for (const l of labels) expect(l.box.x).toBeGreaterThan(columnRight);
-  expect((await overlayBoxes(page)).legend.x).toBeGreaterThan(columnRight);
+  // 凡例は範囲の左上の隅（地図の上側の余白）に、横に長い形で置かれ、23区の駅の柱を隠さない
+  const legendBox = (await overlayBoxes(page)).legend;
+  expect(legendBox.x).toBeGreaterThan(columnRight);
+  expect(legendBox.y).toBeLessThan(30);
+  expect(legendBox.height).toBeLessThan(170);
+  await expectLegendClearOfPillars(page);
+  // 23区の駅の柱の大半が、本文カードに覆われていない範囲に収まる
+  await expectWardsInFreeRegion(page);
+  // 航空写真のない範囲も単色の地面で埋まり、空の色で抜けた範囲がない
+  expect(await skyColoredPixels(page)).toBeLessThan(200);
   await page.screenshot({ path: 'screenshots/main-3.png' });
 
   // 場面4: 柱は伸びきったまま、色分けが「空きが放置台数以上／未満」に切り替わる
@@ -395,6 +498,9 @@ test('場面3・4（PC 幅）: 柱が伸びて489か所・合計13,394台が立�
   await expect(legend).toContainText('合計 13,394台（489か所）');
   await expect(legend).toContainText(LEGEND_SURVEY);
   expect(await expectOverlayClear(page, vp)).toBeGreaterThanOrEqual(8);
+  await expectLegendClearOfPillars(page);
+  await expectWardsInFreeRegion(page);
+  expect(await skyColoredPixels(page)).toBeLessThan(200);
   await page.screenshot({ path: 'screenshots/main-4.png' });
 
   // 場面4から場面3へ戻っても、柱は伸びきったまま（色は台数の段階に戻る）
@@ -430,6 +536,9 @@ test('場面3・4（スマートフォン幅 390×844）: ラベルは上位5か
       expect(legend.width).toBeLessThan(260);
       expect(legend.y + legend.height).toBeLessThan(844 / 2);
       for (const l of labels) expect(l.box.y + l.box.height).toBeLessThan(844 / 2 + 40);
+      // 凡例は23区の駅の柱を隠さず、23区の駅の柱の大半（上位の駅と外周の駅は全部）が、カードに覆われていない範囲に入る
+      await expectLegendClearOfPillars(page);
+      await expectWardsInFreeRegion(page);
     }
     // 柱が伸びきっていて、本文カードも出ている位置（カードとカードのあいだは何も出ない）でスクリーンショットを撮る
     let withCard = false;
@@ -448,6 +557,7 @@ test('場面3・4（スマートフォン幅 390×844）: ラベルは上位5か
     await expect(page.locator('.sm-legend')).toContainText('合計 13,394台（489か所）');
     await expect(page.locator('.sm-legend')).toContainText(LEGEND_SURVEY);
     await expect(page.locator('.sm-legend-scale')).toHaveText(LEGEND_SCALE);
+    expect(await skyColoredPixels(page)).toBeLessThan(200);
     await page.screenshot({ path: file });
   }
   expect(errors).toEqual([]);
