@@ -62,7 +62,8 @@
 }
 
 .methods p {
-  margin: 0.8em 0;
+  /* 左右の margin は触らない（`.methods > *` の auto で中央に置く） */
+  margin-block: 0.8em;
 }
 
 .methods__lead {
@@ -76,7 +77,7 @@
 }
 
 .methods ul {
-  margin: 0.8em 0;
+  margin-block: 0.8em;
   padding-left: 1.3em;
 }
 
@@ -101,7 +102,8 @@
 
 /* 項目の目次。1行1項目で、行全体をタップできる大きさにする。 */
 .methods__toc ul {
-  margin: 1em 0 0;
+  margin-block: 1em 0;
+  margin-inline: 0;
   padding: 0;
   list-style: none;
 }
@@ -124,7 +126,7 @@
 }
 
 /* 作品の先頭へ戻るリンク。 */
-.methods__back {
+.methods p.methods__back {
   margin-top: 3.2em;
   text-align: center;
 }
@@ -173,4 +175,14 @@
   .methods ul {
     padding-left: 1.1em;
   }
+}
+
+/*
+ * 節を読んでいる間（3D の描画を止めている間。createApp が html に `ptm-in-methods` を付ける）は、
+ * 3D の操作や読み込みの表示を出さない（節の上に重ならないように）。出典表示は残す。
+ */
+.ptm-in-methods .story-free-toggle,
+.ptm-in-methods .ptm-loading,
+.ptm-in-methods .ptm-pile-loading {
+  display: none !important;
 }

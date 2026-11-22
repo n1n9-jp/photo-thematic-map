@@ -735,6 +735,13 @@ test('「データと方法」の節: 出典表示のリンクから移動でき
   await page.waitForTimeout(2_000);
   expect(await page.evaluate(() => window.__MAIN__!.status().renderCount)).toBe(frozen);
 
+  // 節を読んでいる間は、「地図を動かす」ボタンと読み込みの表示が節の上に重ならない
+  expect(await page.evaluate(() => getComputedStyle(document.querySelector('.story-free-toggle')!).display)).toBe('none');
+  expect(await page.evaluate(() => document.documentElement.classList.contains('ptm-in-methods'))).toBe(true);
+  // 本文の列は画面の中央にある（前書きも「先頭へ戻る」も、列の左端が揃う）
+  const lefts = await page.evaluate(() => [...document.querySelectorAll<HTMLElement>('.methods__lead, .methods__toc, .methods__item, .methods__back')].map((e) => Math.round(e.getBoundingClientRect().left)));
+  expect(new Set(lefts).size).toBe(1);
+
   // 幅 1280px（PC）・390px・320px で横にあふれない。スクリーンショット
   mkdirSync('screenshots', { recursive: true });
   for (const [width, height, shot] of [

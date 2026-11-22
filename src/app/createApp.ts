@@ -266,10 +266,12 @@ export async function createApp(options: CreateAppOptions): Promise<App> {
     if (covered && renderCount > 0) {
       if (loopPaused) return;
       loopPaused = true;
+      document.documentElement.classList.add('ptm-in-methods');
       renderer.setAnimationLoop(null);
       indicator.set(false);
     } else if (loopPaused) {
       loopPaused = false;
+      document.documentElement.classList.remove('ptm-in-methods');
       last = performance.now();
       renderRequested = true;
       renderer.setAnimationLoop(frame);
@@ -325,6 +327,7 @@ export async function createApp(options: CreateAppOptions): Promise<App> {
     dispose() {
       renderer.setAnimationLoop(null);
       stopCoverWatch?.();
+      document.documentElement.classList.remove('ptm-in-methods');
       unsubscribe();
       for (const m of modules) m?.dispose();
       story.dispose();
