@@ -174,25 +174,40 @@ function akihabaraFit(e: AkihabaraExtent, a: AboveAngles, minDistanceM = 1): Sto
 }
 
 /**
- * 場面2 の始まり: 電気街口の駅前広場を斜め上（高さ約 27m）から見る。先頭の 8台（駅前広場の南西の角）が収まり、
- * 自転車の全長が画面上で 12 CSS px より十分大きい（約 40px）距離。足元の印はカメラが高いほど濃くなる（12〜45m）ので、
- * この高さでは薄く、自転車の形が見える。場面1（西向き）からの方位の差は 30°。
+ * 場面2 の始まり: 駅前の先頭の1台を、北東の斜め上（高さ約 14m）から見下ろす。自転車の全長は画面上で 12 CSS px より十分大きく
+ * （約 60px）、足元の印はカメラが高いほど濃くなる（12〜45m）ので、この高さではほぼ見えず、自転車の形が見える。
+ * 南側（総武線の高架の側）から見ると高架に隠れるので、北東から。場面1（西向き）からの方位の差は 45°。
+ * 3台目までこのまま寄り、8台目（駅前広場の南西の角）までに、8台が収まる距離へ引く。
  */
-const AKIHABARA_START: AboveAngles = { azimuthDeg: 300, elevationDeg: 50 };
-const AKIHABARA_START_DISTANCE_M = 35;
+const AKIHABARA_START: AboveAngles = { azimuthDeg: 225, elevationDeg: 45 };
+const AKIHABARA_START_DISTANCE_M = 20;
+/** 8台目までに引く先（駅前広場の南西の角の 8台が収まる、高さ約 30m）。 */
+const AKIHABARA_CORNER: AboveAngles = { azimuthDeg: 225, elevationDeg: 55 };
+const AKIHABARA_CORNER_DISTANCE_M = 35;
+
+/** 先頭の1台に寄るカメラ。 */
+const AKIHABARA_FIRST_BIKE: StoryCameraView = {
+  target: { ...PLACES.akihabaraFirstBike, alt: 0.5 },
+  distance: AKIHABARA_START_DISTANCE_M,
+  ...AKIHABARA_START,
+};
 /**
  * 場面2 の終わりと場面8: 462台の広がりが本文カードに覆われていない範囲に収まる、最も近い距離。方位と見下ろす角度は、
- * その距離で、建物にも本文カードにも隠れずに見える台数が最も多いもの（`tests/e2e/visibilityHelpers.ts` の測り方）。
+ * その距離で、建物にも本文カードにも隠れずに見える台数が多く（`tests/e2e/visibilityHelpers.ts` の測り方）、場面2 の始まり
+ * （方位 225°）からの方位の差が 150° 以内のもの。見下ろす角度 80°（平面図にしない上限）で、PC 幅は北向き（462台のうち約 314台。
+ * 最も多かった北東向き 326台は始まりとの差が 180°）、縦長の画面は東北東向き（約 374台）。近いほど斜めの視線になり、
+ * 通りの壁際の自転車が建物の向こう側に隠れるので、遠くから見下ろした以前のカメラ（約 380台）より少ない。
  */
-const AKIHABARA_END: AboveAngles = { azimuthDeg: 45, elevationDeg: 80 };
+const AKIHABARA_END: AboveAngles = { azimuthDeg: 0, elevationDeg: 80 };
 const AKIHABARA_END_PORTRAIT: AboveAngles = { azimuthDeg: 75, elevationDeg: 80 };
 
-/** 場面2: 始まり（駅前広場の南西の角）→ 22台目で駅の東が加わる前に引く → 増えるにつれて少しずつ引き、462台の広がりに合わせる。 */
+/** 場面2: 始まり（先頭の1台）→ 駅前広場の南西の角 → 22台目で駅の東が加わる前に引く → 増えるにつれて少しずつ引き、462台の広がりに合わせる。 */
 const AKIHABARA_GROW: StoryCameraKeyframe = {
-  ...akihabaraFit(AKIHABARA_EXTENTS.k8, AKIHABARA_START, AKIHABARA_START_DISTANCE_M),
+  ...AKIHABARA_FIRST_BIKE,
   stops: [
-    // 8台目までは駅前広場の南西の角のまま。そこから、21台目（駅前広場の周り）を経て、22台目（駅の東）が加わるまでに引く
-    { at: akihabaraAtCount(8), camera: akihabaraFit(AKIHABARA_EXTENTS.k8, AKIHABARA_START, AKIHABARA_START_DISTANCE_M) },
+    // 3台目（先頭の1台のすぐ隣）まではそのまま。8台目（駅前広場の南西の角）までに引き、そこから 22台目（駅の東）が加わるまでに大きく引く
+    { at: akihabaraAtCount(3), camera: AKIHABARA_FIRST_BIKE },
+    { at: akihabaraAtCount(8), camera: akihabaraFit(AKIHABARA_EXTENTS.k8, AKIHABARA_CORNER, AKIHABARA_CORNER_DISTANCE_M) },
     ...[AKIHABARA_EXTENTS.k22, AKIHABARA_EXTENTS.k120, AKIHABARA_EXTENTS.k180, AKIHABARA_EXTENTS.k330, AKIHABARA_EXTENTS.k462].map((e) => ({
       at: akihabaraAtCount(e.count),
       camera: akihabaraFit(e, AKIHABARA_END),
