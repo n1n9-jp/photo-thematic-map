@@ -132,3 +132,77 @@ export const FACTS = {
   targetParked: fact(15_000, '台以下', SOURCES.press, { note: '2025年度中の目標' }),
 } as const satisfies Record<string, Fact>;
 
+// ---------------------------------------------------------------------------
+// 「データと方法」の節（src/app/methods/）が使う定数。本文（FACTS）と食い違わないよう、数値はここに置く。
+// ---------------------------------------------------------------------------
+
+/** 撤去台数（原動機付自転車を含む、2024年度）。FACTS.removedFY2024（自転車のみ）との違いを節で説明する。 */
+export const REMOVED_FY2024_WITH_MOPEDS: Fact = fact(188_561, '台', SOURCES.summary, { note: '2024年度、自転車と原動機付自転車の計（自転車 187,262、原付 1,299）' });
+
+/** 地図の柱の数（駅別の表の行を同じ場所ごとに合算した、放置自転車のある場所）。単体テストで固定している。 */
+export const STATION_PILLARS: Fact = fact(489, 'か所', `${CALC}（駅別の表の行を同じ場所で合算）`, {
+  note: '本文の「530駅」「425駅」は表の行の数',
+});
+
+/** 放置台数が旧方式（自転車が100台以上ある駅だけを数える）だった最後の年。 */
+export const LAST_THRESHOLD_YEAR = 2011;
+
+/** 撤去台数の推移を載せた報告書の範囲（平成23年度調査〜令和7年度調査）。 */
+export const REPORT_YEARS = { firstHeisei: 23, lastReiwa: 7 } as const;
+
+/** データの年度。 */
+export const DATA_YEARS = { plateauBuildings: 2025, plateauOrtho: 2024, stations: 2024 } as const;
+
+/**
+ * 建物の事前変換（scripts/bake/buildings.ts）が読んだ PLATEAU の区。`public/data/buildings/manifest.json` の
+ * `sources.tilesets` と一致する（tests/unit/methods.test.ts が、manifest があるとき照合する）。
+ * - detail: 建物の詳細な形（LOD2）。 bridges: 橋梁・高架（LOD2）。 far: 遠景の箱形（LOD1）。
+ */
+export const BUILDING_DISTRICTS = {
+  detail: ['千代田区', '中央区', '台東区', '文京区', '新宿区', '渋谷区', '中野区'],
+  bridges: ['千代田区', '中央区', '台東区', '文京区', '新宿区', '渋谷区', '港区'],
+  far: [
+    '千代田区', '中央区', '港区', '新宿区', '文京区', '台東区', '墨田区', '江東区', '品川区', '目黒区', '渋谷区',
+    '中野区', '杉並区', '豊島区', '北区', '荒川区', '板橋区', '練馬区', '足立区', '葛飾区', '江戸川区', '世田谷区',
+  ],
+} as const;
+
+/** 都庁第一本庁舎の最高部の高さ(m)。出典: 東京都財務局の資料。FACTS.tochoHeight は四捨五入した値。 */
+export const TOCHO_HEIGHT_M = 243.4;
+/** 東京ドームの容積(m³)。出典: 東京ドームシティ公式サイト。FACTS.cumulativePileDomes の換算に使った値。 */
+export const TOKYO_DOME_VOLUME_M3 = 1_240_000;
+
+/**
+ * 山の計算の仮定（`src/scene/pileScene/compute.ts` の PILE_DEFAULTS と同じ値。tests/unit/methods.test.ts が照合する）。
+ * `reference` は、1台あたりのかさ体積の目安にした2つの値。
+ * - 整然と詰めた輸出用コンテナ: 約0.13m³（40フィートコンテナに 500〜575台）。
+ * - 自転車を直方体として隙間なく並べた場合: 約1.13m³。
+ * 山積みの自転車が占める体積の実測値は見つかっていないので、0.35m³ はこの2つの間の推定値。
+ */
+export const PILE_ASSUMPTIONS = {
+  unitVolumeM3: 0.35,
+  reposeAngleDeg: 35,
+  reference: {
+    containerPerBicycleM3: 0.13,
+    containerBicyclesMin: 500,
+    containerBicyclesMax: 575,
+    boxPerBicycleM3: 1.13,
+  },
+} as const;
+
+/** 平らな地面に、安息角 angleDeg の円錐として count 台（1台 unitVolumeM3）を積んだときの高さ(m)。概算。 */
+export function coneHeightOnFlatGroundM(count: number, unitVolumeM3: number, angleDeg: number): number {
+  const t = Math.tan((angleDeg * Math.PI) / 180);
+  return Math.cbrt((3 * count * unitVolumeM3 * t * t) / Math.PI);
+}
+
+/**
+ * 15年ぶんの山（表層だけを置く）で、実際に置く自転車の台数。`computePileScene` の `placedCount`
+ * （tests/unit/methods.test.ts が照合する）。表層の深さは端末で違う（パソコン 0.8m、スマートフォン 0.7m。`pileModule.ts`）。
+ * 1年ぶんの山は全台（FACTS.removedFY2024）を置く。
+ */
+export const PILE_SURFACE_PLACED = {
+  largeDevice: { count: 169_337, surfaceDepthM: 0.8 },
+  smallDevice: { count: 148_324, surfaceDepthM: 0.7 },
+} as const;
+

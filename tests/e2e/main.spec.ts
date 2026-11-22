@@ -118,7 +118,7 @@ test('8場面を順にスクロールすると、場面が進み、カメラが�
   await expect(attribution).toContainText('非公式の作品｜データと方法');
   await expect(attribution.getByRole('link', { name: '国土交通省 PLATEAU' })).toHaveAttribute('href', 'https://www.mlit.go.jp/plateau/');
   await expect(attribution.getByRole('link', { name: 'データと方法' })).toHaveAttribute('href', '#data-and-methods');
-  await expect(page.locator('#data-and-methods')).toContainText('準備中');
+  await expect(page.locator('#data-and-methods h2')).toHaveText('データと方法');
 
   const metrics: SceneMetric[] = [];
   const pileMetrics: PileMetric[] = [];
@@ -659,5 +659,104 @@ test('直接読む経路（?buildings=live）の場面ごとの読み込み量�
   mkdirSync('screenshots', { recursive: true });
   writeFileSync('screenshots/main-metrics-live.json', JSON.stringify(rows, null, 2));
   for (const r of rows) console.log(`場面${String(r.scene)} ${String(r.id)}: 計 ${((r.bytes as number) / 1e6).toFixed(1)} MB（建物 ${((r.buildingsLive as number) / 1e6).toFixed(1)} MB）${((r.settleMs as number) / 1000).toFixed(1)} s`);
+  expect(errors).toEqual([]);
+});
+
+// ---------------------------------------------------------------------------
+// 「データと方法」の節
+// ---------------------------------------------------------------------------
+
+/** 節の見出しの上端（画面の上端からの距離, px）。 */
+async function methodsHeadingTop(page: Page): Promise<number> {
+  return page.evaluate(() => document.getElementById('data-and-methods-heading')!.getBoundingClientRect().top);
+}
+
+/** 横にあふれていないか。文書と、節の中のすべての要素の右端・左端が画面の幅に収まる。 */
+async function methodsOverflow(page: Page): Promise<{ docScrollWidth: number; innerWidth: number; offenders: string[] }> {
+  return page.evaluate(() => {
+    const w = window.innerWidth;
+    const offenders: string[] = [];
+    for (const el of document.querySelectorAll<HTMLElement>('#data-and-methods, #data-and-methods *')) {
+      const r = el.getBoundingClientRect();
+      if (r.width > 0 && (r.right > w + 0.5 || r.left < -0.5)) offenders.push(`${el.tagName.toLowerCase()}「${(el.textContent ?? '').slice(0, 20)}」 ${Math.round(r.left)}〜${Math.round(r.right)}`);
+    }
+    return { docScrollWidth: document.documentElement.scrollWidth, innerWidth: w, offenders: offenders.slice(0, 5) };
+  });
+}
+
+test('「データと方法」の節: 出典表示のリンクから移動でき、見出しとリンクが整い、描画が止まり、幅 320・390・1280px で横にあふれない', async ({ page }) => {
+  const errors = collectErrors(page);
+  await open(page);
+
+  // 出典表示の「データと方法」のリンクから、節の見出しへ移動する
+  await page.locator('.ptm-site-attribution').getByRole('link', { name: 'データと方法' }).click();
+  await expect.poll(() => page.evaluate(() => location.hash)).toBe('#data-and-methods');
+  await expect.poll(async () => Math.abs(await methodsHeadingTop(page)), { timeout: 30_000 }).toBeLessThan(120);
+  expect(await methodsHeadingTop(page)).toBeGreaterThanOrEqual(0);
+
+  // 見出しの構造: h2 が1つ（節の見出し）、その下に h3 が5つ（項目）
+  const section = page.locator('#data-and-methods');
+  await expect(section.locator('h2')).toHaveText(['データと方法']);
+  await expect(section.locator('h3')).toHaveText([
+    'この作品について',
+    '放置自転車の台数：出典と数え方',
+    '自転車の置き方：どこまでが事実か',
+    '地図と3Dモデル：出典',
+    '制作の技術',
+  ]);
+  await expect(section).not.toContainText('準備中');
+  await expect(section).toContainText('個人が非営利で作りました');
+  await expect(section).toContainText('国土交通省、国土地理院、東京都が作成・監修・保証したものではありません');
+
+  // リンク: ページ内のリンクは移動先があり、外へのリンクは https の URL で、別のタブで開く
+  const links = await section.locator('a').evaluateAll((els) =>
+    els.map((a) => ({ href: a.getAttribute('href') ?? '', text: (a.textContent ?? '').trim(), target: a.getAttribute('target'), rel: a.getAttribute('rel') ?? '' })),
+  );
+  expect(links.length).toBeGreaterThan(15);
+  for (const l of links) {
+    expect(l.text, `リンクの文言が空: ${l.href}`).not.toBe('');
+    if (l.href.startsWith('#')) {
+      expect(await page.evaluate((id) => document.getElementById(id) !== null || id === 'top', l.href.slice(1)), `ページ内リンクの移動先がない: ${l.href}`).toBe(true);
+    } else {
+      expect(l.href, `https でない: ${l.href}`).toMatch(/^https:\/\/[^\s/]+\/\S*$/);
+      expect(l.target).toBe('_blank');
+      expect(l.rel).toContain('noopener');
+    }
+  }
+  expect(links.some((l) => l.href === '#top' && l.text === '作品の先頭へ戻る')).toBe(true);
+
+  // 背景は不透明で、画面の中ほどには 3D の画面（canvas）が見えない
+  expect(await page.evaluate(() => getComputedStyle(document.getElementById('data-and-methods')!).backgroundColor)).toMatch(/^rgb\(/);
+  expect(await page.evaluate(() => document.elementFromPoint(window.innerWidth / 2, window.innerHeight / 2)?.closest('#data-and-methods') !== null)).toBe(true);
+
+  // 節に入ると、3D の描画が止まる。先頭へ戻ると再開する
+  await page.waitForTimeout(500);
+  const frozen = await page.evaluate(() => window.__MAIN__!.status().renderCount);
+  await page.waitForTimeout(2_000);
+  expect(await page.evaluate(() => window.__MAIN__!.status().renderCount)).toBe(frozen);
+
+  // 幅 1280px（PC）・390px・320px で横にあふれない。スクリーンショット
+  mkdirSync('screenshots', { recursive: true });
+  for (const [width, height, shot] of [
+    [1280, 720, 'methods-desktop'],
+    [390, 844, 'methods-mobile'],
+    [320, 640, 'methods-320'],
+  ] as const) {
+    await page.setViewportSize({ width, height });
+    await page.evaluate(() => document.getElementById('data-and-methods')!.scrollIntoView({ block: 'start', behavior: 'instant' }));
+    await page.waitForTimeout(300);
+    const o = await methodsOverflow(page);
+    expect(o.docScrollWidth, `幅 ${width}px で文書が横にあふれる`).toBeLessThanOrEqual(o.innerWidth);
+    expect(o.offenders, `幅 ${width}px で節からはみ出す要素`).toEqual([]);
+    await section.screenshot({ path: `screenshots/${shot}.png` });
+  }
+
+  // 先頭へ戻るリンクで先頭へ戻り、描画が再開する
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await page.evaluate(() => document.getElementById('data-and-methods')!.scrollIntoView({ block: 'start', behavior: 'instant' }));
+  await section.getByRole('link', { name: '作品の先頭へ戻る' }).click();
+  await expect.poll(() => page.evaluate(() => window.scrollY), { timeout: 30_000 }).toBeLessThan(5);
+  await expect.poll(() => page.evaluate(() => window.__MAIN__!.status().renderCount), { timeout: 60_000 }).toBeGreaterThan(frozen);
+
   expect(errors).toEqual([]);
 });

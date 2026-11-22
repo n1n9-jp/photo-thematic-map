@@ -8,6 +8,7 @@
  * - 直接読むときの建物を読む場所は、カメラが向かっている場面の `place` に合わせて切り替える（場面を離れて動き出した時点で
  *   次の場面の場所を読み始める）。自由操作の間は注視点に合わせて動かす。
  * - 描画は必要なフレームだけ行う（カメラが動いた・街並みを読み込み中・中身から要求があった・リサイズした）。
+ * - `pauseWhenCovered` の要素（「データと方法」の節）が画面を覆っている間は、3D の画面が見えないので、描画のループを止める。
  */
 import { localToLatLon, latLonToLocal } from '../geo/enu';
 import { createScene, type DepthMode, type SceneContext } from '../scene/createScene';
@@ -21,6 +22,7 @@ import { createStory, type Story } from '../story/createStory';
 import type { StoryStage, StoryState } from '../story/types';
 import { ElevationCache } from './elevationCache';
 import { createLoadingIndicator } from './loadingIndicator';
+import { watchCover } from './methods/coverWatch';
 import type { SceneModule, SceneModuleContext, SceneModuleFactory } from './sceneModule';
 
 export interface CreateAppOptions {
@@ -37,6 +39,8 @@ export interface CreateAppOptions {
   buildingErrorTarget?: number;
   /** 建物の読み方。既定は URL の `?buildings=live` があれば 'live'、なければ 'baked'（変換済みのデータ）。 */
   buildings?: 'baked' | 'live';
+  /** 画面の上端に達して画面を覆っている間は、描画のループを止める要素（不透明で、画面より背が高い節）。 */
+  pauseWhenCovered?: HTMLElement;
 }
 
 export interface AppStatus {
@@ -231,7 +235,7 @@ export async function createApp(options: CreateAppOptions): Promise<App> {
   let resolveFirst!: () => void;
   const firstFrame = new Promise<void>((r) => (resolveFirst = r));
 
-  renderer.setAnimationLoop((now: number) => {
+  const frame = (now: number): void => {
     const dt = Math.min((now - last) / 1000, 1);
     last = now;
     updateFocus();
@@ -244,11 +248,39 @@ export async function createApp(options: CreateAppOptions): Promise<App> {
       city.update();
       ctx.render();
       renderCount++;
-      if (renderCount === 1) resolveFirst();
+      if (renderCount === 1) {
+        resolveFirst();
+        applyCover();
+      }
     }
     const st = city.status();
     indicator.set(st.groundLoading || st.buildingsLoading, st.buildingsLoading ? '建物' : st.groundLoading ? '地面' : undefined);
-  });
+  };
+  renderer.setAnimationLoop(frame);
+
+  // 節が画面を覆っている間は、描画のループを止める。戻ったら、経過時間を数え直して再開し、すぐに1フレーム描く。
+  // 最初のフレームは、覆われた状態で開いたときも描く（__APP_READY__ とスクロールの位置の計算のため）。
+  let covered = false;
+  let loopPaused = false;
+  const applyCover = (): void => {
+    if (covered && renderCount > 0) {
+      if (loopPaused) return;
+      loopPaused = true;
+      renderer.setAnimationLoop(null);
+      indicator.set(false);
+    } else if (loopPaused) {
+      loopPaused = false;
+      last = performance.now();
+      renderRequested = true;
+      renderer.setAnimationLoop(frame);
+    }
+  };
+  const stopCoverWatch = options.pauseWhenCovered
+    ? watchCover(options.pauseWhenCovered, (c) => {
+        covered = c;
+        applyCover();
+      })
+    : null;
 
   story.scroll.refresh();
 
@@ -292,6 +324,7 @@ export async function createApp(options: CreateAppOptions): Promise<App> {
     firstFrame,
     dispose() {
       renderer.setAnimationLoop(null);
+      stopCoverWatch?.();
       unsubscribe();
       for (const m of modules) m?.dispose();
       story.dispose();

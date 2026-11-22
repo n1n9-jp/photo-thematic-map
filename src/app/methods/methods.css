@@ -1,0 +1,176 @@
+/*
+ * 「データと方法」の節。本文カード（story.css）と同じ、落ち着いた組版。
+ * 背景は不透明の明るい色で、3D の画面は後ろに見せない（読みやすさを優先）。
+ * 本編の出典表示（画面の下端に固定）に文末が隠れないよう、下に出典表示の高さ（--ptm-attribution-height）の余白を取る。
+ */
+
+.methods {
+  --methods-ink: #1d1d1b;
+  --methods-ink-soft: #55534e;
+  --methods-paper: #faf8f3;
+  --methods-rule: rgba(29, 29, 27, 0.16);
+  --methods-accent: #b8321f;
+  --methods-link: #0b4f8a;
+  --methods-sans: 'Hiragino Kaku Gothic ProN', 'Hiragino Sans', 'Yu Gothic UI', 'Yu Gothic', 'Meiryo', 'Noto Sans JP', 'IPAexGothic', 'IPAPGothic', sans-serif;
+  --methods-serif: 'Hiragino Mincho ProN', 'Yu Mincho', 'Noto Serif JP', 'IPAexMincho', 'IPAPMincho', serif;
+
+  position: relative;
+  z-index: 1;
+  box-sizing: border-box;
+  width: 100%;
+  padding: 48px max(16px, env(safe-area-inset-right)) calc(96px + var(--ptm-attribution-height, 0px)) max(16px, env(safe-area-inset-left));
+  background: var(--methods-paper);
+  color: var(--methods-ink);
+  font-family: var(--methods-sans);
+  font-size: 0.95rem;
+  line-height: 1.85;
+  letter-spacing: 0.02em;
+  /* 日本語の折り返しを自然にする（対応ブラウザのみ）。 */
+  word-break: auto-phrase;
+  overflow-wrap: anywhere;
+}
+
+/* 読みやすい行の長さ（全角で 40 字前後）。幅 320px のスマートフォンでは画面の幅いっぱい。 */
+.methods > * {
+  max-width: 40rem;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.methods h2 {
+  margin-top: 0;
+  margin-bottom: 0.6em;
+  padding-top: 12px;
+  border-top: 3px solid var(--methods-accent);
+  font-family: var(--methods-serif);
+  font-size: 1.5rem;
+  line-height: 1.4;
+  letter-spacing: 0.02em;
+}
+
+.methods h3 {
+  margin: 0 0 0.5em;
+  font-family: var(--methods-serif);
+  font-size: 1.2rem;
+  line-height: 1.5;
+}
+
+.methods h4 {
+  margin: 1.6em 0 0.3em;
+  font-size: 1rem;
+  line-height: 1.6;
+}
+
+.methods p {
+  margin: 0.8em 0;
+}
+
+.methods__lead {
+  color: var(--methods-ink-soft);
+}
+
+.methods__item {
+  margin-top: 2.6em;
+  padding-top: 1.2em;
+  border-top: 1px solid var(--methods-rule);
+}
+
+.methods ul {
+  margin: 0.8em 0;
+  padding-left: 1.3em;
+}
+
+.methods li {
+  margin: 0.55em 0;
+}
+
+.methods a {
+  color: var(--methods-link);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  /* タップしやすいよう、文字の上下にも反応する範囲を取る（行間は 1.85 なので、行の見た目は変わらない）。 */
+  padding: 0.3em 0.1em;
+  -webkit-tap-highlight-color: rgba(11, 79, 138, 0.2);
+}
+
+.methods a:focus-visible {
+  outline: 3px solid #f2c94c;
+  outline-offset: 1px;
+  border-radius: 2px;
+}
+
+/* 項目の目次。1行1項目で、行全体をタップできる大きさにする。 */
+.methods__toc ul {
+  margin: 1em 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.methods__toc li {
+  margin: 0;
+  border-bottom: 1px solid var(--methods-rule);
+}
+
+.methods__toc a {
+  display: block;
+  min-height: 44px;
+  box-sizing: border-box;
+  padding: 10px 4px;
+  text-decoration: none;
+}
+
+.methods__toc a:hover {
+  text-decoration: underline;
+}
+
+/* 作品の先頭へ戻るリンク。 */
+.methods__back {
+  margin-top: 3.2em;
+  text-align: center;
+}
+
+.methods__back a {
+  display: inline-block;
+  min-height: 44px;
+  box-sizing: border-box;
+  padding: 10px 28px;
+  color: #fff;
+  background: #1d1d1b;
+  border-radius: 999px;
+  text-decoration: none;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.methods__back a:focus-visible {
+  outline: 3px solid #f2c94c;
+  outline-offset: 2px;
+}
+
+@media (min-width: 768px) {
+  .methods {
+    padding-top: 80px;
+    font-size: 1rem;
+    line-height: 1.95;
+  }
+
+  .methods h2 {
+    font-size: 1.75rem;
+  }
+
+  .methods h3 {
+    font-size: 1.3rem;
+  }
+}
+
+/* 狭い画面（幅 360px 未満）: 文字を少し小さくする。 */
+@media (max-width: 359px) {
+  .methods {
+    font-size: 0.9rem;
+    line-height: 1.8;
+  }
+
+  .methods ul {
+    padding-left: 1.1em;
+  }
+}

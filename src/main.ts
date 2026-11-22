@@ -3,6 +3,7 @@
  * `?depth=standard|reversed|logarithmic` で深度バッファの方式、`?error=` で建物の画面上の許容誤差(px)を切り替えられる（確認用）。
  */
 import { createApp } from './app/createApp';
+import { mountMethodsSection } from './app/methods/render';
 import { SCENE_MODULES } from './app/modules';
 import type { DepthMode } from './scene/createScene';
 
@@ -17,6 +18,9 @@ const container = document.getElementById('app');
 const storyRoot = document.getElementById('story');
 if (!container || !storyRoot) throw new Error('#app / #story が見つかりません');
 
+// 「データと方法」の節は、3D の準備を待たずに先に組む（出典表示のリンクで、読み込み中でも移動できる）
+const methods = mountMethodsSection();
+
 const depthParam = new URLSearchParams(location.search).get('depth');
 const depth: DepthMode | undefined =
   depthParam === 'standard' || depthParam === 'reversed' || depthParam === 'logarithmic' ? depthParam : undefined;
@@ -24,7 +28,7 @@ const depth: DepthMode | undefined =
 const errorParam = Number(new URLSearchParams(location.search).get('error'));
 const buildingErrorTarget = Number.isFinite(errorParam) && errorParam > 0 ? errorParam : undefined;
 
-const app = await createApp({ container, storyRoot, modules: SCENE_MODULES, depth, buildingErrorTarget });
+const app = await createApp({ container, storyRoot, modules: SCENE_MODULES, depth, buildingErrorTarget, pauseWhenCovered: methods });
 window.__MAIN__ = app.debug;
 // 確認用（コンソールから街並みのタイルなどを調べる）
 (window as unknown as { __PTM_APP__: unknown }).__PTM_APP__ = app;
