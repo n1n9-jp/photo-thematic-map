@@ -21,7 +21,15 @@ export interface StoryCameraKeyframe {
    * `distance` と比べて遠い方を使う（`distance` は「これより近づかない」下限）。
    */
   fit?: StoryCameraFit;
+  /**
+   * 縦長の画面（canvas の高さが幅より大きい。スマートフォンの縦向き）で使うカメラ。省略時は横長と同じ。
+   * 本文カードが画面の下に出て主役が上側の狭い範囲に寄るので、横長の画面とは別の方位・距離が良いことがある。
+   */
+  portrait?: StoryCameraView;
 }
+
+/** 画面の向きごとのカメラ（`StoryCameraKeyframe` から縦長の画面用の値を除いたもの）。 */
+export type StoryCameraView = Omit<StoryCameraKeyframe, 'portrait'>;
 
 /**
  * 注視点を中心とする、地表の長方形（東西・南北の幅(m)）。方位に関わらず、東西は東西、南北は南北の向きにとる。

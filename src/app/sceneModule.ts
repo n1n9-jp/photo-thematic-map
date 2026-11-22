@@ -14,6 +14,7 @@
  */
 import type { PerspectiveCamera, Scene, WebGLRenderer } from 'three';
 import type { Vec3 } from '../geo/enu';
+import type { MeasureTargets } from './visibility';
 
 export interface SceneModuleContext {
   scene: Scene;
@@ -46,6 +47,11 @@ export interface SceneModule {
   setProgress(progress: number): void;
   setActive(active: boolean): void;
   update?(dtSec: number): boolean;
+  /**
+   * 見えている割合を測る対象（`visibility.ts`）。場面に入っていて主役を表示しているときだけ返す（なければ null）。
+   * 確認用の読み出し口で、表示には影響しない。
+   */
+  measureTargets?(): MeasureTargets | null;
   dispose(): void;
 }
 

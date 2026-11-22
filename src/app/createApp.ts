@@ -15,13 +15,15 @@ import { addSiteAttribution } from '../scene/plateau/attribution';
 import { loadPlateauCatalog } from '../scene/plateau/catalog';
 import { buildingSourceFromUrl } from '../scene/plateau/bakedBuildings';
 import { PlateauCity, type PlateauCityStatus } from '../scene/plateau/stage';
-import { poseToCameraPosition, keyframeToPose } from '../story/cameraPath';
+import { poseToCameraPosition, keyframeToPose, viewsOf } from '../story/cameraPath';
 import { SCRIPT, type ScriptScene } from '../story/content/script';
 import { createStory, type Story } from '../story/createStory';
-import type { StoryStage, StoryState } from '../story/types';
+import type { StoryCameraKeyframe, StoryStage, StoryState } from '../story/types';
+import { Vector3, type Object3D } from 'three';
 import { ElevationCache } from './elevationCache';
 import { createLoadingIndicator } from './loadingIndicator';
 import type { SceneModule, SceneModuleContext, SceneModuleFactory } from './sceneModule';
+import { measureBuildingShare, measureVisibility, type CoverRect, type VisibilityResult } from './visibility';
 
 export interface CreateAppOptions {
   /** canvas を入れる要素。 */
@@ -66,6 +68,28 @@ export interface MainDebugApi {
   /** 街並みが出そろい、カメラも止まり、中身の初期化も済んだか。 */
   isSettled(): boolean;
   setFreeOrbit(on: boolean): void;
+  /**
+   * いまの場面の主役（自転車・山）が、建物に隠れずに・本文カードと出典表示に覆われずに見えている割合（`visibility.ts`）。
+   * 主役のない場面では null。buildings=true なら建物の画面の占有率も測る。
+   */
+  measureVisibility(options?: { expand?: number; buildings?: boolean }): (VisibilityResult & { covers: CoverRect[] }) | null;
+  /** 建物の画面の占有率（いまのカメラ）。 */
+  buildingShare(): number;
+  /** 緯度経度・標高(m)の点の画面上の位置（canvas の左上を原点とする CSS px）。inFront はカメラの前にあるか。 */
+  project(lat: number, lon: number, altM: number): { x: number; y: number; inFront: boolean };
+  /** 本文カードと出典表示など、画面を覆う DOM の長方形（canvas の左上を原点とする CSS px）。 */
+  covers(): CoverRect[];
+  /** 場面 index のカメラを差し替える（null で台本に戻す）。カメラ位置の候補を試す確認用。 */
+  setStageCamera(index: number, keyframe: StoryCameraKeyframe | null): void;
+  /**
+   * 連続位置 position（`StoryState.position`）で、スクロールが止まったときの語りのカメラ。ローカル座標（m）と、
+   * カメラの真下の地表からの高さ。場面の間の移動の経路を調べるのに使う。
+   */
+  poseAt(position: number): { camera: { x: number; y: number; z: number }; target: { x: number; y: number; z: number }; heightAboveGround: number };
+  /** 縦長の画面用のカメラを使っているか。 */
+  portrait(): boolean;
+  /** 地点の標高(m)（国土地理院の標高タイル。読み込み済みの範囲は正確な値）。 */
+  groundHeight(lat: number, lon: number): number;
 }
 
 declare global {
@@ -76,6 +100,8 @@ declare global {
 
 /** カメラがこのフレーム数止まっていれば「止まった」とみなす。 */
 const CAMERA_IDLE_FRAMES = 5;
+/** 場面の間を移る途中のカメラの高さの下限の上限(m)（`transitionFloor`）。丸の内・新宿の高層ビル（200m 前後）の上を通る。 */
+const TRANSITION_CLEARANCE_M = 200;
 /** カメラの高さがこれ以下の場面では、カメラの位置の標高も先に読む(m)。 */
 const PREFETCH_CAMERA_BELOW_M = 2000;
 
@@ -128,16 +154,18 @@ export async function createApp(options: CreateAppOptions): Promise<App> {
 
   // 場面の注視点と（低い場面は）カメラの位置の標高を先に読む。キーフレームはこの標高で決まる。
   await Promise.all(
-    script.flatMap((s) => {
-      const jobs = [elevation.prefetch(s.camera.target.lat, s.camera.target.lon)];
-      const pose = keyframeToPose(s.camera, () => 0);
-      const cam = poseToCameraPosition(pose);
-      if (cam.y < PREFETCH_CAMERA_BELOW_M) {
-        const ll = localToLatLon({ x: cam.x, y: 0, z: cam.z });
-        jobs.push(elevation.prefetch(ll.lat, ll.lon));
-      }
-      return jobs;
-    }),
+    script.flatMap((s) =>
+      viewsOf(s.camera).flatMap((view) => {
+        const jobs = [elevation.prefetch(view.target.lat, view.target.lon)];
+        const pose = keyframeToPose(view, () => 0);
+        const cam = poseToCameraPosition(pose);
+        if (cam.y < PREFETCH_CAMERA_BELOW_M) {
+          const ll = localToLatLon({ x: cam.x, y: 0, z: cam.z });
+          jobs.push(elevation.prefetch(ll.lat, ll.lon));
+        }
+        return jobs;
+      }),
+    ),
   );
   const groundY = (lat: number, lon: number): number => elevation.heightAt(lat, lon);
 
@@ -178,7 +206,8 @@ export async function createApp(options: CreateAppOptions): Promise<App> {
     },
   }));
 
-  const story = createStory({ scene: ctx, stages, root: options.storyRoot, groundY });
+  // 場面の間を移る途中は、両端のカメラの高さ（地表から、200m まで）より下がらない（建物の中を通り抜けない）
+  const story = createStory({ scene: ctx, stages, root: options.storyRoot, groundY, rig: { transitionClearance: TRANSITION_CLEARANCE_M } });
   storyRef = story;
 
   let activeIndex = -1;
@@ -257,6 +286,29 @@ export async function createApp(options: CreateAppOptions): Promise<App> {
     return { lat: ll.lat, lon: ll.lon, heightAboveGround: y - groundY(ll.lat, ll.lon) };
   };
 
+  const canvasEl = renderer.domElement;
+  const covers = (): CoverRect[] => {
+    const base = canvasEl.getBoundingClientRect();
+    const out: CoverRect[] = [];
+    const add = (el: Element): void => {
+      const r = el.getBoundingClientRect();
+      if (r.width <= 0 || r.height <= 0 || r.bottom <= base.top || r.top >= base.bottom) return;
+      out.push({ left: r.left - base.left, top: r.top - base.top, right: r.right - base.left, bottom: r.bottom - base.top });
+    };
+    for (const c of document.querySelectorAll<HTMLElement>('.story-card')) {
+      if (Number(getComputedStyle(c).opacity) > 0.05) add(c);
+    }
+    for (const el of document.querySelectorAll<HTMLElement>('.ptm-site-attribution, .story-free-toggle')) {
+      if (!el.hidden && getComputedStyle(el).display !== 'none') add(el);
+    }
+    return out;
+  };
+  const buildingObjects = (): Object3D[] =>
+    scene.children.filter((o) => o.name === 'plateau-baked-buildings' || o.name.startsWith('plateau-buildings'));
+  /** 航空写真の下に敷く単色の地面（測るときに遮るものとして描かない。`visibility.ts` の `exclude`）。 */
+  const notOccluders = (): Object3D[] => scene.children.filter((o) => o.name === 'plateau-base-ground');
+  const canvasSize = (): { width: number; height: number } => ({ width: canvasEl.clientWidth, height: canvasEl.clientHeight });
+
   const debug: MainDebugApi = {
     stageIds: () => script.map((s) => s.id),
     getState: () => story.scroll.getState(),
@@ -281,6 +333,48 @@ export async function createApp(options: CreateAppOptions): Promise<App> {
     }),
     isSettled: () => modulesReady && cameraIdleFrames >= CAMERA_IDLE_FRAMES && !city.busy,
     setFreeOrbit: (on) => story.setFreeOrbit(on),
+    measureVisibility: (opts = {}) => {
+      const targets = modules[activeIndex]?.measureTargets?.() ?? null;
+      if (!targets) return null;
+      const cv = covers();
+      // 霧はカメラの高さで変わるので、いまのフレームと同じ値にしてから測る
+      camera.updateMatrixWorld();
+      const r = measureVisibility(renderer, scene, camera, targets, canvasSize(), {
+        expand: opts.expand,
+        covers: cv,
+        buildings: opts.buildings ? buildingObjects() : undefined,
+        exclude: notOccluders(),
+        ground: scene.children.filter((o) => o.name === 'plateau-ground'),
+      });
+      requestRender();
+      return { ...r, covers: cv };
+    },
+    buildingShare: () => {
+      camera.updateMatrixWorld();
+      const v = measureBuildingShare(renderer, scene, camera, buildingObjects(), canvasSize(), notOccluders());
+      requestRender();
+      return v;
+    },
+    project: (lat, lon, altM) => {
+      camera.updateMatrixWorld();
+      const p = latLonToLocal({ lat, lon, alt: altM });
+      const v = new Vector3(p.x, p.y, p.z);
+      const inFront = v.clone().applyMatrix4(camera.matrixWorldInverse).z < 0;
+      v.project(camera);
+      return { x: ((v.x + 1) / 2) * canvasEl.clientWidth, y: ((1 - v.y) / 2) * canvasEl.clientHeight, inFront };
+    },
+    covers,
+    setStageCamera: (index, keyframe) => {
+      story.rig.setStageCamera(index, keyframe);
+      requestRender();
+    },
+    poseAt: (position) => {
+      const pose = story.rig.poseAt(position);
+      const cam = poseToCameraPosition(pose);
+      return { camera: cam, target: { ...pose.target }, heightAboveGround: heightAt(cam.x, cam.y, cam.z).heightAboveGround };
+    },
+    portrait: () => story.rig.portrait,
+    groundHeight: (lat, lon) => groundY(lat, lon),
   };
 
   return {

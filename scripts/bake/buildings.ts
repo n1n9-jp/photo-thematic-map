@@ -46,7 +46,7 @@ import {
 } from '../../src/data/buildings';
 import { ecefToGeodetic } from '../../src/geo/ecef';
 import { latLonToLocal, localToLatLon } from '../../src/geo/enu';
-import { keyframeToPose, poseToCameraPosition } from '../../src/story/cameraPath';
+import { keyframeToPose, poseToCameraPosition, viewsOf } from '../../src/story/cameraPath';
 import { PLACES, SCRIPT } from '../../src/story/content/script';
 import { fetchCounts, fetchJsonCached, mapLimit } from './cache';
 import { fetchTile, selectLeafTiles, type RegionRad, type TilesetJson } from './tiles';
@@ -169,10 +169,13 @@ export function placesFromScript(): Place[] {
     }
     const points: Point[] = [];
     for (const s of g.scenes) {
-      const pose = keyframeToPose(s.camera, () => 0);
-      const cam = poseToCameraPosition(pose);
-      points.push({ scene: s.id, role: 'target', x: round(pose.target.x, 2), z: round(pose.target.z, 2), heightM: round(pose.target.y, 2) });
-      points.push({ scene: s.id, role: 'camera', x: round(cam.x, 2), z: round(cam.z, 2), heightM: round(cam.y, 2) });
+      // 横長の画面のカメラと、あれば縦長の画面のカメラ（`StoryCameraKeyframe.portrait`）
+      for (const view of viewsOf(s.camera)) {
+        const pose = keyframeToPose(view, () => 0);
+        const cam = poseToCameraPosition(pose);
+        points.push({ scene: s.id, role: 'target', x: round(pose.target.x, 2), z: round(pose.target.z, 2), heightM: round(pose.target.y, 2) });
+        points.push({ scene: s.id, role: 'camera', x: round(cam.x, 2), z: round(cam.z, 2), heightM: round(cam.y, 2) });
+      }
     }
     // 同じ位置の点（場面1 と 8 など）は 1 つにする
     const seen = new Set<string>();

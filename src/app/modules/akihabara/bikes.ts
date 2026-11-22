@@ -9,6 +9,7 @@
  */
 import type { PerspectiveCamera, Scene, WebGLRenderer } from 'three';
 import { BicycleField } from '../../../scene/bicycle/field';
+import type { MeasureTargets } from '../../visibility';
 import { stationLayoutToInstances } from '../../../scene/bicycle/stationInstances';
 import { computeAkihabaraInWorker } from './computeInWorker';
 import type { AkihabaraLayoutResult } from './layout';
@@ -177,6 +178,16 @@ export class AkihabaraBikes {
       this.field.update(camera, px);
     }
     return needed;
+  }
+
+  /** 見えている割合を測る対象（表示中の自転車。足元の印は測らない）。表示していなければ null。 */
+  measureTargets(): MeasureTargets | null {
+    if (!this.markers || !this.field.object.visible || this.debug.shown === 0) return null;
+    return {
+      subjects: [this.field.object],
+      hide: [this.markers.mesh],
+      prepare: (camera, px) => this.field.update(camera, px),
+    };
   }
 
   dispose(): void {
