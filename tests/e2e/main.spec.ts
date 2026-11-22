@@ -70,8 +70,11 @@ async function goToScene(page: Page, i: number, holdFraction = 0.5): Promise<num
   );
   await expect.poll(() => page.evaluate(() => window.__MAIN__!.getState().stage), { timeout: 120_000 }).toBe(i);
   // スクロールの進捗が反映されるまで待つ（街並みがすぐ出そろうと、反映の前に isSettled() が true になることがある）
+  // 1 フレームが数秒かかる環境（上空から街を広く見る場面）でも待てるよう、場面の番号の確認と同じく 2 分待つ
   await expect
-    .poll(() => page.evaluate(([i, f]) => Math.abs(window.__MAIN__!.getState().progress - (window.__MAIN__!.holds()[i] ?? 0.4) * f), [i, holdFraction] as const))
+    .poll(() => page.evaluate(([i, f]) => Math.abs(window.__MAIN__!.getState().progress - (window.__MAIN__!.holds()[i] ?? 0.4) * f), [i, holdFraction] as const), {
+      timeout: 120_000,
+    })
     .toBeLessThan(0.01);
   await page.waitForFunction(() => window.__MAIN__!.isSettled(), undefined, { timeout: SETTLE_TIMEOUT_MS, polling: 250 });
   return Date.now() - t0;
@@ -329,7 +332,8 @@ async function checkVisibility(page: Page, viewport: { width: number; height: nu
     }
     const row = await measureScene(page, i, id, tag);
     rows.push(row);
-    console.log(`見えている割合 ${tag} 場面${i + 1} ${id}: 建物に隠れていない ${row.unoccluded}、カードにも覆われていない ${row.clear}、画面内 ${row.onScreen}、大きさ ${row.sizeOfShortSide}`);
+    const items = row.items ? `、台数 ${row.items.clear}/${row.items.total}（建物に隠れていない ${row.items.visible}台）` : '';
+    console.log(`見えている割合 ${tag} 場面${i + 1} ${id}: 建物に隠れていない ${row.unoccluded}、カードにも覆われていない ${row.clear}、画面内 ${row.onScreen}、大きさ ${row.sizeOfShortSide}${items}`);
     await page.screenshot({ path: shot(i + 1) });
   }
   writeVisibility(tag, rows);

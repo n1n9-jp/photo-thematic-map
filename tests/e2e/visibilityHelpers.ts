@@ -4,6 +4,8 @@
  * 割合は `window.__MAIN__.measureVisibility()`（src/app/visibility.ts）が、画面外の描画先へ描いて画素を数えて求める。
  * - unoccluded: 主役の画素のうち、建物にも地面にも隠れず画面に入っている割合（画面の外の分も「見えていない」に数える）。
  * - clear: さらに本文カードと出典表示にも覆われていない割合。
+ * - items（場面2・8 の 462台）: 1台ごとの標本点（3 点）で数えた、建物にも本文カードにも隠れずに見えている台数の割合。
+ *   遠くから見下ろす場面では自転車が 1 台 1 画素に満たず、画素の比はカメラのわずかな違いで揺れるので、目標は台数で確かめる。
  * 物差しの建物（丸の内駅舎・都庁第一本庁舎）は、上端と足元の点が画面に入り、カードに覆われていないかで確かめる。
  */
 import type { Page } from '@playwright/test';
@@ -38,6 +40,8 @@ export interface VisibilityGoal {
   clear?: number;
   /** unoccluded（建物に隠れていない割合）の下限。 */
   unoccluded?: number;
+  /** 1台ごとに数えた、建物にも本文カードにも隠れずに見えている台数の割合（items.clearFraction）の下限。 */
+  itemsClear?: number;
   /** 画面に入っている割合（onScreen）の下限。 */
   onScreen?: number;
   /** 主役の画面上の大きさ（囲む長方形の長い辺）の、画面の短い辺に対する割合の下限。 */
@@ -48,11 +52,11 @@ export interface VisibilityGoal {
 /** 場面 id → 目標。 */
 export const VISIBILITY_GOALS: Record<string, VisibilityGoal> = {
   'akihabara-one': { unoccluded: 0.95, clear: 0.95, sizeOfShortSide: 0.2 },
-  'akihabara-462': { clear: 0.8 },
+  'akihabara-462': { itemsClear: 0.8 },
   'removed-fy2024': { unoccluded: 0.9, onScreen: 0.98, landmark: MARUNOUCHI },
   'removed-15years': { unoccluded: 0.9, onScreen: 0.98, landmark: TOCHO },
   'after-removal': { unoccluded: 0.9, onScreen: 0.98, landmark: MARUNOUCHI },
-  'since-1990': { clear: 0.8 },
+  'since-1990': { itemsClear: 0.8 },
 };
 
 export interface VisibilityRow {
@@ -70,6 +74,8 @@ export interface VisibilityRow {
   sizeOfShortSide: number;
   bbox: { left: number; top: number; right: number; bottom: number } | null;
   buildingShare: number | null;
+  /** 1台ごとに数えた台数（場面2・8）。 */
+  items: { total: number; visible: number; clear: number; visibleFraction: number; clearFraction: number } | null;
   /** 物差しの建物の各点が、画面に入りカードに覆われていないか。 */
   landmark: { name: string; points: { x: number; y: number; ok: boolean }[] } | null;
   camera: { lat: number; lon: number; heightAboveGround: number };
@@ -103,6 +109,8 @@ export async function measureScene(page: Page, i: number, id: string, viewport: 
   }
   const failures: string[] = [];
   if (goal.clear !== undefined && r.clear < goal.clear) failures.push(`clear ${r.clear.toFixed(3)} < ${goal.clear}`);
+  if (goal.itemsClear !== undefined && (r.items?.clearFraction ?? 0) < goal.itemsClear)
+    failures.push(`台数 ${r.items?.clear ?? 0}/${r.items?.total ?? 0}（${(r.items?.clearFraction ?? 0).toFixed(3)}）< ${goal.itemsClear}`);
   if (goal.unoccluded !== undefined && r.unoccluded < goal.unoccluded) failures.push(`unoccluded ${r.unoccluded.toFixed(3)} < ${goal.unoccluded}`);
   if (goal.onScreen !== undefined && r.onScreen < goal.onScreen) failures.push(`onScreen ${r.onScreen.toFixed(3)} < ${goal.onScreen}`);
   if (goal.sizeOfShortSide !== undefined && size < goal.sizeOfShortSide) failures.push(`size ${size.toFixed(3)} < ${goal.sizeOfShortSide}`);
@@ -124,6 +132,7 @@ export async function measureScene(page: Page, i: number, id: string, viewport: 
     sizeOfShortSide: round(size),
     bbox: r.bbox,
     buildingShare: r.buildingShare === null ? null : round(r.buildingShare),
+    items: r.items ? { ...r.items, visibleFraction: round(r.items.visibleFraction), clearFraction: round(r.items.clearFraction) } : null,
     landmark,
     camera: { lat: Number(cam.lat.toFixed(6)), lon: Number(cam.lon.toFixed(6)), heightAboveGround: Math.round(cam.heightAboveGround * 10) / 10 },
     failures,

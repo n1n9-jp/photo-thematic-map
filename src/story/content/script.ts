@@ -128,13 +128,13 @@ const SCENE1_PORTRAIT_VIEW = { azimuthDeg: 270, heightM: 2.5, horizontalM: 8, ta
 /**
  * 場面2・8: 462台を西の上空から、見下ろす角度 80°（平面図にしない上限の近く）で見る。自転車は通りの壁際に並ぶので、
  * 斜めから見ると、カメラから見て建物の向こう側の壁際の自転車が隠れる。秋葉原の通りは東西・南北の格子で、
- * 自転車の向きもほぼ東西か南北にそろっている。方位と距離・注視点を何通りも試して、隠れずに見える自転車の画素の割合が
- * 最も高かったのが、東をわずかに北へ振った方位（80°）だった（`tests/e2e/visibilityHelpers.ts` の測り方。
- * 南から見下ろした以前のカメラでは約 3 割）。
+ * 自転車の向きもほぼ東西か南北にそろっている。方位と距離・注視点を何通りも試して、建物にも本文カードにも隠れずに見える
+ * 台数が最も多かったのが、東をわずかに北へ振った方位（85°）だった（462台のうち約 380台。高架の下の 19台は上空からは見えない。
+ * 測り方は `tests/e2e/visibilityHelpers.ts`。南から見下ろした以前のカメラでは、自転車の画素の約 3 割しか見えなかった）。
  * 縦長の画面は横幅が狭いので、遠くから（距離 1000m）塊の東西の広がりを収める。PC 幅は 850m。
  */
 const AKIHABARA_ABOVE_ELEVATION_DEG = 80;
-const AKIHABARA_ABOVE_AZIMUTH_DEG = 80;
+const AKIHABARA_ABOVE_AZIMUTH_DEG = 85;
 function akihabaraAbove(distanceM: number): StoryCameraView {
   return { target: { ...PLACES.akihabaraBikesView, alt: 0 }, distance: distanceM, azimuthDeg: AKIHABARA_ABOVE_AZIMUTH_DEG, elevationDeg: AKIHABARA_ABOVE_ELEVATION_DEG };
 }

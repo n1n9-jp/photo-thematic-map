@@ -15,8 +15,13 @@
  * 画素の大きさは CSS px（devicePixelRatio に依らない）。
  */
 import {
+  BufferAttribute,
+  BufferGeometry,
   Color,
   Matrix4,
+  Points,
+  PointsMaterial,
+  Vector3,
   PerspectiveCamera,
   RGBAFormat,
   UnsignedByteType,
@@ -38,6 +43,12 @@ export interface MeasureTargets {
    * viewportHeightPx は描画先の高さ(CSS px)。
    */
   prepare?(camera: PerspectiveCamera, viewportHeightPx: number): void;
+  /**
+   * 主役が数えられる物（462台の自転車）なら、1台ごとの標本点（ローカル座標 x, y, z を perItem 点ずつ）。
+   * 遠くから見下ろすと自転車は 1 台 1 画素に満たず、画素の比はカメラのわずかな違いで揺れるので、
+   * 「何台が見えているか」を標本点で数える（`VisibilityResult.items`）。
+   */
+  samples?: { points: Float32Array; perItem: number };
 }
 
 /** 画面（canvas）の左上を原点とする長方形(CSS px)。 */
@@ -103,6 +114,11 @@ export interface VisibilityResult {
   screenShare: number;
   /** 建物を描いた画素が画面に占める割合（`buildings` を渡したときだけ）。 */
   buildingShare: number | null;
+  /**
+   * 1台ごとの数え方（`MeasureTargets.samples` があるときだけ）。標本点のうち過半が画面に入り建物にも地面にも
+   * 隠れていない物を「見えている」、さらにその標本点の過半が本文カードにも覆われていない物を「隠れずに見えている」とする。
+   */
+  items: { total: number; visible: number; clear: number; visibleFraction: number; clearFraction: number } | null;
 }
 
 interface SavedState {
@@ -308,6 +324,12 @@ export function measureVisibility(
     const unoccludedPixels = soloS > 0 ? (onScreenPixels * unoccS) / soloS : 0;
     const clearPixels = soloS > 0 ? (onScreenPixels * clearS) / soloS : 0;
 
+    // 2b. 1台ごとの標本点（建物と地面を深度だけ描いた上に、点を 1 画素ずつ描いて、その画素に描けたかを読む）
+    let items: VisibilityResult['items'] = null;
+    if (targets.samples && targets.samples.points.length >= 3) {
+      items = measureItems(renderer, scene, camera, saved, rt, targets, options, covers, sc);
+    }
+
     // 3. 建物の画面の占有率（地面を深度だけ描き、建物を描く）
     let buildingShare: number | null = null;
     if (options.buildings && options.buildings.length > 0) {
@@ -343,6 +365,7 @@ export function measureVisibility(
       bbox: onScreenPixels > 0 ? { left: bx0, top: by0, right: bx1 + 1, bottom: by1 + 1 } : null,
       screenShare: clearPixels / (W * H),
       buildingShare,
+      items,
     };
   } finally {
     color.setLocked(false);
@@ -352,6 +375,106 @@ export function measureVisibility(
     rtEx.dispose();
     rt.dispose();
   }
+}
+
+/** 標本点を描く回数（隣り合う自転車の点が同じ画素に重ならないよう、物の番号の余りで分けて描く）。 */
+const ITEM_BATCHES = 7;
+
+function measureItems(
+  renderer: WebGLRenderer,
+  scene: Scene,
+  camera: PerspectiveCamera,
+  saved: SavedState,
+  rt: WebGLRenderTarget,
+  targets: MeasureTargets,
+  options: VisibilityOptions,
+  covers: readonly CoverRect[],
+  sc: number,
+): NonNullable<VisibilityResult['items']> {
+  const { points, perItem } = targets.samples!;
+  const n = Math.floor(points.length / 3);
+  const items = Math.floor(n / perItem);
+  const Ws = rt.width;
+  const Hs = rt.height;
+  const color = renderer.state.buffers.color;
+  // 標本点の画素の位置（描画先の画素。画面の外・カメラの後ろは -1）
+  camera.updateMatrixWorld();
+  const vp = new Matrix4().multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
+  const v = new Vector3();
+  const px = new Int32Array(n).fill(-1);
+  const py = new Int32Array(n).fill(-1);
+  const covered = new Uint8Array(n);
+  for (let i = 0; i < n; i++) {
+    v.set(points[i * 3]!, points[i * 3 + 1]!, points[i * 3 + 2]!).applyMatrix4(vp);
+    if (!Number.isFinite(v.x) || v.z < -1 || v.z > 1 || Math.abs(v.x) > 1 || Math.abs(v.y) > 1) continue;
+    const x = Math.min(Ws - 1, Math.floor(((v.x + 1) / 2) * Ws));
+    const y = Math.min(Hs - 1, Math.floor(((v.y + 1) / 2) * Hs));
+    px[i] = x;
+    py[i] = y;
+    const cx = (x + 0.5) / sc;
+    const cy = (Hs - 1 - y + 0.5) / sc;
+    covered[i] = covers.some((c) => cx >= c.left && cx < c.right && cy >= c.top && cy < c.bottom) ? 1 : 0;
+  }
+  // 遮るもの（主役を除く）を深度だけ描く
+  renderer.setRenderTarget(rt);
+  renderer.clear(true, true, true);
+  showExcept(saved, [...targets.subjects, ...(targets.hide ?? []), ...(options.exclude ?? [])]);
+  color.setMask(false);
+  color.setLocked(true);
+  renderer.render(scene, camera);
+  color.setLocked(false);
+  color.setMask(true);
+  for (const o of saved.visible.keys()) o.visible = o === scene;
+  // 点は深度を書かない（点どうしで隠し合わない）
+  const material = new PointsMaterial({ size: 1, sizeAttenuation: false, color: 0xffffff, fog: false, depthWrite: false });
+  const seen = new Uint8Array(n);
+  const pixel = new Uint8Array(4);
+  try {
+    for (let slot = 0; slot < perItem; slot++) {
+      for (let b = 0; b < ITEM_BATCHES; b++) {
+        const idx: number[] = [];
+        for (let it = b; it < items; it += ITEM_BATCHES) {
+          const i = it * perItem + slot;
+          if (px[i]! >= 0) idx.push(i);
+        }
+        if (idx.length === 0) continue;
+        const pos = new Float32Array(idx.length * 3);
+        idx.forEach((i, k) => pos.set(points.subarray(i * 3, i * 3 + 3), k * 3));
+        const geometry = new BufferGeometry();
+        geometry.setAttribute('position', new BufferAttribute(pos, 3));
+        const cloud = new Points(geometry, material);
+        cloud.frustumCulled = false;
+        scene.add(cloud);
+        renderer.clear(true, false, false);
+        renderer.render(scene, camera);
+        cloud.removeFromParent();
+        geometry.dispose();
+        for (const i of idx) {
+          renderer.readRenderTargetPixels(rt, px[i]!, py[i]!, 1, 1, pixel);
+          if (pixel[3]! > 0) seen[i] = 1;
+        }
+      }
+    }
+  } finally {
+    material.dispose();
+  }
+  let visible = 0;
+  let clear = 0;
+  const need = Math.floor(perItem / 2) + 1;
+  for (let it = 0; it < items; it++) {
+    let a = 0;
+    let c = 0;
+    for (let k = 0; k < perItem; k++) {
+      const i = it * perItem + k;
+      if (seen[i]) {
+        a++;
+        if (!covered[i]) c++;
+      }
+    }
+    if (a >= need) visible++;
+    if (c >= need) clear++;
+  }
+  return { total: items, visible, clear, visibleFraction: items > 0 ? visible / items : 0, clearFraction: items > 0 ? clear / items : 0 };
 }
 
 /**
