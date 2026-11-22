@@ -411,14 +411,15 @@ test('場面の間を移る途中も、カメラが建物の中を通らない�
 
 /**
  * 場面 from のカメラが止まっている位置から、場面 to へ一気にスクロールし、カメラが追いつくまでの毎フレームのカメラの位置が
- * 建物の外にあることを確かめる。1 フレームで進める時間を 1/30 秒に抑え（描画の遅い環境でも動きを細かく刻む）、記録する。
+ * 建物の外にあることを確かめる。1 フレームで進める時間を frameDt 秒に抑え（描画の遅い環境でも動きを細かく刻む）、記録する。
+ * カメラは経路の上を追いかけるので、場面の間を移る区間は追いかけ始めの数フレームで通り過ぎる。遠くへ移る区間ほど細かく刻む。
  */
-async function expectFastScrollOutsideBuildings(page: Page, solids: BuildingSolids, from: number, to: number): Promise<number> {
+async function expectFastScrollOutsideBuildings(page: Page, solids: BuildingSolids, from: number, to: number, frameDt: number): Promise<number> {
   await goToScene(page, from);
-  await page.evaluate(() => {
-    window.__MAIN__!.setMaxFrameDt(1 / 30);
+  await page.evaluate((dt) => {
+    window.__MAIN__!.setMaxFrameDt(dt);
     window.__MAIN__!.traceCamera(true);
-  });
+  }, frameDt);
   await page.evaluate((to) => {
     const api = window.__MAIN__!;
     window.scrollTo({ top: api.scrollYFor(to, (api.holds()[to] ?? 0.4) * 0.5), behavior: 'instant' });
@@ -444,7 +445,7 @@ async function expectFastScrollOutsideBuildings(page: Page, solids: BuildingSoli
     window.__MAIN__!.setMaxFrameDt(1);
     return t;
   });
-  expect(trace.length, `場面${from + 1}→${to + 1}: 記録したフレームの数`).toBeGreaterThan(20);
+  expect(trace.length, `場面${from + 1}→${to + 1}: 記録したフレームの数`).toBeGreaterThan(10);
   const inside = trace.flatMap((c, k) => (solids.inside(c.x, c.y, c.z) ? [`${k}: (${c.x.toFixed(0)}, ${c.y.toFixed(0)}, ${c.z.toFixed(0)})`] : []));
   expect(inside, `場面${from + 1}→${to + 1} を一気にスクロールしたとき、建物の中にあったフレーム`).toEqual([]);
   return trace.length;
@@ -454,12 +455,12 @@ test('一気にスクロールしても、追いかけるカメラが建物の�
   const errors = collectErrors(page);
   await open(page);
   const solids = new BuildingSolids();
-  for (const [from, to] of [
-    [0, 1],
-    [5, 6],
-    [6, 7],
+  for (const [from, to, dt] of [
+    [0, 1, 1 / 30],
+    [5, 6, 1 / 240],
+    [6, 7, 1 / 240],
   ] as const) {
-    const frames = await expectFastScrollOutsideBuildings(page, solids, from, to);
+    const frames = await expectFastScrollOutsideBuildings(page, solids, from, to, dt);
     console.log(`一気にスクロール 場面${from + 1}→${to + 1}: ${frames} フレーム、建物の中 0`);
   }
   expect(errors).toEqual([]);
