@@ -33,3 +33,10 @@ export const GSI_DEM5A_URL = 'https://cyberjapandata.gsi.go.jp/xyz/dem5a_png/{z}
 export const GSI_DEM5A_ZOOM = 15;
 export const GSI_DEM10_URL = 'https://cyberjapandata.gsi.go.jp/xyz/dem_png/{z}/{x}/{y}.png';
 export const GSI_DEM10_MAX_ZOOM = 14;
+
+/**
+ * 国土地理院「全国最新写真（シームレス）」の XYZ タイル（JPEG、最大ズーム 18）。航空写真の出典を替える比較用（`?ortho=gsi`）。
+ * 仕様: https://maps.gsi.go.jp/development/ichiran.html
+ */
+export const GSI_PHOTO_URL = 'https://cyberjapandata.gsi.go.jp/xyz/seamlessphoto/{z}/{x}/{y}.jpg';
+export const GSI_PHOTO_MAX_ZOOM = 18;

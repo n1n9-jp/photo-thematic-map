@@ -195,7 +195,7 @@ export class PlateauCity {
 
   /** 読み込み中のタイルがあれば true（俯瞰で建物を描いていないときは地面だけ）。 */
   get isLoading(): boolean {
-    return this.ground.isLoading || this.baseGround.isLoading || (this.buildingsVisible && this.buildingsLoading);
+    return this.ground.needsUpdate || this.baseGround.isLoading || (this.buildingsVisible && this.buildingsLoading);
   }
 
   /** 読み込み中か、読み込みが止まってまだ数フレームしか経っていない（描画を続けるべき）か。 */

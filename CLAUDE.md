@@ -27,7 +27,7 @@ E2E は `/opt/pw-browsers/chromium` を使う。preview サーバーのポート
 ## ディレクトリ構成
 
 - `src/scene/` 描画（renderer・シーン・カメラ・PLATEAU 表示）
-  - `src/scene/plateau/` PLATEAU の街並み。`stage.ts`（舞台一式）、`bakedBuildings.ts`（変換済みの建物。本編の既定）、`buildings.ts`（建物 3D Tiles を直接読む。確認ページ demos/plateau と本編の `?buildings=live`）、`ground.ts`（航空写真の地面）、`elevation.ts`（標高）、`catalog.ts`（tileset 一覧）、`attribution.ts`（出典表示）、`tileFetch.ts`（タイル取得の再試行と失敗の集計）、`budget.ts`（端末に合わせたメモリの上限）、`baseGround.ts`（航空写真の下に敷く単色の地面と海。航空写真のない範囲を空の色で抜かさない）
+  - `src/scene/plateau/` PLATEAU の街並み。`stage.ts`（舞台一式）、`bakedBuildings.ts`（変換済みの建物。本編の既定）、`buildings.ts`（建物 3D Tiles を直接読む。確認ページ demos/plateau と本編の `?buildings=live`）、`ground.ts`（航空写真の地面。読み込み量を抑える工夫は下記「航空写真の読み込み量」）、`orthoSource.ts`（航空写真の出典。既定 PLATEAU-Ortho、`?ortho=gsi` で国土地理院の写真に切り替える比較用）、`elevation.ts`（標高）、`catalog.ts`（tileset 一覧）、`attribution.ts`（出典表示）、`tileFetch.ts`（タイル取得の再試行と失敗の集計）、`budget.ts`（端末に合わせたメモリの上限）、`baseGround.ts`（航空写真の下に敷く単色の地面と海。航空写真のない範囲を空の色で抜かさない）
 - `src/data/` 生成データの形式と読み込み（`grids.ts` 街の高さ格子、`buildings.ts` 変換済みの建物のチャンク）
 - `src/geo/` 座標変換（`enu.ts`）
 - `src/sim/` 堆積計算（描画に依存しない純粋ロジック）
@@ -46,6 +46,16 @@ E2E は `/opt/pw-browsers/chromium` を使う。preview サーバーのポート
 - E2E: `tests/e2e/<機能名>.spec.ts`（`/demos/<機能名>.html` を開き、`__APP_READY__` とコンソールエラー0件を確認し、`screenshots/<機能名>.png` を保存する）
 - `vite.config.ts` が `demos/*.html` を自動でビルド対象に含めるので、設定の変更は不要。
 - 機能の本体は `src/scene/` `src/sim/` `src/story/` に再利用できるモジュールとして置き、確認ページからはそれを呼ぶだけにする。
+
+## 航空写真の読み込み量
+
+地面の航空写真（`src/scene/plateau/ground.ts`）は、モバイル回線での転送量を抑えるため、次の順で粗いタイルで済ませる。計測は `tests/e2e/ground-load.spec.ts`（場面ごと・ズーム別・表示に使われているか別。PC 幅とスマートフォン幅。結果は `screenshots/ground-load/*.json`）。対策の前後の表と画面は `docs/ground-load/`。
+
+- 浅い角度で見るタイルは、必要な細かさを √sinθ 倍に下げる（`grazingMinFactor`。地上の目線の場面で遠くの地面を細かく読まない）。
+- 霧が掛かる距離では、霧の濃さに応じて粗くする（`fogMinContrast`）。
+- 四分木の途中の段は、子をさらに細かくしたいときは読まずに飛ばす（読み込み済みの祖先の画像の 8×8 区画から、3 段下までの子孫の有無を判断する）。
+- カメラが動いている間（と止まって 3 フレーム）は粗いタイルだけを読む（`movingTexelFactor`。場面のあいだの移動で通り過ぎる場所を細かく読まない）。この間は `needsUpdate` が true なので、呼び出し側は `update()` を呼び続ける。
+- 細かさの基準（`texelScale`）は端末別（`budget.ts` の `groundTexelScale`。パソコン 1.5・スマートフォン 2）。
 
 ## 静的アセットのパスと favicon
 

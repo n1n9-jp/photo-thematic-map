@@ -14,6 +14,7 @@
 import {
   Box3,
   BufferAttribute,
+  Fog,
   BufferGeometry,
   DoubleSide,
   Frustum,
@@ -21,19 +22,22 @@ import {
   Matrix4,
   Mesh,
   MeshBasicMaterial,
+  Quaternion,
   SRGBColorSpace,
   Texture,
   Vector2,
   Vector3,
 } from 'three';
 import type { PerspectiveCamera, WebGLRenderer } from 'three';
-import { GSI_DEM10_MAX_ZOOM, GSI_DEM5A_ZOOM, PLATEAU_ORTHO_MAX_ZOOM, PLATEAU_ORTHO_URL } from '../../config';
+import { GSI_DEM10_MAX_ZOOM, GSI_DEM5A_ZOOM } from '../../config';
 import { latLonToLocal, localToLatLon } from '../../geo/enu';
 import { latToTileY, lonToTileX, tileBounds, tileXToLon, tileYToLat } from '../../geo/tiles';
 import type { TileBounds } from '../../geo/tiles';
 import { plateauMemoryBudget, releaseAfterUpload } from './budget';
 import { GsiElevationSource, fetchImagePixels, hasValidHeights, sampleDemAt } from './elevation';
 import type { DemKind, DemTile } from './elevation';
+import { ORTHO_SOURCES, orthoSourceFromUrl, orthoTileUrl } from './orthoSource';
+import type { OrthoSource } from './orthoSource';
 import { TileFetchPolicy, reportTileFailure } from './tileFetch';
 import type { TileFetchPolicyOptions } from './tileFetch';
 
@@ -44,10 +48,30 @@ export interface PlateauGroundOptions {
   radiusM?: number;
   /** 最も粗いズーム。既定 10。 */
   minZoom?: number;
-  /** 最も細かいズーム。既定 19（PLATEAU-Ortho の最大）。 */
+  /** 最も細かいズーム。既定は航空写真の最大（PLATEAU-Ortho 19、国土地理院 18）。 */
   maxZoom?: number;
-  /** 画像 1 画素を画面上で何 px まで引き伸ばしてよいか。大きいほど粗いタイルで済ませる。既定 1.5。 */
+  /** 航空写真の出典。既定は URL の `?ortho=gsi` があれば国土地理院、なければ PLATEAU-Ortho（`orthoSource.ts`）。 */
+  ortho?: OrthoSource;
+  /**
+   * 画像 1 画素を画面上で何 px まで引き伸ばしてよいか。大きいほど粗いタイルで済ませる。
+   * 既定は端末に合わせて plateauMemoryBudget() から選ぶ（パソコン 1.5・スマートフォン 2）。
+   */
   texelScale?: number;
+  /**
+   * カメラが動いている間（と止まってから数フレーム）は、texelScale をこの倍率にして粗いタイルだけを読む。
+   * 場面のあいだの移動で通り過ぎる場所の細かいタイルを読まずに済む。1 で無効。既定 4。
+   */
+  movingTexelFactor?: number;
+  /**
+   * 霧（シーンの Fog）が掛かる距離では、霧の濃さに応じて粗いタイルで済ませる（色の差が 1−濃さ に薄まるので、
+   * 必要な細かさをその割合で下げる）。下げる割合の下限（この値より薄い色の差は、この値とみなす）。0 で無効。既定 0.25。
+   */
+  fogMinContrast?: number;
+  /**
+   * 地面を浅い角度で見るタイルは、奥行きの方向に縮んで見えるので粗いタイルで済ませる。視線と地面の角度を θ として、
+   * 必要な細かさを √sinθ 倍に下げる（横方向の細かさとの釣り合い）。下げる倍率の下限。1 で無効。既定 0.25。
+   */
+  grazingMinFactor?: number;
   /** 同時に読み込むタイル数。既定 12。 */
   concurrency?: number;
   /** 保持するタイル数の上限。既定は端末に合わせて plateauMemoryBudget() から選ぶ（パソコン 240・スマートフォン 120）。 */
@@ -63,8 +87,11 @@ export interface PlateauGroundOptions {
   fetchPolicy?: TileFetchPolicyOptions;
 }
 
-/** unavailable: 存在しない（撮影範囲外など）。failed: 取得できなかった（再試行の上限に達した）。 */
-type NodeState = 'idle' | 'loading' | 'ready' | 'unavailable' | 'failed';
+/**
+ * unavailable: 存在しない（撮影範囲外など）。failed: 取得できなかった（再試行の上限に達した）。
+ * skipped: 読まずに飛ばした途中の段（画像を持たず、子の有無は読み込み済みの祖先の画像から決める）。
+ */
+type NodeState = 'idle' | 'loading' | 'ready' | 'unavailable' | 'failed' | 'skipped';
 
 interface GroundNode {
   z: number;
@@ -77,8 +104,11 @@ interface GroundNode {
   sizeM: number;
   state: NodeState;
   mesh: Mesh | null;
-  /** 子タイル（北西・北東・南西・南東）が存在するか。読み込み後に確定。 */
-  childAvailable: [boolean, boolean, boolean, boolean] | null;
+  /**
+   * 画像を ALPHA_GRID×ALPHA_GRID に分けた各区画に不透明な画素があるか（行優先）。読み込み後に確定し、解放後も残す。
+   * 子孫のタイル（MAX_SKIP_DEPTH 段下まで）が存在するかの判断に使う。
+   */
+  alphaGrid: Uint8Array | null;
   children: (GroundNode | null)[] | null;
   /** 細かい順の標高タイル（自分で取得したもの → 祖先のもの）。 */
   dems: DemTile[];
@@ -86,14 +116,18 @@ interface GroundNode {
 }
 
 const SEGMENTS = 16;
+/** 画像の不透明な区画を調べる細かさ（一辺の区画数）。2^MAX_SKIP_DEPTH。 */
+const ALPHA_GRID = 8;
+/** 読み込み済みのタイルから何段下まで、途中の段を読まずに子孫の有無を判断できるか。 */
+const MAX_SKIP_DEPTH = 3;
+/** カメラがこのフレーム数止まっていれば、細かいタイルを読み始める。 */
+const STILL_FRAMES = 3;
+/** 1 フレームの回転がこれ(rad)を超えたら「動いている」とみなす。 */
+const MOVING_ANGLE_RAD = 0.0005;
 const SETTLE_FRAMES = 10;
 /** 使っていない木の枝を刈り込む間隔（フレーム）。 */
 const PRUNE_INTERVAL = 120;
 const IMG = 256;
-
-function orthoUrl(z: number, x: number, y: number): string {
-  return PLATEAU_ORTHO_URL.replace('{z}', String(z)).replace('{x}', String(x)).replace('{y}', String(y));
-}
 
 /** 子の並び順（北西・北東・南西・南東）に対応する (dx, dy)。 */
 const CHILD_OFFSETS: readonly (readonly [number, number])[] = [
@@ -120,7 +154,19 @@ export class PlateauGround {
   private readonly rootBounds: PlateauGroundOptions['rootBounds'];
   private readonly minZoom: number;
   private readonly maxZoom: number;
+  /** 航空写真の出典。 */
+  readonly ortho: OrthoSource;
   private readonly texelScale: number;
+  private readonly movingTexelFactor: number;
+  private readonly fogMinContrast: number;
+  private readonly grazingMinFactor: number;
+  /** このフレームで使う texelScale（カメラが動いている間は粗い）。 */
+  private splitScale = 1.5;
+  private fog: Fog | null = null;
+  private readonly prevPos = new Vector3(Number.NaN, 0, 0);
+  private readonly prevQuat = new Quaternion();
+  /** カメラが止まってからのフレーム数。 */
+  private stillFrames = STILL_FRAMES;
   private readonly concurrency: number;
   private readonly maxTiles: number;
   private readonly roots = new Map<string, GroundNode>();
@@ -144,10 +190,16 @@ export class PlateauGround {
     this.radiusM = options.radiusM ?? 6000;
     this.rootBounds = options.rootBounds;
     this.minZoom = options.minZoom ?? 10;
-    this.maxZoom = Math.min(options.maxZoom ?? PLATEAU_ORTHO_MAX_ZOOM, PLATEAU_ORTHO_MAX_ZOOM);
-    this.texelScale = options.texelScale ?? 1.5;
-    this.concurrency = options.concurrency ?? 12;
+    this.ortho = options.ortho ?? orthoSourceFromUrl();
+    const sourceMaxZoom = ORTHO_SOURCES[this.ortho].maxZoom;
+    this.maxZoom = Math.min(options.maxZoom ?? sourceMaxZoom, sourceMaxZoom);
     const budget = plateauMemoryBudget();
+    this.texelScale = options.texelScale ?? budget.groundTexelScale;
+    this.movingTexelFactor = Math.max(1, options.movingTexelFactor ?? 4);
+    this.fogMinContrast = Math.min(Math.max(options.fogMinContrast ?? 0.25, 0), 1);
+    this.grazingMinFactor = Math.min(Math.max(options.grazingMinFactor ?? 0.25, 0.01), 1);
+    this.splitScale = this.texelScale;
+    this.concurrency = options.concurrency ?? 12;
     this.maxTiles = options.maxTiles ?? budget.groundMaxTiles;
     this.orthoPolicy = new TileFetchPolicy('航空写真', options.fetchPolicy);
     this.elevation = new GsiElevationSource({
@@ -170,6 +222,8 @@ export class PlateauGround {
     this.camPos.setFromMatrixPosition(cam.matrixWorld);
     this.projScreen.multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse);
     this.frustum.setFromProjectionMatrix(this.projScreen);
+    this.trackMotion(cam);
+    this.fog = findFog(this.group);
 
     const visible = new Set<GroundNode>();
     const wanted: GroundNode[] = [];
@@ -190,7 +244,7 @@ export class PlateauGround {
     if (this.frame % PRUNE_INTERVAL === 0) this.prune(new Set(roots));
 
     if (!this.isReady) {
-      const busy = wanted.length > 0 || this.loadingCount > 0;
+      const busy = wanted.length > 0 || this.loadingCount > 0 || this.cameraSettling;
       this.settledFrames = busy ? 0 : this.settledFrames + 1;
       if (this.settledFrames >= SETTLE_FRAMES) {
         this.isReady = true;
@@ -204,9 +258,41 @@ export class PlateauGround {
     return this.loadingCount > 0;
   }
 
+  /**
+   * 読み込み中か、カメラが動いている（止まったら細かいタイルを読む）ので update() を呼び続けてほしいなら true。
+   * 描画を必要なフレームだけ行う呼び出し側は、これが true の間は update() を呼ぶ。
+   */
+  get needsUpdate(): boolean {
+    return this.loadingCount > 0 || this.cameraSettling;
+  }
+
+  /** カメラが動いている、または止まってまだ数フレーム。 */
+  private get cameraSettling(): boolean {
+    return this.movingTexelFactor > 1 && this.stillFrames < STILL_FRAMES;
+  }
+
+  /** カメラの動きを前のフレームと比べ、このフレームで使う細かさ（splitScale）を決める。 */
+  private trackMotion(cam: PerspectiveCamera): void {
+    const q = cam.getWorldQuaternion(new Quaternion());
+    if (!Number.isNaN(this.prevPos.x)) {
+      // 高いところほど大きく動いても見え方は変わらないので、許す移動量を高さに比例させる
+      const tol = Math.max(0.02, Math.abs(this.camPos.y) * 0.001);
+      const moved = this.camPos.distanceTo(this.prevPos) > tol || q.angleTo(this.prevQuat) > MOVING_ANGLE_RAD;
+      this.stillFrames = moved ? 0 : this.stillFrames + 1;
+    }
+    this.prevPos.copy(this.camPos);
+    this.prevQuat.copy(q);
+    this.splitScale = this.cameraSettling ? this.texelScale * this.movingTexelFactor : this.texelScale;
+  }
+
   /** 読み込み済みタイル数。 */
   get tileCount(): number {
     return this.loaded.size;
+  }
+
+  /** 読み込み済みのタイル（確認用。E2E が読み込み量を、表示に使っているかどうか別に集計する）。 */
+  debugTiles(): { z: number; x: number; y: number; visible: boolean }[] {
+    return [...this.loaded].map((n) => ({ z: n.z, x: n.x, y: n.y, visible: n.mesh?.visible ?? false }));
   }
 
   /** 取得できなかった航空写真のタイル数（復号に失敗したものを含む）。 */
@@ -291,7 +377,7 @@ export class PlateauGround {
       sizeM: b.x - a.x,
       state: 'idle',
       mesh: null,
-      childAvailable: null,
+      alphaGrid: null,
       children: null,
       dems: parent ? parent.dems : [],
       lastUsed: 0,
@@ -316,45 +402,123 @@ export class PlateauGround {
     this.renderer.getSize(this.size);
     const f = this.size.y / 2 / Math.tan(((this.camera.fov / 2) * Math.PI) / 180);
     const d = Math.max(this.distanceTo(node), 1);
-    return (node.sizeM * f) / d > IMG * this.texelScale;
+    return (node.sizeM * f * this.grazingFactor(node, d)) / d > IMG * this.splitScale * this.fogRelief(d);
   }
 
+  /** 視線と地面の角度による、必要な細かさの倍率（0〜1）。カメラよりタイルが高いときは 1。 */
+  private grazingFactor(node: GroundNode, d: number): number {
+    if (this.grazingMinFactor >= 1) return 1;
+    const h = this.camPos.y - (node.box.min.y + node.box.max.y) / 2;
+    if (h <= 0 || h >= d) return 1;
+    return Math.max(Math.sqrt(h / d), this.grazingMinFactor);
+  }
+
+  /** 距離 d(m) での霧による許容の倍率（1 以上）。霧が濃いほど粗いタイルで済ませる。 */
+  private fogRelief(d: number): number {
+    const fog = this.fog;
+    if (!fog || this.fogMinContrast <= 0 || fog.far <= fog.near) return 1;
+    const t = Math.min(Math.max((d - fog.near) / (fog.far - fog.near), 0), 1);
+    return 1 / Math.max(1 - t, this.fogMinContrast);
+  }
+
+  /**
+   * 表示するタイルと読み込むタイルを選ぶ。読み込み済みのタイルは、細かくしたいときに子（が全部そろうまでは自分）を表示する。
+   * 飛ばした段（skipped）は、子が全部そろったときだけここへ来るので、子を選ぶ。
+   */
   private select(node: GroundNode, visible: Set<GroundNode>, wanted: GroundNode[]): void {
-    if (!this.inRange(node) || !this.frustum.intersectsBox(node.box)) return;
+    if (!this.inView(node)) return;
     node.lastUsed = this.frame;
     if (node.state === 'unavailable' || node.state === 'failed') return;
+    if (node.state === 'skipped') {
+      for (const k of this.viewKids(node)) this.select(k, visible, wanted);
+      return;
+    }
     if (node.state !== 'ready') {
       if (node.state === 'idle') wanted.push(node);
       return;
     }
     if (this.wantsSplit(node)) {
-      const kids = this.childrenOf(node).filter(
-        (k): k is GroundNode =>
-          k !== null &&
-          k.state !== 'unavailable' &&
-          k.state !== 'failed' &&
-          this.inRange(k) &&
-          this.frustum.intersectsBox(k.box),
-      );
-      if (kids.every((k) => k.state === 'ready')) {
+      const kids = this.viewKids(node);
+      if (kids.every((k) => this.isComplete(k))) {
         for (const k of kids) this.select(k, visible, wanted);
         return;
       }
-      for (const k of kids) {
-        k.lastUsed = this.frame;
-        if (k.state === 'idle') wanted.push(k);
-      }
+      for (const k of kids) this.request(k, wanted, 1);
     }
     visible.add(node);
   }
 
+  private inView(node: GroundNode): boolean {
+    return this.inRange(node) && this.frustum.intersectsBox(node.box);
+  }
+
+  /** 存在し、範囲と視野に入る子。 */
+  private viewKids(node: GroundNode): GroundNode[] {
+    return this.childrenOf(node).filter(
+      (k): k is GroundNode => k !== null && k.state !== 'unavailable' && k.state !== 'failed' && this.inView(k),
+    );
+  }
+
+  /** 表示に使える（読み込み済み、または飛ばした段で、子が全部そろっている）か。 */
+  private isComplete(node: GroundNode): boolean {
+    if (node.state === 'ready') return true;
+    if (node.state !== 'skipped') return false;
+    return this.viewKids(node).every((k) => this.isComplete(k));
+  }
+
+  /**
+   * 親の代わりに表示するために、node（読み込み済みの祖先から depth 段下）を用意する。node 自身もさらに細かくしたい
+   * （子を読むことになる）なら、node の画像は読まずに飛ばし、子を用意する（途中の段を読まない）。
+   * 飛ばせるのは、祖先の画像から子孫の有無が分かる MAX_SKIP_DEPTH 段下までで、カメラが動いている間は飛ばさない。
+   */
+  private request(node: GroundNode, wanted: GroundNode[], depth: number): void {
+    node.lastUsed = this.frame;
+    if (node.state === 'idle') {
+      if (depth < MAX_SKIP_DEPTH && !this.cameraSettling && this.wantsSplit(node)) {
+        node.state = 'skipped';
+        node.children = null;
+      } else {
+        wanted.push(node);
+        return;
+      }
+    }
+    if (node.state !== 'skipped') return;
+    // 細かくしなくてよくなった（カメラが離れた）うえ、子をまだ何も持っていなければ、飛ばすのをやめて自分を読む
+    if (!this.wantsSplit(node) && !(node.children ?? []).some((k) => k && (k.state === 'ready' || k.state === 'loading' || k.state === 'skipped'))) {
+      node.state = 'idle';
+      node.children = null;
+      wanted.push(node);
+      return;
+    }
+    for (const k of this.viewKids(node)) this.request(k, wanted, depth + 1);
+  }
+
   private childrenOf(node: GroundNode): (GroundNode | null)[] {
     if (!node.children) {
-      node.children = CHILD_OFFSETS.map(([dx, dy], i) =>
-        node.childAvailable?.[i] ? this.createNode(node.z + 1, node.x * 2 + dx, node.y * 2 + dy, node) : null,
-      );
+      node.children = CHILD_OFFSETS.map(([dx, dy]) => {
+        const x = node.x * 2 + dx;
+        const y = node.y * 2 + dy;
+        return this.descendantAvailable(node, node.z + 1, x, y) ? this.createNode(node.z + 1, x, y, node) : null;
+      });
     }
     return node.children;
+  }
+
+  /** タイル (z, x, y)（from の子孫）が存在するか。from から近い順に、画像を読んだ祖先の不透明な区画で判断する。 */
+  private descendantAvailable(from: GroundNode, z: number, x: number, y: number): boolean {
+    for (let a: GroundNode | null = from; a; a = a.parent) {
+      if (!a.alphaGrid) continue;
+      const depth = z - a.z;
+      if (depth > MAX_SKIP_DEPTH) return false;
+      const cells = ALPHA_GRID >> depth;
+      const rx = x - (a.x << depth);
+      const ry = y - (a.y << depth);
+      for (let j = ry * cells; j < (ry + 1) * cells; j++) {
+        for (let i = rx * cells; i < (rx + 1) * cells; i++) if (a.alphaGrid[j * ALPHA_GRID + i]) return true;
+      }
+      return false;
+    }
+    return false;
   }
 
   private async load(node: GroundNode): Promise<void> {
@@ -362,7 +526,7 @@ export class PlateauGround {
     this.loadingCount++;
     try {
       const [img, ownDem] = await Promise.all([
-        fetchImagePixels(orthoUrl(node.z, node.x, node.y), undefined, this.orthoPolicy),
+        fetchImagePixels(orthoTileUrl(this.ortho, node.z, node.x, node.y), undefined, this.orthoPolicy),
         this.loadDem(node),
       ]);
       if (this.disposed) {
@@ -374,7 +538,7 @@ export class PlateauGround {
         return;
       }
       node.dems = ownDem ? [ownDem, ...(node.parent?.dems ?? [])] : (node.parent?.dems ?? []);
-      node.childAvailable = quadrantsWithAlpha(img.pixels, img.bitmap.width, img.bitmap.height);
+      node.alphaGrid = alphaGrid(img.pixels, img.bitmap.width, img.bitmap.height, ALPHA_GRID);
       node.mesh = this.buildMesh(node, img.bitmap);
       this.group.add(node.mesh);
       node.state = 'ready';
@@ -391,22 +555,32 @@ export class PlateauGround {
     }
   }
 
-  /** このタイルのために新たに取得する標高タイル。親の標高に有効値が無い範囲は取得しない。 */
+  /**
+   * このタイルのために新たに取得する標高タイル（ズーム14までは同じズームの 10m メッシュ、それより細かいタイルは
+   * ズーム15 の 5m メッシュ）。祖先の標高に有効値が無い範囲は取得しない。
+   * 途中の段を飛ばしたときも、読み込み済みの最も近い祖先が自分の標高を持っていれば、その範囲から判断して取得する。
+   */
   private async loadDem(node: GroundNode): Promise<DemTile | null> {
-    const { z, x, y, parent } = node;
-    let kind: DemKind;
-    if (z <= GSI_DEM10_MAX_ZOOM) kind = 'dem10';
-    else if (z === GSI_DEM5A_ZOOM) kind = 'dem5a';
-    else return null;
-    const parentDem = parent?.dems[0];
+    const { z, parent } = node;
+    const demZoom = (zoom: number): number => (zoom <= GSI_DEM10_MAX_ZOOM ? zoom : GSI_DEM5A_ZOOM);
+    const zt = demZoom(z);
+    const kind: DemKind = zt === GSI_DEM5A_ZOOM ? 'dem5a' : 'dem10';
+    const tx = node.x >> (z - zt);
+    const ty = node.y >> (z - zt);
     if (parent) {
-      if (!parentDem || parentDem.z !== z - 1) return null;
-      const half = IMG / 2;
-      const ox = (x - parent.x * 2) * half;
-      const oy = (y - parent.y * 2) * half;
-      if (!hasValidHeights(parentDem, ox, oy, ox + half, oy + half)) return null;
+      const ancestorDem = parent.dems[0];
+      if (!ancestorDem || ancestorDem.z >= zt) return null;
+      // 読み込み済みの最も近い祖先が、自分の標高を取得できていなければ（有効値が無い範囲・取得不能）取得しない
+      let loadedAncestor: GroundNode | null = parent;
+      while (loadedAncestor && loadedAncestor.state === 'skipped') loadedAncestor = loadedAncestor.parent;
+      if (loadedAncestor && ancestorDem.z !== demZoom(loadedAncestor.z)) return null;
+      const scale = 2 ** (zt - ancestorDem.z);
+      const size = Math.max(1, IMG / scale);
+      const ox = Math.floor((tx - ancestorDem.x * scale) * size);
+      const oy = Math.floor((ty - ancestorDem.y * scale) * size);
+      if (!hasValidHeights(ancestorDem, ox, oy, ox + size, oy + size)) return null;
     }
-    return this.elevation.getTile(kind, z, x, y);
+    return this.elevation.getTile(kind, zt, tx, ty);
   }
 
   private heightAt(dems: readonly DemTile[], lat: number, lon: number): number {
@@ -559,6 +733,27 @@ export class PlateauGround {
       if (!keep(root) && !currentRoots.has(root)) this.roots.delete(key);
     }
   }
+}
+
+/** 祖先のシーンの霧（線形の Fog）。 */
+function findFog(obj: Group): Fog | null {
+  for (let o = obj.parent; o; o = o.parent) {
+    const fog = (o as { fog?: unknown }).fog;
+    if (fog instanceof Fog) return fog;
+  }
+  return null;
+}
+
+/** RGBA 画素を n×n に分けた各区画（行優先）に不透明な画素があるか（1 / 0）。 */
+export function alphaGrid(pixels: ArrayLike<number>, width: number, height: number, n: number): Uint8Array {
+  const out = new Uint8Array(n * n);
+  for (let y = 0; y < height; y++) {
+    const row = Math.min(n - 1, Math.floor((y * n) / height));
+    for (let x = 0; x < width; x++) {
+      if ((pixels[(y * width + x) * 4 + 3] ?? 0) > 0) out[row * n + Math.min(n - 1, Math.floor((x * n) / width))] = 1;
+    }
+  }
+  return out;
 }
 
 /** RGBA 画素の 4 つの象限（北西・北東・南西・南東）それぞれに不透明な画素があるか。 */
