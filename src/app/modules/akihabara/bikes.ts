@@ -7,7 +7,7 @@
  *   場面2 で増えた分の印は、現れた瞬間に大きく明るく光る（動きを減らす設定では明るくするだけ）。
  * - どの場面からも使われていないときは描かない。
  */
-import type { PerspectiveCamera, Scene, WebGLRenderer } from 'three';
+import { Vector3, type PerspectiveCamera, type Scene, type WebGLRenderer } from 'three';
 import { BicycleField } from '../../../scene/bicycle/field';
 import type { MeasureTargets } from '../../visibility';
 import { stationLayoutToInstances } from '../../../scene/bicycle/stationInstances';
@@ -33,6 +33,12 @@ const MARKER_RADIUS_M = 1.3;
 const MARKER_FADE_FROM_M = 12;
 const MARKER_FADE_TO_M = 45;
 
+/**
+ * 足元の印の画面上の直径の下限(CSS px)。遠くから見下ろすと印が小さくなりすぎるので、表示中で最も遠い印がこの直径になるまで
+ * 印を大きくする（自転車そのものは実寸のまま）。
+ */
+export const MARKER_MIN_DIAMETER_PX = 6.5;
+
 /** E2E・確認用の読み取り口。 */
 export interface AkihabaraDebug {
   ready: boolean;
@@ -51,6 +57,12 @@ export interface AkihabaraDebug {
   /** 最初の1台の位置（ローカル座標）と向き（yaw, ラジアン）。 */
   first: { x: number; y: number; z: number; yaw: number } | null;
   markerOpacity: number;
+  /** 足元の印の大きさの倍率（遠くから見下ろすときに大きくする）。 */
+  markerScale: number;
+  /** 表示中の印のうち、画面上で最も小さい直径(CSS px)。描いていなければ 0。 */
+  markerMinDiameterPx: number;
+  /** 置いた順の先頭の1台の、画面上の全長（前後の端の間の長さ, CSS px）。描いていなければ 0。 */
+  firstBikeLengthPx: number;
 }
 
 declare global {
@@ -89,6 +101,9 @@ export class AkihabaraBikes {
     layoutMs: 0,
     first: null,
     markerOpacity: 0,
+    markerScale: 1,
+    markerMinDiameterPx: 0,
+    firstBikeLengthPx: 0,
   };
 
   constructor(private readonly compute: () => Promise<AkihabaraLayoutResult & { loadMs: number }> = () => computeAkihabaraInWorker()) {
@@ -172,6 +187,7 @@ export class AkihabaraBikes {
       needed = true;
     }
     this.debug.markerOpacity = this.markers.opacity;
+    if (this.updateScreenSizes(camera, renderer.domElement.height / renderer.getPixelRatio())) needed = true;
     if (this.markers.update(dtSec)) needed = true;
     if (visible) {
       const px = renderer.domElement.height / renderer.getPixelRatio();
@@ -198,13 +214,53 @@ export class AkihabaraBikes {
   }
 
   /**
+   * 画面上の大きさ: 表示中で最も遠い印が `MARKER_MIN_DIAMETER_PX` を下回らないよう印の倍率を決め、先頭の1台の全長を測る。
+   * 倍率が変わったら true（描き直す）。
+   */
+  private updateScreenSizes(camera: PerspectiveCamera, heightPx: number): boolean {
+    const layout = this.result?.layout;
+    const markers = this.markers;
+    const n = Math.min(this.debug.shown, layout?.count ?? 0);
+    if (!layout || !markers || n === 0 || heightPx <= 0) {
+      this.debug.markerMinDiameterPx = 0;
+      this.debug.firstBikeLengthPx = 0;
+      return false;
+    }
+    const focal = heightPx / 2 / Math.tan(((camera.fov / camera.zoom) * Math.PI) / 360);
+    const c = camera.position;
+    let far = 0;
+    for (let i = 0; i < n; i++) {
+      far = Math.max(far, Math.hypot(layout.positions[i * 3]! - c.x, layout.positions[i * 3 + 1]! - c.y, layout.positions[i * 3 + 2]! - c.z));
+    }
+    const base = (2 * MARKER_RADIUS_M * focal) / Math.max(far, 1e-6);
+    const scale = Math.max(1, MARKER_MIN_DIAMETER_PX / base);
+    const changed = Math.abs(scale - markers.sizeScale) > 1e-3;
+    if (changed) markers.sizeScale = scale;
+    this.debug.markerScale = scale;
+    this.debug.markerMinDiameterPx = base * scale;
+    // 先頭の1台の前後の端（自転車は yaw の向き (cos, 0, -sin) に長い）
+    const half = layout.bikeLength / 2;
+    const fx = Math.cos(layout.yaws[0]!);
+    const fz = -Math.sin(layout.yaws[0]!);
+    const x = layout.positions[0]!;
+    const y = layout.positions[1]! + 0.5;
+    const z = layout.positions[2]!;
+    camera.updateMatrixWorld();
+    const a = new Vector3(x + fx * half, y, z + fz * half).project(camera);
+    const b = new Vector3(x - fx * half, y, z - fz * half).project(camera);
+    const width = heightPx * camera.aspect;
+    this.debug.firstBikeLengthPx = Math.hypot(((a.x - b.x) / 2) * width, ((a.y - b.y) / 2) * heightPx);
+    return changed;
+  }
+
+  /**
    * 表示中の自転車 1 台ごとに 3 点（前輪の上・サドルの下・後輪の上。地面から 0.45〜0.55m）の標本点（見えている台数を数える）。
    */
   private samplePoints(count: number): { points: Float32Array; perItem: number } | undefined {
     const layout = this.result?.layout;
     if (!layout) return undefined;
     const n = Math.min(count, layout.count);
-    const half = (layout.bikeLength ?? 1.8) * 0.33;
+    const half = layout.bikeLength * 0.33;
     const points = new Float32Array(n * 9);
     for (let i = 0; i < n; i++) {
       const x = layout.positions[i * 3]!;

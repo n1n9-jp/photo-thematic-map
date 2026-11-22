@@ -10,7 +10,7 @@ import { SCRIPT } from '../../src/story/content/script';
 import { freeRegionFor } from '../../src/story/layout';
 import { checkPileScene, PILE_SCENES, settlePile, type PileMetric } from './pileHelpers';
 import { BuildingSolids } from './buildingSolids';
-import { measureScene, VISIBILITY_GOALS, type VisibilityRow } from './visibilityHelpers';
+import { measureScene, VISIBILITY_GOALS, type ScenePhase, type VisibilityRow } from './visibilityHelpers';
 
 // ソフトウェア描画（SwiftShader）では PLATEAU の読み込みと描画に時間がかかる
 test.setTimeout(5_400_000);
@@ -146,9 +146,12 @@ test('8場面を順にスクロールすると、場面が進み、カメラが�
     before = after;
 
     const target = await page.evaluate(() => window.__MAIN__!.target());
-    // 注視点は台本の場所（水平 3m 以内）、高さは台本の「地表からの高さ」に合う
-    expect(distanceM(target, scene.camera.target)).toBeLessThan(3);
-    expect(Math.abs(target.heightAboveGround - (scene.camera.target.alt ?? 0))).toBeLessThan(0.5);
+    // 注視点は台本の場所（水平 3m 以内）、高さは台本の「地表からの高さ」に合う。場面の中でカメラが動く場面（場面2）は、
+    // 測った位置（カメラが止まっている区間 × holdFraction）より前の最後の経由点（場面の終わりのカメラ）
+    const stop = [...(scene.camera.stops ?? [])].reverse().find((st) => st.at <= holdFraction);
+    const expectedTarget = stop?.camera.target ?? scene.camera.target;
+    expect(distanceM(target, expectedTarget)).toBeLessThan(3);
+    expect(Math.abs(target.heightAboveGround - (expectedTarget.alt ?? 0))).toBeLessThan(0.5);
     // カメラは地面の上
     const cam = await page.evaluate(() => window.__MAIN__!.camera());
     expect(cam.heightAboveGround).toBeGreaterThan(0.5);
@@ -298,9 +301,21 @@ test('PC 幅で、場面5・6の注視点がカードの列の右側にあり、
 // ---------------------------------------------------------------------------
 
 /** 見えている割合を測る場面（0 始まり）。 */
-const VISIBILITY_SCENES = SCRIPT.flatMap((s, i) => (VISIBILITY_GOALS[s.id] ? [i] : []));
+const VISIBILITY_SCENES = SCRIPT.flatMap((s, i) => (Object.keys(VISIBILITY_GOALS).some((k) => k === s.id || k.startsWith(`${s.id}@`)) ? [i] : []));
 
-/** 測った値を screenshots/visibility.json に書き足す（PC 幅とスマートフォン幅のテストが別々に書くので、同じ画面の行だけ置き換える）。 */
+/**
+ * 場面2（462台）の測る位置: カメラが止まっている区間に対する割合。始まり（1台）、途中（駅の東が加わった直後・増えている途中）、
+ * 終わり（462台）。
+ */
+const AKIHABARA_PHASES: { phase: ScenePhase; fraction: number; shot: string }[] = [
+  { phase: 'start', fraction: 0.0005, shot: '-start' },
+  { phase: 'mid', fraction: 0.05, shot: '-mid-1' },
+  { phase: 'mid', fraction: 0.3, shot: '-mid' },
+  { phase: 'mid', fraction: 0.6, shot: '-mid-2' },
+  { phase: 'end', fraction: 0.95, shot: '' },
+];
+
+/** 測った値を screenshots/visibility.json に書き足す（画面の大きさごとのテストが別々に書くので、同じ画面の行だけ置き換える）。 */
 function writeVisibility(viewport: string, rows: VisibilityRow[]): void {
   mkdirSync('screenshots', { recursive: true });
   const path = 'screenshots/visibility.json';
@@ -314,41 +329,58 @@ function writeVisibility(viewport: string, rows: VisibilityRow[]): void {
   writeFileSync(path, JSON.stringify(all, null, 2));
 }
 
-async function checkVisibility(page: Page, viewport: { width: number; height: number }, shot: (n: number) => string): Promise<void> {
+async function checkVisibility(
+  page: Page,
+  viewport: { width: number; height: number },
+  shot: (name: string) => string,
+  options: { scenes?: readonly number[]; portrait: boolean },
+): Promise<void> {
   await page.setViewportSize(viewport);
   const errors = collectErrors(page);
   await open(page);
   const tag = `${viewport.width}x${viewport.height}`;
   const rows: VisibilityRow[] = [];
-  for (const i of VISIBILITY_SCENES) {
+  for (const i of options.scenes ?? VISIBILITY_SCENES) {
     const id = SCRIPT[i]!.id;
-    // 場面2 は 462台がそろう位置、山が育つ場面（5・6）は積もりきる位置で測る
     const pile = PILE_SCENES[i];
-    await goToScene(page, i, id === 'akihabara-462' || pile?.grow ? 0.95 : 0.5);
-    if (pile) await settlePile(page, pile.key);
-    if (AKIHABARA_SHOWN[id]) {
-      expect(await akihabaraShown(page)).toBe(AKIHABARA_SHOWN[id]);
-      await page.waitForTimeout(2500);
+    // 場面2 は始まり・途中・終わり、山が育つ場面（5・6）は積もりきる位置で測る
+    const phases = id === 'akihabara-462' ? AKIHABARA_PHASES : [{ phase: null, fraction: pile?.grow ? 0.95 : 0.5, shot: '' }];
+    for (const ph of phases) {
+      await goToScene(page, i, ph.fraction);
+      if (pile) await settlePile(page, pile.key);
+      if (AKIHABARA_SHOWN[id]) {
+        if (ph.phase !== 'mid') expect(await akihabaraShown(page)).toBe(ph.phase === 'start' ? 1 : AKIHABARA_SHOWN[id]);
+        await page.waitForTimeout(2500);
+      }
+      const row = await measureScene(page, i, id, tag, ph.phase);
+      rows.push(row);
+      const items = row.items ? `、台数 ${row.items.clear}/${row.items.total}（建物に隠れていない ${row.items.visible}台、収まっている ${row.items.framed}台）` : '';
+      const sizes = row.bikeSizes ? `、先頭の1台 ${row.bikeSizes.firstBikeLengthPx}px、印 ${row.bikeSizes.markerMinDiameterPx}px` : '';
+      console.log(
+        `見えている割合 ${tag} 場面${i + 1} ${id}${ph.phase ? `@${ph.phase}(${ph.fraction})` : ''}: 建物に隠れていない ${row.unoccluded}、` +
+          `カードにも覆われていない ${row.clear}、画面内 ${row.onScreen}、大きさ ${row.sizeOfShortSide}${items}${sizes}、` +
+          `俯角 ${row.pose.elevationDeg}°、距離 ${row.pose.distance}m${row.tightness !== null ? `、広がり ${row.tightness}` : ''}`,
+      );
+      await page.screenshot({ path: shot(`${i + 1}${ph.shot}`) });
     }
-    const row = await measureScene(page, i, id, tag);
-    rows.push(row);
-    const items = row.items ? `、台数 ${row.items.clear}/${row.items.total}（建物に隠れていない ${row.items.visible}台）` : '';
-    console.log(`見えている割合 ${tag} 場面${i + 1} ${id}: 建物に隠れていない ${row.unoccluded}、カードにも覆われていない ${row.clear}、画面内 ${row.onScreen}、大きさ ${row.sizeOfShortSide}${items}`);
-    await page.screenshot({ path: shot(i + 1) });
   }
   writeVisibility(tag, rows);
-  // 縦長の画面ではスマートフォン向けのカメラを使う
-  for (const r of rows) expect(r.portrait).toBe(viewport.height > viewport.width);
-  expect(rows.flatMap((r) => r.failures.map((f) => `場面${r.scene} ${r.id}: ${f}`))).toEqual([]);
+  // 本文カードが下寄せの配置（スマートフォンの縦向き）でだけ、縦長の画面用のカメラを使う
+  for (const r of rows) expect(r.portrait).toBe(options.portrait);
+  expect(rows.flatMap((r) => r.failures.map((f) => `場面${r.scene} ${r.id}${r.phase ? `@${r.phase}` : ''}: ${f}`))).toEqual([]);
   expect(errors).toEqual([]);
 }
 
 test('PC 幅で、場面1・2・5・6・7・8の主役（自転車・山）が建物と本文カードに隠れずに見える', async ({ page }) => {
-  await checkVisibility(page, { width: 1280, height: 720 }, (n) => `screenshots/main-${n}.png`);
+  await checkVisibility(page, { width: 1280, height: 720 }, (n) => `screenshots/main-${n}.png`, { portrait: false });
 });
 
 test('スマートフォン幅（390×844）で、場面1・2・5・6・7・8の主役（自転車・山）が建物と本文カードに隠れずに見える', async ({ page }) => {
-  await checkVisibility(page, { width: 390, height: 844 }, (n) => `screenshots/main-mobile-${n}.png`);
+  await checkVisibility(page, { width: 390, height: 844 }, (n) => `screenshots/main-mobile-${n}.png`, { portrait: true });
+});
+
+test('タブレットの縦向き（768×1024、本文カードは左の列）で、場面5・6・7の山が隠れずに見え、縦長用のカメラを使わない', async ({ page }) => {
+  await checkVisibility(page, { width: 768, height: 1024 }, (n) => `screenshots/main-tablet-${n}.png`, { scenes: [4, 5, 6], portrait: false });
 });
 
 /**
@@ -374,6 +406,47 @@ test('場面の間を移る途中も、カメラが建物の中を通らない�
   const errors = collectErrors(page);
   await expectPathOutsideBuildings(page, { width: 1280, height: 720 });
   await expectPathOutsideBuildings(page, { width: 390, height: 844 });
+  expect(errors).toEqual([]);
+});
+
+/**
+ * 場面 from のカメラが止まっている位置から、場面 to へ一気にスクロールし、カメラが追いつくまでの毎フレームのカメラの位置が
+ * 建物の外にあることを確かめる。1 フレームで進める時間を 1/30 秒に抑え（描画の遅い環境でも動きを細かく刻む）、記録する。
+ */
+async function expectFastScrollOutsideBuildings(page: Page, solids: BuildingSolids, from: number, to: number): Promise<number> {
+  await goToScene(page, from);
+  await page.evaluate(() => {
+    window.__MAIN__!.setMaxFrameDt(1 / 30);
+    window.__MAIN__!.traceCamera(true);
+  });
+  await page.evaluate((to) => {
+    const api = window.__MAIN__!;
+    window.scrollTo({ top: api.scrollYFor(to, (api.holds()[to] ?? 0.4) * 0.5), behavior: 'instant' });
+  }, to);
+  await expect.poll(() => page.evaluate(() => window.__MAIN__!.status().cameraIdleFrames), { timeout: SETTLE_TIMEOUT_MS, intervals: [1000] }).toBeGreaterThanOrEqual(3);
+  const trace = await page.evaluate(() => {
+    const t = window.__MAIN__!.traceCamera(false);
+    window.__MAIN__!.setMaxFrameDt(1);
+    return t;
+  });
+  expect(trace.length, `場面${from + 1}→${to + 1}: 記録したフレームの数`).toBeGreaterThan(20);
+  const inside = trace.flatMap((c, k) => (solids.inside(c.x, c.y, c.z) ? [`${k}: (${c.x.toFixed(0)}, ${c.y.toFixed(0)}, ${c.z.toFixed(0)})`] : []));
+  expect(inside, `場面${from + 1}→${to + 1} を一気にスクロールしたとき、建物の中にあったフレーム`).toEqual([]);
+  return trace.length;
+}
+
+test('一気にスクロールしても、追いかけるカメラが建物の中を通らない（場面1→2、6→7、7→8。PC 幅）', async ({ page }) => {
+  const errors = collectErrors(page);
+  await open(page);
+  const solids = new BuildingSolids();
+  for (const [from, to] of [
+    [0, 1],
+    [5, 6],
+    [6, 7],
+  ] as const) {
+    const frames = await expectFastScrollOutsideBuildings(page, solids, from, to);
+    console.log(`一気にスクロール 場面${from + 1}→${to + 1}: ${frames} フレーム、建物の中 0`);
+  }
   expect(errors).toEqual([]);
 });
 

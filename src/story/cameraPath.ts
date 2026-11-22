@@ -8,7 +8,7 @@
  */
 import { ORIGIN } from '../config';
 import { latLonToLocal, type Vec3 } from '../geo/enu';
-import type { StoryCameraFit, StoryCameraKeyframe, StoryCameraView } from './types';
+import type { StoryCameraFit, StoryCameraKeyframe, StoryCameraStop, StoryCameraView } from './types';
 
 const DEG2RAD = Math.PI / 180;
 const RAD2DEG = 180 / Math.PI;
@@ -64,9 +64,49 @@ export function viewFor(k: StoryCameraKeyframe, portrait: boolean): StoryCameraV
   return portrait && k.portrait ? k.portrait : k;
 }
 
-/** キーフレームが持つカメラ（横長と、あれば縦長）。範囲の計算（建物の事前変換、標高の先読み）に使う。 */
+/** 経由点の、画面の向きに合わせたカメラ。 */
+export function stopViewFor(stop: StoryCameraStop, portrait: boolean): StoryCameraView {
+  return portrait && stop.portrait ? stop.portrait : stop.camera;
+}
+
+/**
+ * キーフレームが持つカメラ（横長と、あれば縦長、場面の中の経由点のそれぞれ）。範囲の計算（建物の事前変換、標高の先読み）に使う。
+ */
 export function viewsOf(k: StoryCameraKeyframe): StoryCameraView[] {
-  return k.portrait ? [k, k.portrait] : [k];
+  const out: StoryCameraView[] = k.portrait ? [k, k.portrait] : [k];
+  for (const s of k.stops ?? []) out.push(...(s.portrait ? [s.camera, s.portrait] : [s.camera]));
+  return out;
+}
+
+/** 段階ごとのカメラの姿勢（場面の始まりと、場面の中の経由点）。 */
+export interface StagePoses {
+  start: CameraPose;
+  /** 経由点（`at` の順）。空なら場面の中でカメラは動かない。 */
+  stops: readonly { at: number; pose: CameraPose }[];
+}
+
+/** 場面の終わりの姿勢（最後の経由点。なければ始まり）。 */
+export function stageEnd(s: StagePoses): CameraPose {
+  return s.stops.length > 0 ? (s.stops[s.stops.length - 1] as { pose: CameraPose }).pose : s.start;
+}
+
+/** 場面の中の姿勢。u は「カメラが止まっている区間」に対する割合(0〜1)。経由点のあいだは `lerpPose` で補間する。 */
+export function stagePoseAt(s: StagePoses, u: number): CameraPose {
+  if (s.stops.length === 0) return s.start;
+  let prev = { at: 0, pose: s.start };
+  for (const stop of s.stops) {
+    if (u <= stop.at) {
+      const span = stop.at - prev.at;
+      return span <= 1e-9 ? stop.pose : lerpPose(prev.pose, stop.pose, clamp01((u - prev.at) / span));
+    }
+    prev = stop;
+  }
+  return prev.pose;
+}
+
+/** 経由点のない段階の並び（`samplePath` に姿勢の配列を渡したとき）。 */
+function asStages(poses: readonly (CameraPose | StagePoses)[]): StagePoses[] {
+  return poses.map((p) => ('start' in p ? p : { start: p, stops: [] }));
 }
 
 /**
@@ -126,7 +166,8 @@ export interface FitFrame {
 }
 
 /**
- * 注視点を中心とする地表の長方形 `fit`（注視点の高さの水平面）の4隅が、画面の覆われていない範囲に収まる最小の距離(m)。
+ * 注視点を中心とする地表の長方形 `fit`（注視点の高さの水平面）の4隅（`fit.points` があればその点）が、
+ * 画面の覆われていない範囲に収まる最小の距離(m)。
  *
  * 注視点から見て、隅 p の画面上の位置は、カメラの右・上方向の成分（x, y）を、奥行き（距離 d + 視線方向の成分 z）で割った値に
  * 焦点距離(px)を掛けたもの。覆われていない範囲の中央が注視点なので、収まる条件は
@@ -147,15 +188,16 @@ export function distanceToFit(
   const focalPx = frame.canvasHeight / 2 / Math.tan((frame.fovDeg * DEG2RAD) / 2);
   const halfW = Math.max(frame.regionWidth, 1) / 2;
   const halfH = Math.max(frame.regionHeight, 1) / 2;
+  // 収める点（ローカル座標の注視点からのずれ）。points がなければ長方形の4隅。
+  const pts: Vec3[] = fit.points
+    ? fit.points.map((q) => ({ x: q.eastM, y: q.upM ?? 0, z: -q.northM }))
+    : [-1, 1].flatMap((sx) => [-1, 1].map((sy) => ({ x: (sx * fit.eastWestM) / 2, y: 0, z: -(sy * fit.northSouthM) / 2 })));
   let need = 0;
-  for (const sx of [-1, 1]) {
-    for (const sy of [-1, 1]) {
-      const p = { x: (sx * fit.eastWestM) / 2, y: 0, z: -(sy * fit.northSouthM) / 2 };
-      const x = Math.abs(p.x * r.x + p.z * r.z);
-      const y = Math.abs(p.x * u.x + p.y * u.y + p.z * u.z);
-      const z = p.x * f.x + p.y * f.y + p.z * f.z;
-      need = Math.max(need, (x * focalPx) / halfW - z, (y * focalPx) / halfH - z);
-    }
+  for (const p of pts) {
+    const x = Math.abs(p.x * r.x + p.y * r.y + p.z * r.z);
+    const y = Math.abs(p.x * u.x + p.y * u.y + p.z * u.z);
+    const z = p.x * f.x + p.y * f.y + p.z * f.z;
+    need = Math.max(need, (x * focalPx) / halfW - z, (y * focalPx) / halfH - z);
   }
   return need;
 }
@@ -253,26 +295,29 @@ export interface SamplePathOptions {
  * 残りで i+1 へ移る。範囲外は端のキーフレームに丸める。
  */
 export function samplePath(
-  poses: readonly CameraPose[],
+  poses: readonly (CameraPose | StagePoses)[],
   position: number,
   options: SamplePathOptions = {},
 ): CameraPose {
-  const first = poses[0];
+  const stages = asStages(poses);
+  const first = stages[0];
   if (!first) throw new Error('samplePath: poses が空です');
-  if (poses.length === 1) return first;
+  if (stages.length === 1) return first.start;
 
   const ease = options.ease ?? smoothstep;
-  const last = poses.length - 1;
+  const last = stages.length - 1;
   const s = Math.min(Math.max(position, 0), last);
   const i = Math.min(Math.floor(s), last - 1);
   const f = s - i;
   const holdOpt = options.hold;
   const hold = typeof holdOpt === 'number' ? holdOpt : (holdOpt?.[i] ?? DEFAULT_HOLD);
   const t = hold >= 1 ? (f >= 1 ? 1 : 0) : clamp01((f - hold) / (1 - hold));
-  const a = poses[i];
-  const b = poses[i + 1];
+  const a = stages[i];
+  const b = stages[i + 1];
   if (!a || !b) throw new Error('samplePath: 内部エラー');
-  return lerpPose(a, b, ease(t));
+  // 止まっている区間: 場面の中の経由点をたどる
+  if (t <= 0) return stagePoseAt(a, hold > 0 ? clamp01(f / hold) : 1);
+  return lerpPose(stageEnd(a), b.start, ease(t));
 }
 
 /**
@@ -291,7 +336,7 @@ export function segmentAt(count: number, position: number, hold: number | readon
 }
 
 /** 移る途中の高さの下限が、移り始め・着く前のこの割合（緩急をかけた進み具合）で上がりきる・降り始める。 */
-export const TRANSITION_RAMP = 0.3;
+export const TRANSITION_RAMP = 0.15;
 
 /**
  * 場面の間を移る途中の、カメラの地表からの高さの下限(m)。両端（u=0, 1）で 0、途中は両端のカメラの高さ（地表から）の
@@ -309,23 +354,24 @@ export function transitionFloor(heightA: number, heightB: number, u: number, cap
  * cap が 0 以下なら持ち上げない。キーフレームの位置（止まっている間）は変えない。
  */
 export function samplePathLifted(
-  poses: readonly CameraPose[],
+  poses: readonly (CameraPose | StagePoses)[],
   position: number,
   options: SamplePathOptions & { groundAt: GroundHeightAt; cap: number },
 ): CameraPose {
   const p = samplePath(poses, position, options);
   if (options.cap <= 0) return p;
-  const { i, t } = segmentAt(poses.length, position, options.hold);
+  const stages = asStages(poses);
+  const { i, t } = segmentAt(stages.length, position, options.hold);
   if (t <= 0 || t >= 1) return p;
-  const a = poses[i];
-  const b = poses[i + 1];
+  const a = stages[i];
+  const b = stages[i + 1];
   if (!a || !b) return p;
   const above = (q: CameraPose): number => {
     const c = poseToCameraPosition(q);
     return c.y - options.groundAt(c.x, c.z);
   };
   const u = (options.ease ?? smoothstep)(t);
-  const floor = transitionFloor(above(a), above(b), u, options.cap);
+  const floor = transitionFloor(above(stageEnd(a)), above(b.start), u, options.cap);
   return floor > 0 ? liftAboveGround(p, options.groundAt, floor) : p;
 }
 
