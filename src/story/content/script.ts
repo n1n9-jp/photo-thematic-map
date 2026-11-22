@@ -5,8 +5,9 @@
  * `cameraFrom()` で距離・仰角に直す。`place` は場面の街並み（建物を読む区を選ぶ中心と半径）。
  * 俯瞰の場面は null（建物を読まず、航空写真の地面だけを見せる）。
  */
+import { latLonToLocal } from '../../geo/enu';
 import { distanceForHeight } from '../cameraPath';
-import type { StoryCameraKeyframe, StoryCameraView, StoryStat, StoryText } from '../types';
+import type { StoryCameraFit, StoryCameraKeyframe, StoryCameraView, StoryStat, StoryText } from '../types';
 import {
   FACTS,
   FIRST_FISCAL_YEAR,
@@ -49,11 +50,6 @@ export const PLACES = {
    * `src/app/modules/akihabara/layout.ts` の配置の結果の位置（tests/unit/akihabaraLayout.test.ts が一致を確かめる）。
    */
   akihabaraFirstBike: { lat: 35.698655, lon: 139.772652 },
-  /**
-   * 場面2・8 の注視点。462台の重心（駅の西の電気街口・東の中央改札口と昭和通り口・南西の通りに広がる、東西約 300m・南北約 180m の
-   * 範囲の中ほど）から東へ 60m。西の上空から見下ろすとき、カメラの真下が塊の西の端の近くに来て、自転車を東向きに（西から）見る。
-   */
-  akihabaraBikesView: { lat: 35.698409, lon: 139.774124 },
   /**
    * 23区の俯瞰の注視点。23区の489か所のうち23区内の駅（410か所）の緯度経度の範囲（東西 139.568〜139.898、南北 35.541〜35.815）の
    * 中央に近い。注視点は本文カードに覆われない範囲の中央に置かれる（`story/layout.ts`）ので、西にずらす必要はない。
@@ -126,24 +122,110 @@ const SCENE1_VIEW = { azimuthDeg: 270, heightM: 2.2, horizontalM: 6, targetAltM:
 const SCENE1_PORTRAIT_VIEW = { azimuthDeg: 270, heightM: 2.5, horizontalM: 8, targetAltM: 1.2 } as const;
 
 /**
- * 場面2・8: 462台を西の上空から、見下ろす角度 80°（平面図にしない上限の近く）で見る。自転車は通りの壁際に並ぶので、
- * 斜めから見ると、カメラから見て建物の向こう側の壁際の自転車が隠れる。秋葉原の通りは東西・南北の格子で、
- * 自転車の向きもほぼ東西か南北にそろっている。方位と距離・注視点を何通りも試して、建物にも本文カードにも隠れずに見える
- * 台数が最も多かったのが、東をわずかに北へ振った方位（85°）だった（462台のうち約 380台。高架の下の 19台は上空からは見えない。
- * 測り方は `tests/e2e/visibilityHelpers.ts`。南から見下ろした以前のカメラでは、自転車の画素の約 3 割しか見えなかった）。
- * 縦長の画面は横幅が狭いので、遠くから（距離 1000m）塊の東西の広がりを収める。PC 幅は 850m。
+ * 秋葉原の 462台の広がり。置いた順の先頭 k 台の凸包（自転車の長さの半分ほど外へ広げた多角形）を、凸包を囲む長方形の中心からの
+ * 東・北へのずれ(m)で表す。`src/app/modules/akihabara/layout.ts` の配置の結果（tests/unit/akihabaraExtent.test.ts が、
+ * 先頭 k 台がすべて多角形の中にあることを確かめる）。
+ * 先頭の 8台は駅前広場の南西の角（約 20m 四方）、21台目までは電気街口の駅前広場の周り（約 45m 四方）にあり、
+ * 22台目で駅の東（中央改札口・昭和通り口）が加わって東西約 230m に広がる。
  */
-const AKIHABARA_ABOVE_ELEVATION_DEG = 80;
-const AKIHABARA_ABOVE_AZIMUTH_DEG = 85;
-function akihabaraAbove(distanceM: number): StoryCameraView {
-  return { target: { ...PLACES.akihabaraBikesView, alt: 0 }, distance: distanceM, azimuthDeg: AKIHABARA_ABOVE_AZIMUTH_DEG, elevationDeg: AKIHABARA_ABOVE_ELEVATION_DEG };
+export const AKIHABARA_EXTENTS = {
+  k8: { count: 8, center: { lat: 35.698752, lon: 139.77275 }, hull: [[-11.3, -12.1], [-7.6, -12], [11.2, 10.9], [11.4, 11.5], [11.2, 12.1]] },
+  k22: { count: 22, center: { lat: 35.698481, lon: 139.773684 }, hull: [[-117.6, 39.3], [-117.4, 38.7], [-96.4, 19.4], [117.6, -42.7], [-75.1, 42.9]] },
+  k120: { count: 120, center: { lat: 35.69841, lon: 139.77372 }, hull: [[-131, 50.7], [-123.8, -33.9], [-122.1, -34.4], [-115.9, -36.2], [121.6, -51], [130.3, -41.3], [131.1, -35.5], [-78.4, 50.9], [-125.6, 51]] },
+  k180: { count: 180, center: { lat: 35.698553, lon: 139.77371 }, hull: [[-133.4, 36], [-122.7, -49.9], [-112.8, -55.7], [122.7, -72.8], [133.3, -56.9], [133.1, -51.5], [18.7, 73.2], [17.1, 73.5], [13.4, 73.5], [-127.7, 55.9], [-127.8, 55.4]] },
+  k330: { count: 330, center: { lat: 35.69853, lon: 139.773579 }, hull: [[-145.2, -30], [-101, -53.3], [134.5, -84.9], [145.1, -54.4], [144.9, -49], [30.7, 75.7], [29.1, 75.9], [21.1, 77], [11.1, 78], [-97.1, 85], [-114.8, 66.3], [-115, 65.8]] },
+  k462: { count: 462, center: { lat: 35.698571, lon: 139.7735 }, hull: [[-152.3, -53.4], [-83.8, -91.3], [141.5, -92.1], [141.7, -91.6], [152.3, -58.9], [152.1, -53.5], [50.3, 90.6], [48.7, 91.5], [47.7, 92], [21.7, 92.8], [18, 92.8], [-86.9, 89], [-88.5, 88.5], [-107.6, 61.8]] },
+} as const satisfies Record<string, AkihabaraExtent>;
+
+export interface AkihabaraExtent {
+  /** 先頭から何台目までの広がりか。 */
+  count: number;
+  center: { lat: number; lon: number };
+  /** 凸包の頂点（中心からの東・北へのずれ(m)）。 */
+  hull: readonly (readonly [number, number])[];
 }
-const AKIHABARA_ABOVE: StoryCameraKeyframe = { ...akihabaraAbove(850), portrait: akihabaraAbove(1000) };
+
+/**
+ * 場面2 で 462台が増えきる進み具合（カメラが止まっている区間に対する割合）。
+ * `src/app/modules/akihabara/module.ts` の GROW_END_OF_HOLD と同じ値（tests/unit/akihabaraExtent.test.ts が確かめる）。
+ */
+export const AKIHABARA_GROW_END = 0.85;
+/** k 台目が現れる進み具合（カメラが止まっている区間に対する割合）。 */
+export function akihabaraAtCount(k: number): number {
+  return (AKIHABARA_GROW_END * (k - 1)) / (FACTS.akihabaraParked.value - 1);
+}
+
+function fitHull(e: AkihabaraExtent): StoryCameraFit {
+  return { eastWestM: 0, northSouthM: 0, points: e.hull.map(([eastM, northM]) => ({ eastM, northM })) };
+}
+
+/** 上空から見下ろすカメラの向き。 */
+interface AboveAngles {
+  azimuthDeg: number;
+  elevationDeg: number;
+}
+
+/**
+ * 広がり e が本文カードに覆われていない範囲に収まる、最も近いカメラ（距離はカメラリグが画面の大きさから求める。`fit`）。
+ * minDistanceM は「これより近づかない」下限。
+ */
+function akihabaraFit(e: AkihabaraExtent, a: AboveAngles, minDistanceM = 1): StoryCameraView {
+  return { target: { ...e.center, alt: 0 }, distance: minDistanceM, azimuthDeg: a.azimuthDeg, elevationDeg: a.elevationDeg, fit: fitHull(e) };
+}
+
+/**
+ * 場面2 の始まり: 駅前の先頭の1台を、北東の斜め上（高さ約 14m）から見下ろす。自転車の全長は画面上で 12 CSS px より十分大きく
+ * （約 60px）、足元の印はカメラが高いほど濃くなる（12〜45m）ので、この高さではほぼ見えず、自転車の形が見える。
+ * 南側（総武線の高架の側）から見ると高架に隠れるので、北東から。場面1（西向き）からの方位の差は 45°。
+ * 3台目までこのまま寄り、8台目（駅前広場の南西の角）までに、8台が収まる距離へ引く。
+ */
+const AKIHABARA_START: AboveAngles = { azimuthDeg: 225, elevationDeg: 45 };
+const AKIHABARA_START_DISTANCE_M = 20;
+/** 8台目までに引く先（駅前広場の南西の角の 8台が収まる、高さ約 30m）。 */
+const AKIHABARA_CORNER: AboveAngles = { azimuthDeg: 225, elevationDeg: 55 };
+const AKIHABARA_CORNER_DISTANCE_M = 35;
+
+/** 先頭の1台に寄るカメラ。 */
+const AKIHABARA_FIRST_BIKE: StoryCameraView = {
+  target: { ...PLACES.akihabaraFirstBike, alt: 0.5 },
+  distance: AKIHABARA_START_DISTANCE_M,
+  ...AKIHABARA_START,
+};
+/**
+ * 場面2 の終わりと場面8: 462台の広がりが本文カードに覆われていない範囲に収まる、最も近い距離。方位と見下ろす角度は、
+ * その距離で、建物にも本文カードにも隠れずに見える台数が多く（`tests/e2e/visibilityHelpers.ts` の測り方）、場面2 の始まり
+ * （方位 225°）からの方位の差が 150° 以内のもの。見下ろす角度 80°（平面図にしない上限）で、PC 幅は北向き（462台のうち約 314台。
+ * 最も多かった北東向き 326台は始まりとの差が 180°）、縦長の画面は東北東向き（約 374台）。近いほど斜めの視線になり、
+ * 通りの壁際の自転車が建物の向こう側に隠れるので、遠くから見下ろした以前のカメラ（約 380台）より少ない。
+ */
+const AKIHABARA_END: AboveAngles = { azimuthDeg: 0, elevationDeg: 80 };
+const AKIHABARA_END_PORTRAIT: AboveAngles = { azimuthDeg: 75, elevationDeg: 80 };
+
+/** 場面2: 始まり（先頭の1台）→ 駅前広場の南西の角 → 22台目で駅の東が加わる前に引く → 増えるにつれて少しずつ引き、462台の広がりに合わせる。 */
+const AKIHABARA_GROW: StoryCameraKeyframe = {
+  ...AKIHABARA_FIRST_BIKE,
+  stops: [
+    // 3台目（先頭の1台のすぐ隣）まではそのまま。8台目（駅前広場の南西の角）までに引き、そこから 22台目（駅の東）が加わるまでに大きく引く
+    { at: akihabaraAtCount(3), camera: AKIHABARA_FIRST_BIKE },
+    { at: akihabaraAtCount(8), camera: akihabaraFit(AKIHABARA_EXTENTS.k8, AKIHABARA_CORNER, AKIHABARA_CORNER_DISTANCE_M) },
+    ...[AKIHABARA_EXTENTS.k22, AKIHABARA_EXTENTS.k120, AKIHABARA_EXTENTS.k180, AKIHABARA_EXTENTS.k330, AKIHABARA_EXTENTS.k462].map((e) => ({
+      at: akihabaraAtCount(e.count),
+      camera: akihabaraFit(e, AKIHABARA_END),
+      portrait: akihabaraFit(e, AKIHABARA_END_PORTRAIT),
+    })),
+  ],
+};
+
+/** 場面8: 場面2 の終わりと同じ構図。 */
+const AKIHABARA_ALL: StoryCameraKeyframe = {
+  ...akihabaraFit(AKIHABARA_EXTENTS.k462, AKIHABARA_END),
+  portrait: akihabaraFit(AKIHABARA_EXTENTS.k462, AKIHABARA_END_PORTRAIT),
+};
 
 /**
  * 山の場面（5・6・7）のカメラは、方位・高さ・距離を何通りも試し、山の画素のうち建物に隠れずに見える割合（`tests/e2e/visibilityHelpers.ts`）、
- * 山の頂上から裾までが画面に入るか、物差しの建物が一緒に入るかと、見た目で選んだ。縦長の画面（スマートフォン）は横幅が狭く、
- * 横長の画面と同じ距離では山の裾が画面からはみ出すので、別に決めた（`portrait`）。
+ * 山の頂上から裾までが画面に入るか、物差しの建物が一緒に入るかと、見た目で選んだ。本文カードが下寄せの配置（スマートフォン）は
+ * 横幅が狭く、同じ距離では山の裾が画面からはみ出すので、別に決めた（`portrait`）。
  */
 interface PileView {
   azimuthDeg: number;
@@ -163,29 +245,95 @@ interface PileView {
 const SCENE5_VIEW: PileView = { azimuthDeg: 105, heightM: 34, horizontalM: 165, targetAltM: pile5.heightM * 0.45, shiftM: 14 };
 const SCENE5_PORTRAIT_VIEW: PileView = { azimuthDeg: 105, heightM: 60, horizontalM: 300, targetAltM: pile5.heightM * 0.45, shiftM: 0 };
 /**
- * 場面7: 東京駅前の山に寄る。西北西の斜め上（高さ 70m）から、左に丸の内駅舎の北のドーム、右に山。以前の高さ 30m・水平 115m では
- * 山の右の裾が画面からはみ出した。北西（方位 125°）からも試したが、カメラのすぐ後ろに高層ビルがあり、場面の間を移るときに
- * そのビルの中を通ったので、後ろの空いた方位にした。縦長の画面では、北西からだと手前の建物の中にカメラが入るので、
- * 場面5 と同じ方位から、場面5 より近く・高く見る。
+ * 場面7: 東京駅前の山に寄る。行幸通りの上（場面5 より高く近い、高さ 60m）から、山と後ろの丸の内駅舎を見る。
+ * 以前の高さ 30m・水平 115m では山の右の裾が画面からはみ出した。北西（方位 115〜125°）からは、カメラのすぐ後ろに高層ビルがあり、
+ * 場面の間を移るときや、カードの列の右側が狭い画面（タブレットの縦向き）で引いたときに、ビルの中を通った。行幸通りの軸の上なら、
+ * 引いても通りの上にいる。
  */
-const SCENE7_VIEW: PileView = { azimuthDeg: 115, heightM: 70, horizontalM: 150, targetAltM: pile5.heightM * 0.4, shiftM: 8 };
+const SCENE7_VIEW: PileView = { azimuthDeg: 105, heightM: 60, horizontalM: 120, targetAltM: pile5.heightM * 0.4, shiftM: 10 };
 const SCENE7_PORTRAIT_VIEW: PileView = { azimuthDeg: 105, heightM: 80, horizontalM: 270, targetAltM: pile5.heightM * 0.4, shiftM: 0 };
 /**
- * 場面6: 新宿中央公園の北西の上空（高さ 550m、周りの高層ビルより十分上）から南東を見下ろす。山の左奥に都庁第一本庁舎（高さ 243m）。
- * 以前の西の上空（高さ 230m）からでは、山の左側が手前の高層ビルに隠れた（隠れずに見える割合 約 8 割）。見下ろす角度を深くすると
- * 手前のビルの陰が短くなる。縦長の画面では、同じ方位で 1.4 倍離れる。
+ * 場面6: 山の高さを都庁第一本庁舎（243m）と比べて感じる場面。見下ろす角度（俯角）を 30° 以下にして、山の頂上が背景に対して
+ * 三角の輪郭に見え、都庁の上端から足元までが山の隣に入るようにする。距離は、山の裾と頂上、都庁の上端と足元が本文カードに
+ * 覆われていない範囲に収まる距離（`fit`）。方位と俯角は、手前に高層ビルのない方位を何通りも試して選んだ:
+ * 南南東の上空（初台・西新宿三丁目の低層の住宅地の上）から北北西を向くと、山の右に都庁が立ち、山の後ろは西新宿の高層ビル群になる。
+ * 俯角 20° では、遠くから見る画面（スマートフォン、タブレットの縦向き）で手前のビルに山の裾が隠れたので 25°。
+ * 以前の北西の上空（高さ 550m、俯角約 40°）からは、山が平たい円盤に見えた。
  */
-const SCENE6_VIEW: PileView = { azimuthDeg: 125, heightM: 550, horizontalM: 650, targetAltM: pile6.heightM * 0.6, shiftM: 30 };
-const SCENE6_PORTRAIT_VIEW: PileView = { azimuthDeg: 125, heightM: 770, horizontalM: 910, targetAltM: pile6.heightM * 0.6, shiftM: 0 };
+const SCENE6_ANGLES = { azimuthDeg: 345, elevationDeg: 25 } as const;
+const SCENE6_PORTRAIT_ANGLES = SCENE6_ANGLES;
+/** 場面6 の注視点の地表からの高さ(m)（山の高さの 6 割。山と都庁の上端の間）。 */
+const SCENE6_TARGET_ALT_M = pile6.heightM * 0.6;
 
-function pileView(site: { lat: number; lon: number }, v: PileView): StoryCameraKeyframe {
-  return cameraFrom(offsetLatLon(site, v.azimuthDeg - 90, v.shiftM), v);
+/** 地点 a から地点 b への東・北へのずれ(m)。 */
+function offsetM(a: { lat: number; lon: number }, b: { lat: number; lon: number }): { eastM: number; northM: number } {
+  const pa = latLonToLocal({ ...a, alt: 0 });
+  const pb = latLonToLocal({ ...b, alt: 0 });
+  return { eastM: pb.x - pa.x, northM: -(pb.z - pa.z) };
+}
+
+/** 物差しの建物（足元の緯度経度と高さ）。 */
+interface Landmark {
+  lat: number;
+  lon: number;
+  heightM: number;
+  /** 建物の幅の半分ほど(m)。建物の全体が画面に入るよう、足元の点のまわりのこの四方を収める。既定 0（点だけ）。 */
+  halfWidthM?: number;
+}
+
+/** 東京駅 丸の内駅舎の中央（屋根の高さ 約 30m の点まで）。 */
+const MARUNOUCHI_STATION: Landmark = { lat: 35.68124, lon: 139.76695, heightM: 30 };
+/** 東京都庁第一本庁舎（243m）。 */
+const TOCHO: Landmark = { ...PLACES.tochoFirstBuilding, heightM: 243, halfWidthM: 35 };
+
+/**
+ * 山の裾（12 点）と頂上、物差しの建物の上端と足元を、注視点からのずれにした fit。地表の高さは山の地点と同じとみなす。
+ */
+function pileFit(
+  site: { lat: number; lon: number },
+  target: { lat: number; lon: number; alt: number },
+  pile: { heightM: number; diameterM: number },
+  landmark: Landmark,
+): StoryCameraFit {
+  const c = offsetM(target, site);
+  // 裾の直径は面積の等しい円の直径なので、裾の形の出っ張りのぶん 15% 広く収める
+  const r = (pile.diameterM / 2) * 1.15;
+  const points = Array.from({ length: 12 }, (_, k) => ({
+    eastM: c.eastM + Math.cos((k / 12) * 2 * Math.PI) * r,
+    northM: c.northM + Math.sin((k / 12) * 2 * Math.PI) * r,
+    upM: -target.alt,
+  }));
+  points.push({ eastM: c.eastM, northM: c.northM, upM: pile.heightM - target.alt });
+  // 物差しの建物は、足元の点のまわり（halfWidthM 四方）の上端と足元
+  const l = offsetM(target, landmark);
+  const w = landmark.halfWidthM ?? 0;
+  for (const [de, dn] of w > 0 ? [[-w, -w], [-w, w], [w, -w], [w, w]] : [[0, 0]]) {
+    const q = { eastM: l.eastM + de!, northM: l.northM + dn! };
+    points.push({ ...q, upM: landmark.heightM - target.alt }, { ...q, upM: -target.alt });
+  }
+  return { eastWestM: 0, northSouthM: 0, points };
+}
+
+/**
+ * 高さ・水平距離で決めた山の場面のカメラ。距離は、山と物差しの建物が本文カードに覆われていない範囲に収まる距離（`fit`）を
+ * 下限にする（タブレットの縦向きなど、カードの列の右側が狭い画面でも山がはみ出さない）。
+ */
+function pileView(site: { lat: number; lon: number }, v: PileView, pile: { heightM: number; diameterM: number }, landmark: Landmark): StoryCameraKeyframe {
+  const k = cameraFrom(offsetLatLon(site, v.azimuthDeg - 90, v.shiftM), v);
+  return { ...k, fit: pileFit(site, { ...k.target, alt: k.target.alt ?? 0 }, pile, landmark) };
 }
 
 /** 横長の画面と縦長の画面のカメラ。 */
-function pileCamera(site: { lat: number; lon: number }, landscape: PileView, portrait: PileView): StoryCameraKeyframe {
-  return { ...pileView(site, landscape), portrait: pileView(site, portrait) };
+function pileCamera(site: { lat: number; lon: number }, landscape: PileView, portrait: PileView, landmark: Landmark): StoryCameraKeyframe {
+  return { ...pileView(site, landscape, pile5, landmark), portrait: pileView(site, portrait, pile5, landmark) };
 }
+
+/** 場面6: 方位と俯角を決め、距離は山と都庁が収まる距離（fit）。 */
+function scene6View(angles: { azimuthDeg: number; elevationDeg: number }): StoryCameraView {
+  const target = { ...PLACES.shinjukuPark, alt: SCENE6_TARGET_ALT_M };
+  return { target, distance: 1, ...angles, fit: pileFit(PLACES.shinjukuPark, target, pile6, TOCHO) };
+}
+const SCENE6_CAMERA: StoryCameraKeyframe = { ...scene6View(SCENE6_ANGLES), portrait: scene6View(SCENE6_PORTRAIT_ANGLES) };
 
 /**
  * 23区の俯瞰の距離の下限（高さ 28km・仰角 60° のときの距離）と仰角(度)。実際の距離は `WARDS_FIT` から求め、
@@ -221,7 +369,7 @@ export const SCRIPT: readonly ScriptScene[] = [
       ],
       stat: stat(F.akihabaraParked, `${SURVEY.year}年${SURVEY.month}月、秋葉原駅周辺の放置自転車`),
     },
-    camera: AKIHABARA_ABOVE,
+    camera: AKIHABARA_GROW,
     place: { ...P.akihabaraSidewalk, radiusM: 1500 },
   },
   {
@@ -275,7 +423,7 @@ export const SCRIPT: readonly ScriptScene[] = [
       ],
       stat: stat(F.removedFY2024, `${FISCAL_YEAR}年度に撤去された自転車`),
     },
-    camera: pileCamera(P.tokyoPlaza, SCENE5_VIEW, SCENE5_PORTRAIT_VIEW),
+    camera: pileCamera(P.tokyoPlaza, SCENE5_VIEW, SCENE5_PORTRAIT_VIEW, MARUNOUCHI_STATION),
     place: { ...P.tokyoPlaza, radiusM: 1800 },
   },
   {
@@ -289,7 +437,7 @@ export const SCRIPT: readonly ScriptScene[] = [
       ],
       stat: stat(F.removed15Years, `${FIRST_FISCAL_YEAR}〜${FISCAL_YEAR}年度に撤去された自転車の累計`),
     },
-    camera: pileCamera(P.shinjukuPark, SCENE6_VIEW, SCENE6_PORTRAIT_VIEW),
+    camera: SCENE6_CAMERA,
     place: { ...P.shinjukuPark, radiusM: 2000 },
   },
   {
@@ -303,7 +451,7 @@ export const SCRIPT: readonly ScriptScene[] = [
       ],
       stat: stat(F.returnRate, `返還率（${FISCAL_YEAR}年度、自転車と原付）`),
     },
-    camera: pileCamera(P.tokyoPlaza, SCENE7_VIEW, SCENE7_PORTRAIT_VIEW),
+    camera: pileCamera(P.tokyoPlaza, SCENE7_VIEW, SCENE7_PORTRAIT_VIEW, MARUNOUCHI_STATION),
     place: { ...P.tokyoPlaza, radiusM: 1800 },
   },
   {
@@ -321,7 +469,7 @@ export const SCRIPT: readonly ScriptScene[] = [
       ),
     },
     // 462台を、場面2 と同じ上空から見渡す（地上の目線では手前の 20台ほどしか見えなかった）
-    camera: AKIHABARA_ABOVE,
+    camera: AKIHABARA_ALL,
     freeOrbit: true,
     place: { ...P.akihabaraSidewalk, radiusM: 1500 },
   },

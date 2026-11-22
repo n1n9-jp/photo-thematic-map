@@ -114,10 +114,10 @@ describe('applyFit', () => {
 });
 
 describe('台本の fit', () => {
-  it('fit を持つのは場面3・4（23区の俯瞰）だけで、同じ範囲を指す', () => {
-    const withFit = SCRIPT.filter((s) => s.camera.fit !== undefined);
-    expect(withFit.map((s) => s.id)).toEqual(['tokyo-13394', 'parking-vacancy']);
-    expect(withFit[0]!.camera.fit).toEqual(withFit[1]!.camera.fit);
+  it('場面3・4（23区の俯瞰）は同じ長方形の範囲を指す（ほかの場面の fit は、収めたい点の集まり）', () => {
+    const rect = SCRIPT.filter((s) => s.camera.fit !== undefined && !s.camera.fit.points);
+    expect(rect.map((s) => s.id)).toEqual(['tokyo-13394', 'parking-vacancy']);
+    expect(rect[0]!.camera.fit).toEqual(rect[1]!.camera.fit);
   });
 
   it('PC 幅でもスマートフォン縦でも、23区の駅の範囲（約 30km 四方）が収まる距離になる', () => {

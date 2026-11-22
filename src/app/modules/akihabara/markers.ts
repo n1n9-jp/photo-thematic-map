@@ -33,7 +33,7 @@ export class BikeMarkers {
   readonly mesh: InstancedMesh;
   private readonly material: MeshBasicMaterial;
   private readonly born: InstancedBufferAttribute;
-  private readonly uniforms: { uShown: IUniform<number>; uTime: IUniform<number>; uFlashScale: IUniform<number>; uFlashTau: IUniform<number>; uFlashColor: IUniform<Color> };
+  private readonly uniforms: { uShown: IUniform<number>; uTime: IUniform<number>; uFlashScale: IUniform<number>; uFlashTau: IUniform<number>; uFlashColor: IUniform<Color>; uSize: IUniform<number> };
   private shown = 0;
   private timeSec = 0;
   private lastFlashSec = -Infinity;
@@ -51,6 +51,7 @@ export class BikeMarkers {
       uFlashScale: { value: (options.flashScale ?? 3) - 1 },
       uFlashTau: { value: this.flashSeconds },
       uFlashColor: { value: new Color(options.flashColor ?? 0xfff2a8) },
+      uSize: { value: 1 },
     };
     this.material = new MeshBasicMaterial({
       color: options.color ?? 0xff4a1c,
@@ -75,6 +76,7 @@ uniform float uShown;
 uniform float uTime;
 uniform float uFlashScale;
 uniform float uFlashTau;
+uniform float uSize;
 varying float vFlash;`,
         )
         .replace(
@@ -82,7 +84,7 @@ varying float vFlash;`,
           `#include <begin_vertex>
 float markAge = max(uTime - aBorn, 0.0);
 vFlash = aRank < uShown ? exp(-markAge / uFlashTau) : 0.0;
-transformed *= aRank < uShown ? 1.0 + uFlashScale * vFlash : 0.0;`,
+transformed *= aRank < uShown ? (1.0 + uFlashScale * vFlash) * uSize : 0.0;`,
         );
       shader.fragmentShader = shader.fragmentShader
         .replace(
@@ -142,6 +144,17 @@ diffuseColor.rgb = mix(diffuseColor.rgb, uFlashColor, vFlash);`,
   }
 
   /** 全体の濃さ（0 で描かない）。 */
+  /**
+   * 印の大きさの倍率（既定 1）。遠くから見下ろす場面で、印が画面上で小さくなりすぎないように大きくする。
+   */
+  set sizeScale(v: number) {
+    this.uniforms.uSize.value = v;
+  }
+
+  get sizeScale(): number {
+    return this.uniforms.uSize.value;
+  }
+
   set opacity(v: number) {
     this.material.opacity = v;
     this.mesh.visible = v > 0.001;

@@ -22,22 +22,48 @@ export interface StoryCameraKeyframe {
    */
   fit?: StoryCameraFit;
   /**
-   * 縦長の画面（canvas の高さが幅より大きい。スマートフォンの縦向き）で使うカメラ。省略時は横長と同じ。
-   * 本文カードが画面の下に出て主役が上側の狭い範囲に寄るので、横長の画面とは別の方位・距離が良いことがある。
+   * 本文カードが画面の下寄せに出る配置（スマートフォンの縦向き。`story/layout.ts` の 'bottom'）で使うカメラ。省略時は同じ。
+   * 主役がカードの上の狭い範囲に寄るので、カードが左の列に出る配置（'side'）とは別の方位・距離が良いことがある。
    */
   portrait?: StoryCameraView;
+  /**
+   * 場面の中でカメラを動かすときの経由点（場面の始まりのカメラは、このキーフレームそのもの）。
+   * `at` は「カメラが止まっている区間」（段階内の進捗 0〜hold）に対する割合(0〜1)。経由点のあいだは補間し、
+   * 最後の経由点（場面の終わりのカメラ）から次の段階へ移る。省略時は場面の中でカメラは動かない。
+   */
+  stops?: readonly StoryCameraStop[];
 }
 
-/** 画面の向きごとのカメラ（`StoryCameraKeyframe` から縦長の画面用の値を除いたもの）。 */
-export type StoryCameraView = Omit<StoryCameraKeyframe, 'portrait'>;
+/** 画面の向きごとのカメラ（`StoryCameraKeyframe` から縦長の画面用の値と経由点を除いたもの）。 */
+export type StoryCameraView = Omit<StoryCameraKeyframe, 'portrait' | 'stops'>;
+
+/** 場面の中の経由点。 */
+export interface StoryCameraStop {
+  /** 「カメラが止まっている区間」に対する割合(0〜1)。経由点の順に大きくする。 */
+  at: number;
+  camera: StoryCameraView;
+  /** 本文カードが下寄せの配置（スマートフォンの縦向き）で使うカメラ。省略時は camera。 */
+  portrait?: StoryCameraView;
+}
 
 /**
  * 注視点を中心とする、地表の長方形（東西・南北の幅(m)）。方位に関わらず、東西は東西、南北は南北の向きにとる。
  * 注視点の高さの水平面にある長方形として扱い、その4隅が画面の覆われていない範囲に入る距離を求める。
+ * `points` があれば、長方形の代わりにそれらの点（注視点からのずれ）がすべて入る距離を求める。
  */
 export interface StoryCameraFit {
   eastWestM: number;
   northSouthM: number;
+  /** 収めたい点（注視点からの東・北・上へのずれ(m)）。自転車の広がりの凸包、山の裾と頂上、物差しの建物の上端など。 */
+  points?: readonly StoryFitPoint[];
+}
+
+/** 注視点からのずれ(m)。 */
+export interface StoryFitPoint {
+  eastM: number;
+  northM: number;
+  /** 注視点の高さからの上へのずれ(m)。既定 0。 */
+  upM?: number;
 }
 
 /** 大きく表示する数値。段階内の進捗に合わせて 0 から `value` まで数え上がる。 */

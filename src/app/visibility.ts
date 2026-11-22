@@ -118,7 +118,23 @@ export interface VisibilityResult {
    * 1台ごとの数え方（`MeasureTargets.samples` があるときだけ）。標本点のうち過半が画面に入り建物にも地面にも
    * 隠れていない物を「見えている」、さらにその標本点の過半が本文カードにも覆われていない物を「隠れずに見えている」とする。
    */
-  items: { total: number; visible: number; clear: number; visibleFraction: number; clearFraction: number } | null;
+  items: VisibilityItems | null;
+}
+
+/** 1台ごとの数え方の結果。 */
+export interface VisibilityItems {
+  total: number;
+  /** 標本点の過半が画面に入り、建物にも地面にも隠れていない台数。 */
+  visible: number;
+  /** さらに本文カード・出典表示にも覆われていない台数。 */
+  clear: number;
+  visibleFraction: number;
+  clearFraction: number;
+  /** 建物に隠れているかに関わらず、標本点の過半が画面に入り、本文カード・出典表示に覆われていない台数（収まっているか）。 */
+  framed: number;
+  framedFraction: number;
+  /** 画面に入っている標本点を囲む長方形(CSS px)。なければ null。 */
+  bbox: CoverRect | null;
 }
 
 interface SavedState {
@@ -390,7 +406,7 @@ function measureItems(
   options: VisibilityOptions,
   covers: readonly CoverRect[],
   sc: number,
-): NonNullable<VisibilityResult['items']> {
+): VisibilityItems {
   const { points, perItem } = targets.samples!;
   const n = Math.floor(points.length / 3);
   const items = Math.floor(n / perItem);
@@ -460,12 +476,27 @@ function measureItems(
   }
   let visible = 0;
   let clear = 0;
+  let framed = 0;
   const need = Math.floor(perItem / 2) + 1;
+  let bx0 = Infinity;
+  let by0 = Infinity;
+  let bx1 = -Infinity;
+  let by1 = -Infinity;
   for (let it = 0; it < items; it++) {
     let a = 0;
     let c = 0;
+    let fr = 0;
     for (let k = 0; k < perItem; k++) {
       const i = it * perItem + k;
+      if (px[i]! >= 0) {
+        if (!covered[i]) fr++;
+        const x = (px[i]! + 0.5) / sc;
+        const y = (Hs - 1 - py[i]! + 0.5) / sc;
+        bx0 = Math.min(bx0, x);
+        bx1 = Math.max(bx1, x);
+        by0 = Math.min(by0, y);
+        by1 = Math.max(by1, y);
+      }
       if (seen[i]) {
         a++;
         if (!covered[i]) c++;
@@ -473,8 +504,19 @@ function measureItems(
     }
     if (a >= need) visible++;
     if (c >= need) clear++;
+    if (fr >= need) framed++;
   }
-  return { total: items, visible, clear, visibleFraction: items > 0 ? visible / items : 0, clearFraction: items > 0 ? clear / items : 0 };
+  const frac = (v: number): number => (items > 0 ? v / items : 0);
+  return {
+    total: items,
+    visible,
+    clear,
+    visibleFraction: frac(visible),
+    clearFraction: frac(clear),
+    framed,
+    framedFraction: frac(framed),
+    bbox: bx0 <= bx1 ? { left: bx0, top: by0, right: bx1, bottom: by1 } : null,
+  };
 }
 
 /**

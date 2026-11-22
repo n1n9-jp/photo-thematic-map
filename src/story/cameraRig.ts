@@ -19,14 +19,16 @@ import {
   poseFromCamera,
   poseToCameraPosition,
   samplePathLifted,
+  stopViewFor,
   viewFor,
+  type StagePoses,
   type CameraPose,
   type FitFrame,
   type GroundHeightAt,
   type GroundYAt,
 } from './cameraPath';
 import { prefersReducedMotion } from './motion';
-import type { StoryCameraKeyframe, StoryStage } from './types';
+import type { StoryCameraKeyframe, StoryCameraView, StoryStage } from './types';
 
 export interface CameraRigTarget {
   camera: PerspectiveCamera;
@@ -80,9 +82,9 @@ export interface CameraRig {
   /**
    * 画面の大きさと、本文カードに覆われていない範囲の大きさ(CSS px)を伝える。キーフレームの `fit`（収めたい地表の範囲）が
    * あるとき、この範囲が覆われていない範囲に収まる距離を求め直す。null か未設定の間は `fit` を使わず、`distance` のまま。
-   * 縦の画角はカメラの `fov` を使う。
+   * 縦の画角はカメラの `fov` を使う。portrait は本文カードが下寄せの配置か（縦長の画面用のカメラ `portrait` を使う。省略時は前の値）。
    */
-  setFitFrame(frame: { canvasWidth?: number; canvasHeight: number; regionWidth: number; regionHeight: number } | null): void;
+  setFitFrame(frame: { canvasHeight: number; regionWidth: number; regionHeight: number; portrait?: boolean } | null): void;
   /**
    * 段階 index のキーフレームを差し替える（null で台本の値に戻す）。カメラ位置の候補を試す確認用。
    * 差し替えた後のカメラは、その段階にいればそこへ滑らかに移る。
@@ -93,7 +95,7 @@ export interface CameraRig {
    * 場面の間の移動の経路を調べるのに使う。
    */
   poseAt(position: number): CameraPose;
-  /** 縦長の画面用のカメラ（`StoryCameraKeyframe.portrait`）を使っているか。 */
+  /** 縦長の画面用のカメラ（`StoryCameraKeyframe.portrait`。本文カードが下寄せの配置のとき）を使っているか。 */
   readonly portrait: boolean;
   /** OrbitControls を有効にしている最中か。 */
   readonly isFree: boolean;
@@ -104,6 +106,8 @@ export interface CameraRig {
 }
 
 const CONVERGED = 1e-3;
+/** 経路上の連続位置が、スクロールの位置にこれより近づいたら追いついたとみなす（段階の 1 万分の 1）。 */
+const FOLLOW_CONVERGED = 1e-4;
 /** これより小さな変化は「動いていない」とみなす（描画を省く判定）。 */
 const UNCHANGED = 1e-7;
 const DEG2RAD = Math.PI / 180;
@@ -124,14 +128,20 @@ export function createCameraRig(
   const transitionClearance = options.transitionClearance ?? 0;
   if (stages.length === 0) throw new Error('stages が空です');
   const overrides: (StoryCameraKeyframe | null)[] = stages.map(() => null);
-  /** 縦長の画面か。`setFitFrame` に canvas の幅が来るまでは、カメラの aspect で決める。 */
-  const isPortrait = (): boolean => camera.aspect < 1;
-  let portrait = isPortrait();
+  /**
+   * 本文カードが下寄せの配置（縦長の画面用のカメラ `portrait` を使う）か。`setFitFrame` で配置が伝わるまでは、
+   * カメラの aspect（縦長か）で決める。
+   */
+  let portrait = camera.aspect < 1;
   let fitFrame: FitFrame | null = null;
-  const fitPoses = (): CameraPose[] =>
+  const toPose = (view: StoryCameraView): CameraPose => applyFit(keyframeToPose(view, options.groundY), view.fit, fitFrame);
+  const fitPoses = (): StagePoses[] =>
     stages.map((s, i) => {
-      const view = viewFor(overrides[i] ?? s.camera, portrait);
-      return applyFit(keyframeToPose(view, options.groundY), view.fit, fitFrame);
+      const k = overrides[i] ?? s.camera;
+      return {
+        start: toPose(viewFor(k, portrait)),
+        stops: (k.stops ?? []).map((stop) => ({ at: stop.at, pose: toPose(stopViewFor(stop, portrait)) })),
+      };
     });
   let poses = fitPoses();
 
@@ -149,8 +159,15 @@ export function createCameraRig(
   };
 
   let position = 0;
+  /**
+   * カメラがたどっている経路上の連続位置。スクロールの位置（position）を時間で追いかける。カメラはつねに経路
+   * （場面の間を移る途中は持ち上げた経路）の上にあり、速くスクロールしても経路の外を近道しない。
+   */
+  let follow = 0;
+  /** 自由操作から戻る途中・経路が変わった直後は、いまの姿勢から経路へ滑らかに寄せる。 */
+  let rejoin = false;
   let shift = { x: 0, y: 0 };
-  let current: CameraPose = poses[0] as CameraPose;
+  let current: CameraPose = (poses[0] as StagePoses).start;
   let free = false;
   let disposed = false;
   /** 最後にカメラへ当てた姿勢。変化がなければ描画を省ける。 */
@@ -166,12 +183,13 @@ export function createCameraRig(
   controls.addEventListener('start', onControlsEvent);
   controls.addEventListener('end', onControlsEvent);
 
-  function desiredPose(): CameraPose {
+  /** 連続位置 at の語りのカメラ（場面の間を移る途中は持ち上げた経路）。 */
+  function pathPose(at: number): CameraPose {
     if (reduced()) {
-      // 即時の切り替え: 段階の番号のキーフレームに固定する。
-      return poses[Math.min(Math.floor(position), poses.length - 1)] as CameraPose;
+      // 即時の切り替え: 段階の番号のキーフレーム（場面の始まり）に固定する。
+      return (poses[Math.min(Math.floor(at), poses.length - 1)] as StagePoses).start;
     }
-    return samplePathLifted(poses, position, { hold, groundAt, cap: transitionClearance });
+    return samplePathLifted(poses, at, { hold, groundAt, cap: transitionClearance });
   }
 
   function updateClip(distance: number, cameraY: number, x: number, z: number): boolean {
@@ -213,6 +231,7 @@ export function createCameraRig(
     } else {
       // 自由に動かした位置から、語りのカメラ位置へ滑らかに戻る。
       current = poseFromCamera(camera.position, controls.target);
+      rejoin = true;
     }
   }
 
@@ -244,12 +263,15 @@ export function createCameraRig(
       if (next !== position) dirty = true;
       position = next;
       if (immediate && !free) {
-        current = desiredPose();
+        follow = position;
+        rejoin = false;
+        current = pathPose(follow);
         apply(current);
       }
     },
     setHolds(next) {
       hold = next;
+      rejoin = true;
       dirty = true;
     },
     setFreeOrbit(on) {
@@ -277,24 +299,23 @@ export function createCameraRig(
             frame.canvasHeight === fitFrame.canvasHeight &&
             frame.regionWidth === fitFrame.regionWidth &&
             frame.regionHeight === fitFrame.regionHeight;
-      const nextPortrait = next?.canvasWidth !== undefined ? next.canvasHeight > next.canvasWidth : isPortrait();
+      const nextPortrait = next?.portrait ?? portrait;
       if (same && nextPortrait === portrait) return;
       fitFrame = frame;
       portrait = nextPortrait;
       poses = fitPoses();
+      rejoin = true;
       dirty = true;
     },
     setStageCamera(index, keyframe) {
       if (disposed || index < 0 || index >= stages.length) return;
       overrides[index] = keyframe;
       poses = fitPoses();
+      rejoin = true;
       dirty = true;
     },
     poseAt(at) {
-      const p = reduced()
-        ? (poses[Math.min(Math.floor(at), poses.length - 1)] as CameraPose)
-        : samplePathLifted(poses, at, { hold, groundAt, cap: transitionClearance });
-      return liftAboveGround(p, groundAt, minClearance);
+      return liftAboveGround(pathPose(at), groundAt, minClearance);
     },
     get portrait() {
       return portrait;
@@ -311,13 +332,24 @@ export function createCameraRig(
       }
       const wasDirty = dirty;
       dirty = false;
-      const desired = desiredPose();
       if (reduced()) {
-        current = desired;
+        follow = position;
+        rejoin = false;
+        current = pathPose(follow);
       } else {
         const k = 1 - Math.exp(-stiffness * Math.max(dtSec, 0));
-        current = lerpPose(current, desired, k);
-        if (poseDelta(current, desired) < CONVERGED) current = desired;
+        follow += (position - follow) * k;
+        if (Math.abs(position - follow) < FOLLOW_CONVERGED) follow = position;
+        const onPath = pathPose(follow);
+        if (rejoin) {
+          current = lerpPose(current, onPath, k);
+          if (poseDelta(current, onPath) < CONVERGED) {
+            current = onPath;
+            rejoin = false;
+          }
+        } else {
+          current = onPath;
+        }
       }
       return apply(current) || wasDirty;
     },

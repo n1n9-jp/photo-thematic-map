@@ -94,6 +94,14 @@ export interface MainDebugApi {
   portrait(): boolean;
   /** 地点の標高(m)（国土地理院の標高タイル。読み込み済みの範囲は正確な値）。 */
   groundHeight(lat: number, lon: number): number;
+  /** いまのカメラの方位・仰角（俯角）・注視点までの距離。 */
+  pose(): { azimuthDeg: number; elevationDeg: number; distance: number };
+  /**
+   * 確認用: 1 フレームで進める時間の上限(s)を変える（既定 1）。描画の遅い環境でも、追従の途中のカメラを細かく刻める。
+   */
+  setMaxFrameDt(sec: number): void;
+  /** 確認用: フレームごとのカメラの位置（ローカル座標）の記録を始める（true）・やめて記録を返す（false）。 */
+  traceCamera(on: boolean): { x: number; y: number; z: number }[];
 }
 
 declare global {
@@ -258,6 +266,10 @@ export async function createApp(options: CreateAppOptions): Promise<App> {
     if (place) city.setFocus(place);
   }
 
+  /** 1 フレームで進める時間の上限(s)。確認用に小さくすると、描画の遅い環境でもカメラの動きを細かく刻める。 */
+  let maxFrameDt = 1;
+  /** 確認用: フレームごとのカメラの位置の記録（null は記録しない）。 */
+  let trace: { x: number; y: number; z: number }[] | null = null;
   let renderCount = 0;
   let cameraIdleFrames = 0;
   let last = performance.now();
@@ -265,10 +277,11 @@ export async function createApp(options: CreateAppOptions): Promise<App> {
   const firstFrame = new Promise<void>((r) => (resolveFirst = r));
 
   const frame = (now: number): void => {
-    const dt = Math.min((now - last) / 1000, 1);
+    const dt = Math.min((now - last) / 1000, maxFrameDt);
     last = now;
     updateFocus();
     const moved = story.update(dt);
+    if (trace) trace.push({ x: camera.position.x, y: camera.position.y, z: camera.position.z });
     cameraIdleFrames = moved ? 0 : cameraIdleFrames + 1;
     let needed = moved || renderRequested;
     for (const m of modules) if (m?.update?.(dt)) needed = true;
@@ -409,6 +422,18 @@ export async function createApp(options: CreateAppOptions): Promise<App> {
     },
     portrait: () => story.rig.portrait,
     groundHeight: (lat, lon) => groundY(lat, lon),
+    pose: () => {
+      const p = story.rig.getPose();
+      return { azimuthDeg: p.azimuthDeg, elevationDeg: p.elevationDeg, distance: p.distance };
+    },
+    setMaxFrameDt: (sec) => {
+      maxFrameDt = Math.max(1e-3, sec);
+    },
+    traceCamera: (on) => {
+      const out = trace ?? [];
+      trace = on ? [] : null;
+      return out;
+    },
   };
 
   return {
