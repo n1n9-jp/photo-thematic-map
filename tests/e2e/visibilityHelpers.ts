@@ -59,8 +59,9 @@ export interface VisibilityGoal {
   /** 足元の印の画面上の直径(CSS px)の下限（表示中で最も遠い印）。 */
   markerMinPx?: number;
   /**
-   * 広がりが、本文カードに覆われていない範囲いっぱいに写っているか（最も近い距離か）。標本点を囲む長方形の幅・高さの、
-   * 範囲の幅・高さに対する割合の大きい方の下限。
+   * 広がりが、本文カードに覆われていない範囲いっぱいに写っているか（最も近い距離か）。範囲の中心（注視点が写る位置）から
+   * 標本点を囲む長方形の各辺までの長さの、範囲の中心から同じ側の端までの長さに対する割合の最大の下限。
+   * 1 に近いほど、どこかの自転車が範囲の端に届いている（それ以上近づくとはみ出す）。
    */
   tightness?: number;
   /** カメラの俯角（見下ろす角度, 度）の上限。 */
@@ -80,11 +81,11 @@ export const VISIBILITY_GOALS: Record<string, VisibilityGoal> = {
   'akihabara-one': { unoccluded: 0.95, clear: 0.95, sizeOfShortSide: 0.2 },
   'akihabara-462@start': { framed: 1, firstBikeMinPx: 12 },
   'akihabara-462@mid': { framed: 0.97 },
-  'akihabara-462@end': { itemsClear: 0.6, framed: 0.97, markerMinPx: 6, tightness: 0.85 },
+  'akihabara-462@end': { itemsClear: 0.6, framed: 0.97, markerMinPx: 6, tightness: 0.9 },
   'removed-fy2024': { unoccluded: 0.9, clear: 0.85, onScreen: 0.98, landmark: MARUNOUCHI },
   'removed-15years': { unoccluded: 0.9, clear: 0.85, onScreen: 0.98, landmark: TOCHO, maxElevationDeg: 30 },
   'after-removal': { unoccluded: 0.9, clear: 0.85, onScreen: 0.98, landmark: MARUNOUCHI },
-  'since-1990': { itemsClear: 0.6, framed: 0.97, markerMinPx: 6, tightness: 0.85 },
+  'since-1990': { itemsClear: 0.6, framed: 0.97, markerMinPx: 6, tightness: 0.9 },
 };
 
 /** 本文カードに覆われていない範囲（画面の座標）。アプリが使う `freeRegionFor` を、いまのカードの位置から求める。 */
@@ -135,7 +136,7 @@ export interface VisibilityRow {
   items: { total: number; visible: number; clear: number; visibleFraction: number; clearFraction: number; framed: number; framedFraction: number } | null;
   /** 秋葉原の自転車の画面上の大きさ（場面1・2・8）: 先頭の1台の全長と、最も小さい足元の印の直径(CSS px)。 */
   bikeSizes: { firstBikeLengthPx: number; markerMinDiameterPx: number; markerScale: number } | null;
-  /** 広がり（標本点を囲む長方形）の、覆われていない範囲に対する割合の大きい方。 */
+  /** 広がり（標本点を囲む長方形）が、覆われていない範囲の中心から端までに占める割合の最大（`VisibilityGoal.tightness`）。 */
   tightness: number | null;
   /** カメラの方位・俯角(度)・注視点までの距離(m)。 */
   pose: { azimuthDeg: number; elevationDeg: number; distance: number };
@@ -162,7 +163,11 @@ export async function measureScene(page: Page, i: number, id: string, viewport: 
   if (r.items?.bbox) {
     const region = await freeRegionOf(page);
     const b = r.items.bbox;
-    tightness = Math.max((b.right - b.left) / (region.right - region.left), (b.bottom - b.top) / (region.bottom - region.top));
+    const cx = (region.left + region.right) / 2;
+    const cy = (region.top + region.bottom) / 2;
+    const hw = (region.right - region.left) / 2;
+    const hh = (region.bottom - region.top) / 2;
+    tightness = Math.max((cx - b.left) / hw, (b.right - cx) / hw, (cy - b.top) / hh, (b.bottom - cy) / hh);
   }
   const short = Math.min(r.width, r.height);
   const size = r.bbox ? Math.max(r.bbox.right - r.bbox.left, r.bbox.bottom - r.bbox.top) / short : 0;

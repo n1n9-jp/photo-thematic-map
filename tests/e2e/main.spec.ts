@@ -423,7 +423,22 @@ async function expectFastScrollOutsideBuildings(page: Page, solids: BuildingSoli
     const api = window.__MAIN__!;
     window.scrollTo({ top: api.scrollYFor(to, (api.holds()[to] ?? 0.4) * 0.5), behavior: 'instant' });
   }, to);
-  await expect.poll(() => page.evaluate(() => window.__MAIN__!.status().cameraIdleFrames), { timeout: SETTLE_TIMEOUT_MS, intervals: [1000] }).toBeGreaterThanOrEqual(3);
+  // スクロールが反映され、カメラが経路の上の止まる位置に追いつくまで待つ
+  await expect
+    .poll(
+      () =>
+        page.evaluate((to) => {
+          const api = window.__MAIN__!;
+          const st = api.getState();
+          // スクロールの位置が反映されてから（反映の前は、止まっているカメラがそのまま「追いついた」に見える）
+          if (Math.abs(st.position - (to + (api.holds()[to] ?? 0.4) * 0.5)) > 0.01) return false;
+          const goal = api.poseAt(st.position).camera;
+          const cam = (window as unknown as { __PTM_APP__: { ctx: { camera: { position: { x: number; y: number; z: number } } } } }).__PTM_APP__.ctx.camera.position;
+          return api.status().cameraIdleFrames >= 3 && Math.hypot(cam.x - goal.x, cam.y - goal.y, cam.z - goal.z) < 1;
+        }, to),
+      { timeout: SETTLE_TIMEOUT_MS, intervals: [1000] },
+    )
+    .toBe(true);
   const trace = await page.evaluate(() => {
     const t = window.__MAIN__!.traceCamera(false);
     window.__MAIN__!.setMaxFrameDt(1);
