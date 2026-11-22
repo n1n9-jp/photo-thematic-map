@@ -35,6 +35,7 @@
       main { max-width: 760px; margin: 0 auto; padding: 32px 16px 64px; }
       h1 { font-size: 1.5rem; margin: 0 0 4px; }
       .lead { color: var(--muted); margin: 0 0 28px; font-size: 0.95rem; }
+      .lead a { color: var(--accent); }
       h2 { font-size: 1rem; margin: 32px 0 10px; color: var(--muted); font-weight: 600; }
       ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
       li { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; }
@@ -60,8 +61,32 @@
     <main>
       <h1>確認ページの一覧</h1>
       <p class="lead">
-        東京都の放置自転車を、実数ぶんの3D自転車として東京の街に置く作品の、開発中の部品です。部品ごとに単独で動きます。本編は準備中です。
+        東京都の放置自転車を、実数ぶんの3D自転車として東京の街に置く作品の、部品ごとの確認ページです。部品ごとに単独で動きます。
+        通して読むには<a href="../">本編</a>を開いてください。
       </p>
+
+      <h2>実際の街に置いたもの（本編の場面と同じ配置）</h2>
+      <ul>
+        <li>
+          <a class="title" href="./akihabara.html?view=top">秋葉原駅の周りの462台</a>
+          <p>PLATEAU の街並みの上に、本編の場面1・2・8と同じ配置で置いたもの。</p>
+          <div class="variants">
+            <a href="./akihabara.html?view=top">真上から</a>
+            <a href="./akihabara.html?view=street">路上の目線</a>
+            <a href="./akihabara.html?view=close">駅前を近くから</a>
+          </div>
+        </li>
+        <li>
+          <a class="title" href="./pile-scene.html?site=marunouchi&view=wide">降って積もる自転車の山</a>
+          <p>東京駅丸の内口（1年ぶん 187,262台）と新宿中央公園（15年ぶん 5,798,477台。表層だけを描画）。計算に数秒〜数十秒かかります。</p>
+          <div class="variants">
+            <a href="./pile-scene.html?site=marunouchi&view=wide">東京駅・全景</a>
+            <a href="./pile-scene.html?site=marunouchi&view=street">東京駅・路上の目線</a>
+            <a href="./pile-scene.html?site=marunouchi&view=wide&play=1">東京駅・積もる動き</a>
+            <a href="./pile-scene.html?site=shinjuku&view=wide">新宿・全景</a>
+          </div>
+        </li>
+      </ul>
 
       <h2>自転車</h2>
       <ul>
@@ -100,7 +125,7 @@
       <ul>
         <li>
           <a class="title" href="./stations-overview.html?view=wards&shape=column">駅ごとの放置自転車（柱の地図）</a>
-          <p>都内489か所、合計13,394台。背景の街並みは未合成です。</p>
+          <p>都内489か所、合計13,394台。この確認ページは柱だけで、背景の街並みはありません。</p>
           <div class="variants">
             <a href="./stations-overview.html?view=wards&shape=column">23区・柱</a>
             <a href="./stations-overview.html?view=wards&shape=cone">23区・山</a>
@@ -117,8 +142,8 @@
           </div>
         </li>
         <li>
-          <a class="title" href="./plateau.html">PLATEAU の街並み<span class="heavy">読み込み 約90MB</span></a>
-          <p>建物の写真テクスチャを含む旧版です。白い建物の版に作り替え中のため、モバイル回線では開かないでください。</p>
+          <a class="title" href="./plateau.html">PLATEAU の街並み<span class="heavy">読み込みが多め</span></a>
+          <p>白い建物（3D Tiles を直接読む経路）と航空写真の地面。本編より読み込みが多いので、モバイル回線では注意してください。</p>
           <div class="variants">
             <a href="./plateau.html">東京駅</a>
             <a href="./plateau.html?lat=35.65803&lon=139.70165">渋谷駅</a>
