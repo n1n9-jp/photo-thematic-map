@@ -9,6 +9,7 @@
  * 場面を離れたら描かない。
  */
 import type { SceneModule, SceneModuleContext, SceneModuleFactory } from '../../sceneModule';
+import type { MeasureTargets } from '../../visibility';
 import { AkihabaraBikes } from './bikes';
 import { AKIHABARA_COUNT } from './layout';
 
@@ -78,6 +79,10 @@ class AkihabaraModule implements SceneModule {
   update(dtSec: number): boolean {
     if (!this.active) return false;
     return this.bikes.update(dtSec, frameCounter++);
+  }
+
+  measureTargets(): MeasureTargets | null {
+    return this.active ? this.bikes.measureTargets() : null;
   }
 
   dispose(): void {

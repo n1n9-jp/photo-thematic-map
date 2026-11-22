@@ -19,6 +19,7 @@ import type { BicycleFieldOptions } from '../../scene/bicycle/field';
 import { isSmallDevice } from '../../scene/plateau/budget';
 import type { SceneModule, SceneModuleContext } from '../sceneModule';
 import { createPileLoadingBadge, type PileLoadingBadge } from './pileLoadingBadge';
+import type { MeasureTargets } from '../visibility';
 
 /** 山の定義。 */
 export interface PileSiteSpec {
@@ -257,6 +258,14 @@ class SharedPile {
     return scene.animating;
   }
 
+  /** 見えている割合を測る対象（山）。表示していなければ null。 */
+  measureTargets(): MeasureTargets | null {
+    const scene = this.scene;
+    const ctx = this.ctx;
+    if (!scene || !ctx || !this.visible) return null;
+    return { subjects: [scene.object], prepare: (camera, px) => scene.update(camera, px) };
+  }
+
   status(): PileDebugStatus {
     const s = this.scene;
     const st = s?.stats;
@@ -409,6 +418,11 @@ export class PileModule implements SceneModule {
   update(): boolean {
     if (!this.active || !this.pile || this.pile.driving !== this) return false;
     return this.pile.update();
+  }
+
+  measureTargets(): MeasureTargets | null {
+    if (!this.active || !this.pile || this.pile.driving !== this) return null;
+    return this.pile.measureTargets();
   }
 
   private updateBadge(): void {

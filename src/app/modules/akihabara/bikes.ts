@@ -9,6 +9,7 @@
  */
 import type { PerspectiveCamera, Scene, WebGLRenderer } from 'three';
 import { BicycleField } from '../../../scene/bicycle/field';
+import type { MeasureTargets } from '../../visibility';
 import { stationLayoutToInstances } from '../../../scene/bicycle/stationInstances';
 import { computeAkihabaraInWorker } from './computeInWorker';
 import type { AkihabaraLayoutResult } from './layout';
@@ -177,6 +178,44 @@ export class AkihabaraBikes {
       this.field.update(camera, px);
     }
     return needed;
+  }
+
+  /** 見えている割合を測る対象（表示中の自転車。足元の印は測らない）。表示していなければ null。 */
+  measureTargets(): MeasureTargets | null {
+    if (!this.markers || !this.field.object.visible || this.debug.shown === 0) return null;
+    return {
+      subjects: [this.field.object],
+      hide: [this.markers.mesh],
+      samples: this.samplePoints(this.debug.shown),
+      prepare: (camera, px) => {
+        // 詳細度の切り替えには余裕幅（直前の詳細度に依る）があるので、測るたびに直前の詳細度を忘れさせ、
+        // どの場面から来ても同じ詳細度で測る（forceLod を切り替えると、次の update で割り当てをやり直す）
+        this.field.forceLod = 0;
+        this.field.forceLod = null;
+        this.field.update(camera, px);
+      },
+    };
+  }
+
+  /**
+   * 表示中の自転車 1 台ごとに 3 点（前輪の上・サドルの下・後輪の上。地面から 0.45〜0.55m）の標本点（見えている台数を数える）。
+   */
+  private samplePoints(count: number): { points: Float32Array; perItem: number } | undefined {
+    const layout = this.result?.layout;
+    if (!layout) return undefined;
+    const n = Math.min(count, layout.count);
+    const half = (layout.bikeLength ?? 1.8) * 0.33;
+    const points = new Float32Array(n * 9);
+    for (let i = 0; i < n; i++) {
+      const x = layout.positions[i * 3]!;
+      const y = layout.positions[i * 3 + 1]!;
+      const z = layout.positions[i * 3 + 2]!;
+      // 自転車の前後の向き（`stationLayout` と同じ: yaw は Y 軸まわり、前は (cos, 0, -sin)）
+      const fx = Math.cos(layout.yaws[i]!);
+      const fz = -Math.sin(layout.yaws[i]!);
+      points.set([x + fx * half, y + 0.45, z + fz * half, x, y + 0.55, z, x - fx * half, y + 0.45, z - fz * half], i * 9);
+    }
+    return { points, perItem: 3 };
   }
 
   dispose(): void {

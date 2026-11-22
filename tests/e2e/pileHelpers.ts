@@ -46,6 +46,12 @@ async function scrollTo(page: Page, i: number, holdFactor: number): Promise<void
   await expect.poll(() => page.evaluate(() => window.__MAIN__!.getState().stage), { timeout: 120_000 }).toBe(i);
 }
 
+/** 山が計算を終え、街並みが出そろい、落下も終わるのを待つ。 */
+export async function settlePile(page: Page, key: string): Promise<void> {
+  await page.waitForFunction((k) => window.__PILES__?.status(k)?.state === 'ready', key, { timeout: SETTLE_TIMEOUT_MS, polling: 250 });
+  await settle(page, key);
+}
+
 /** 街並みが出そろい、落下も終わるのを待つ（ソフトウェア描画は 1 フレーム数秒で、落下は 1 フレーム最大 0.1 秒ずつしか進まない）。 */
 async function settle(page: Page, key: string): Promise<void> {
   await page.waitForFunction(() => window.__MAIN__!.isSettled(), undefined, { timeout: SETTLE_TIMEOUT_MS, polling: 250 });

@@ -8,7 +8,7 @@
  */
 import { ORIGIN } from '../config';
 import { latLonToLocal, type Vec3 } from '../geo/enu';
-import type { StoryCameraFit, StoryCameraKeyframe } from './types';
+import type { StoryCameraFit, StoryCameraKeyframe, StoryCameraView } from './types';
 
 const DEG2RAD = Math.PI / 180;
 const RAD2DEG = 180 / Math.PI;
@@ -59,11 +59,21 @@ function clampElevation(deg: number): number {
   return Math.min(deg, MAX_ELEVATION_DEG);
 }
 
+/** 画面の向きに合わせたカメラ。縦長（portrait=true）で `k.portrait` があればそれ、なければ k そのもの。 */
+export function viewFor(k: StoryCameraKeyframe, portrait: boolean): StoryCameraView {
+  return portrait && k.portrait ? k.portrait : k;
+}
+
+/** キーフレームが持つカメラ（横長と、あれば縦長）。範囲の計算（建物の事前変換、標高の先読み）に使う。 */
+export function viewsOf(k: StoryCameraKeyframe): StoryCameraView[] {
+  return k.portrait ? [k, k.portrait] : [k];
+}
+
 /**
  * 緯度経度のキーフレームをローカル座標の姿勢にする。
  * 注視点の Y は `groundY(lat, lon) + target.alt`（alt は地表からの高さ）。仰角は `MAX_ELEVATION_DEG` までに丸める。
  */
-export function keyframeToPose(k: StoryCameraKeyframe, groundY: GroundYAt = defaultGroundY): CameraPose {
+export function keyframeToPose(k: StoryCameraView, groundY: GroundYAt = defaultGroundY): CameraPose {
   const ground = latLonToLocal({ lat: k.target.lat, lon: k.target.lon, alt: 0 }, ORIGIN);
   return {
     target: { x: ground.x, y: groundY(k.target.lat, k.target.lon) + (k.target.alt ?? 0), z: ground.z },
@@ -263,6 +273,60 @@ export function samplePath(
   const b = poses[i + 1];
   if (!a || !b) throw new Error('samplePath: 内部エラー');
   return lerpPose(a, b, ease(t));
+}
+
+/**
+ * 連続位置 position の区間: 区間の番号 i（キーフレーム i → i+1）と、移動の進み具合 t（0〜1。止まっている間は 0、緩急をかける前）。
+ * `samplePath` と同じ決め方。
+ */
+export function segmentAt(count: number, position: number, hold: number | readonly number[] = DEFAULT_HOLD): { i: number; t: number } {
+  if (count <= 1) return { i: 0, t: 0 };
+  const last = count - 1;
+  const s = Math.min(Math.max(position, 0), last);
+  const i = Math.min(Math.floor(s), last - 1);
+  const f = s - i;
+  const h = typeof hold === 'number' ? hold : (hold[i] ?? DEFAULT_HOLD);
+  const t = h >= 1 ? (f >= 1 ? 1 : 0) : clamp01((f - h) / (1 - h));
+  return { i, t };
+}
+
+/** 移る途中の高さの下限が、移り始め・着く前のこの割合（緩急をかけた進み具合）で上がりきる・降り始める。 */
+export const TRANSITION_RAMP = 0.3;
+
+/**
+ * 場面の間を移る途中の、カメラの地表からの高さの下限(m)。両端（u=0, 1）で 0、途中は両端のカメラの高さ（地表から）の
+ * 大きい方（上限 cap）。u は緩急をかけた進み具合。移り始めにまず上がり、着く直前に降りる山なりの経路にして、
+ * 低いカメラ（地上の目線や建物の間）から・へ移るときに、建物の中を通り抜けないようにする。
+ */
+export function transitionFloor(heightA: number, heightB: number, u: number, cap: number): number {
+  const peak = Math.min(Math.max(heightA, heightB), cap);
+  if (peak <= 0) return 0;
+  return peak * smoothstep(u / TRANSITION_RAMP) * smoothstep((1 - u) / TRANSITION_RAMP);
+}
+
+/**
+ * `samplePath` の姿勢を、場面の間を移る途中だけ `transitionFloor` の高さまで持ち上げる（`liftAboveGround`）。
+ * cap が 0 以下なら持ち上げない。キーフレームの位置（止まっている間）は変えない。
+ */
+export function samplePathLifted(
+  poses: readonly CameraPose[],
+  position: number,
+  options: SamplePathOptions & { groundAt: GroundHeightAt; cap: number },
+): CameraPose {
+  const p = samplePath(poses, position, options);
+  if (options.cap <= 0) return p;
+  const { i, t } = segmentAt(poses.length, position, options.hold);
+  if (t <= 0 || t >= 1) return p;
+  const a = poses[i];
+  const b = poses[i + 1];
+  if (!a || !b) return p;
+  const above = (q: CameraPose): number => {
+    const c = poseToCameraPosition(q);
+    return c.y - options.groundAt(c.x, c.z);
+  };
+  const u = (options.ease ?? smoothstep)(t);
+  const floor = transitionFloor(above(a), above(b), u, options.cap);
+  return floor > 0 ? liftAboveGround(p, options.groundAt, floor) : p;
 }
 
 /**

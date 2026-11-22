@@ -3,12 +3,14 @@
  * 秋葉原の場面（1・2・8）では、表示中の自転車の台数（場面1 で 1台、場面2 の途中と終わり、場面8 で 462台）を確かめる。
  * 場面ごとに、切り替えてから街並みが出そろうまでの時間と、その間に読み込んだ量を screenshots/main-metrics*.json に書き出す。
  */
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import { SCRIPT } from '../../src/story/content/script';
 import { freeRegionFor } from '../../src/story/layout';
-import { checkPileScene, PILE_SCENES, type PileMetric } from './pileHelpers';
+import { checkPileScene, PILE_SCENES, settlePile, type PileMetric } from './pileHelpers';
+import { BuildingSolids } from './buildingSolids';
+import { measureScene, VISIBILITY_GOALS, type VisibilityRow } from './visibilityHelpers';
 
 // ソフトウェア描画（SwiftShader）では PLATEAU の読み込みと描画に時間がかかる
 test.setTimeout(5_400_000);
@@ -68,10 +70,10 @@ async function goToScene(page: Page, i: number, holdFraction = 0.5): Promise<num
   );
   await expect.poll(() => page.evaluate(() => window.__MAIN__!.getState().stage), { timeout: 120_000 }).toBe(i);
   // スクロールの進捗が反映されるまで待つ（街並みがすぐ出そろうと、反映の前に isSettled() が true になることがある）
-  // 山の場面は1フレームに数秒かかることがあるので、既定の 5 秒では足りない
+  // 1 フレームが数秒かかる環境（上空から街を広く見る場面）でも待てるよう、場面の番号の確認と同じく 2 分待つ
   await expect
     .poll(() => page.evaluate(([i, f]) => Math.abs(window.__MAIN__!.getState().progress - (window.__MAIN__!.holds()[i] ?? 0.4) * f), [i, holdFraction] as const), {
-      timeout: 60_000,
+      timeout: 120_000,
     })
     .toBeLessThan(0.01);
   await page.waitForFunction(() => window.__MAIN__!.isSettled(), undefined, { timeout: SETTLE_TIMEOUT_MS, polling: 250 });
@@ -288,6 +290,90 @@ test('PC 幅で、場面5・6の注視点がカードの列の右側にあり、
     }
     await page.screenshot({ path: `screenshots/main-layout-desktop-${i + 1}.png` });
   }
+  expect(errors).toEqual([]);
+});
+
+// ---------------------------------------------------------------------------
+// 主役（自転車・山）の見えている割合（場面1・2・5・6・7・8）
+// ---------------------------------------------------------------------------
+
+/** 見えている割合を測る場面（0 始まり）。 */
+const VISIBILITY_SCENES = SCRIPT.flatMap((s, i) => (VISIBILITY_GOALS[s.id] ? [i] : []));
+
+/** 測った値を screenshots/visibility.json に書き足す（PC 幅とスマートフォン幅のテストが別々に書くので、同じ画面の行だけ置き換える）。 */
+function writeVisibility(viewport: string, rows: VisibilityRow[]): void {
+  mkdirSync('screenshots', { recursive: true });
+  const path = 'screenshots/visibility.json';
+  let all: VisibilityRow[];
+  try {
+    all = JSON.parse(readFileSync(path, 'utf8')) as VisibilityRow[];
+  } catch {
+    all = [];
+  }
+  all = [...all.filter((r) => r.viewport !== viewport), ...rows].sort((a, b) => a.viewport.localeCompare(b.viewport) || a.scene - b.scene);
+  writeFileSync(path, JSON.stringify(all, null, 2));
+}
+
+async function checkVisibility(page: Page, viewport: { width: number; height: number }, shot: (n: number) => string): Promise<void> {
+  await page.setViewportSize(viewport);
+  const errors = collectErrors(page);
+  await open(page);
+  const tag = `${viewport.width}x${viewport.height}`;
+  const rows: VisibilityRow[] = [];
+  for (const i of VISIBILITY_SCENES) {
+    const id = SCRIPT[i]!.id;
+    // 場面2 は 462台がそろう位置、山が育つ場面（5・6）は積もりきる位置で測る
+    const pile = PILE_SCENES[i];
+    await goToScene(page, i, id === 'akihabara-462' || pile?.grow ? 0.95 : 0.5);
+    if (pile) await settlePile(page, pile.key);
+    if (AKIHABARA_SHOWN[id]) {
+      expect(await akihabaraShown(page)).toBe(AKIHABARA_SHOWN[id]);
+      await page.waitForTimeout(2500);
+    }
+    const row = await measureScene(page, i, id, tag);
+    rows.push(row);
+    const items = row.items ? `、台数 ${row.items.clear}/${row.items.total}（建物に隠れていない ${row.items.visible}台）` : '';
+    console.log(`見えている割合 ${tag} 場面${i + 1} ${id}: 建物に隠れていない ${row.unoccluded}、カードにも覆われていない ${row.clear}、画面内 ${row.onScreen}、大きさ ${row.sizeOfShortSide}${items}`);
+    await page.screenshot({ path: shot(i + 1) });
+  }
+  writeVisibility(tag, rows);
+  // 縦長の画面ではスマートフォン向けのカメラを使う
+  for (const r of rows) expect(r.portrait).toBe(viewport.height > viewport.width);
+  expect(rows.flatMap((r) => r.failures.map((f) => `場面${r.scene} ${r.id}: ${f}`))).toEqual([]);
+  expect(errors).toEqual([]);
+}
+
+test('PC 幅で、場面1・2・5・6・7・8の主役（自転車・山）が建物と本文カードに隠れずに見える', async ({ page }) => {
+  await checkVisibility(page, { width: 1280, height: 720 }, (n) => `screenshots/main-${n}.png`);
+});
+
+test('スマートフォン幅（390×844）で、場面1・2・5・6・7・8の主役（自転車・山）が建物と本文カードに隠れずに見える', async ({ page }) => {
+  await checkVisibility(page, { width: 390, height: 844 }, (n) => `screenshots/main-mobile-${n}.png`);
+});
+
+/**
+ * 場面の間の移動の経路（スクロールが止まったときの語りのカメラ）を細かく刻み、カメラが建物の中に入らないことを確かめる。
+ * 建物の中かどうかは、変換済みの建物（public/data/buildings/）で、カメラから真上への半直線が横切る面の数で判定する。
+ */
+async function expectPathOutsideBuildings(page: Page, viewport: { width: number; height: number }): Promise<void> {
+  await page.setViewportSize(viewport);
+  await open(page);
+  const samples = await page.evaluate((perStage) => {
+    const api = window.__MAIN__!;
+    const n = api.stageIds().length;
+    const out: { position: number; camera: { x: number; y: number; z: number } }[] = [];
+    for (let k = 0; k <= perStage * (n - 1); k++) out.push({ position: k / perStage, camera: api.poseAt(k / perStage).camera });
+    return out;
+  }, 400);
+  const solids = new BuildingSolids();
+  const inside = samples.filter((s) => solids.inside(s.camera.x, s.camera.y, s.camera.z)).map((s) => s.position.toFixed(4));
+  expect(inside, `${viewport.width}×${viewport.height}: 建物の中を通る位置（場面の番号 − 1 + 進み具合）`).toEqual([]);
+}
+
+test('場面の間を移る途中も、カメラが建物の中を通らない（PC 幅・スマートフォン幅）', async ({ page }) => {
+  const errors = collectErrors(page);
+  await expectPathOutsideBuildings(page, { width: 1280, height: 720 });
+  await expectPathOutsideBuildings(page, { width: 390, height: 844 });
   expect(errors).toEqual([]);
 });
 
