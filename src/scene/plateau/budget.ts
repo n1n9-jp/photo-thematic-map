@@ -22,6 +22,8 @@ export interface PlateauMemoryBudget {
   groundMaxTiles: number;
   /** 標高タイルのキャッシュの上限（タイル数。1 枚 256KB）。 */
   elevationMaxTiles: number;
+  /** 航空写真の 1 画素を画面上で何 px まで引き伸ばしてよいか（大きいほど粗いタイルで済ませ、転送量が減る）。 */
+  groundTexelScale: number;
 }
 
 export interface DeviceInfo {
@@ -38,6 +40,7 @@ export const SMALL_DEVICE_BUDGET: PlateauMemoryBudget = {
   buildingCache: { minBytes: 64 * MB, maxBytes: 96 * MB, minTiles: 300, maxTiles: 400 },
   groundMaxTiles: 120,
   elevationMaxTiles: 48,
+  groundTexelScale: 2,
 };
 
 /** パソコン向け。 */
@@ -45,6 +48,7 @@ export const DEFAULT_BUDGET: PlateauMemoryBudget = {
   buildingCache: { minBytes: 128 * MB, maxBytes: 192 * MB, minTiles: 600, maxTiles: 800 },
   groundMaxTiles: 240,
   elevationMaxTiles: 96,
+  groundTexelScale: 1.5,
 };
 
 /** いまの端末の情報（ブラウザの外では空）。 */

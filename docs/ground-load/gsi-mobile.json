@@ -1,0 +1,189 @@
+{
+  "query": "?ortho=gsi",
+  "refetched": 0,
+  "rows": [
+    {
+      "scene": 1,
+      "id": "akihabara-one",
+      "settleMs": 55301,
+      "tiles": 24,
+      "bytes": 847645,
+      "shownTiles": 18,
+      "shownBytes": 491196,
+      "byZoom": {
+        "10": [
+          2,
+          199970,
+          0,
+          0
+        ],
+        "12": [
+          1,
+          105417,
+          1,
+          105417
+        ],
+        "13": [
+          2,
+          198386,
+          1,
+          98147
+        ],
+        "15": [
+          3,
+          58384,
+          2,
+          41876
+        ],
+        "16": [
+          9,
+          162541,
+          7,
+          122809
+        ],
+        "17": [
+          1,
+          19397,
+          1,
+          19397
+        ],
+        "18": [
+          6,
+          103550,
+          6,
+          103550
+        ]
+      },
+      "elevationBytes": 862034,
+      "refetchBytes": 0,
+      "visibleByZoom": {
+        "12": 1,
+        "13": 1,
+        "15": 2,
+        "16": 7,
+        "17": 1,
+        "18": 6
+      }
+    },
+    {
+      "scene": 2,
+      "id": "akihabara-462",
+      "settleMs": 9623,
+      "tiles": 5,
+      "bytes": 89588,
+      "shownTiles": 3,
+      "shownBytes": 48987,
+      "byZoom": {
+        "16": [
+          2,
+          40601,
+          0,
+          0
+        ],
+        "18": [
+          3,
+          48987,
+          3,
+          48987
+        ]
+      },
+      "elevationBytes": 0,
+      "refetchBytes": 0,
+      "visibleByZoom": {
+        "18": 7
+      }
+    },
+    {
+      "scene": 3,
+      "id": "tokyo-13394",
+      "settleMs": 3377,
+      "tiles": 5,
+      "bytes": 421806,
+      "shownTiles": 4,
+      "shownBytes": 401640,
+      "byZoom": {
+        "10": [
+          4,
+          401640,
+          4,
+          401640
+        ],
+        "16": [
+          1,
+          20166,
+          0,
+          0
+        ]
+      },
+      "elevationBytes": 412448,
+      "refetchBytes": 0,
+      "visibleByZoom": {
+        "10": 6
+      }
+    },
+    {
+      "scene": 4,
+      "id": "parking-vacancy",
+      "settleMs": 2860,
+      "tiles": 0,
+      "bytes": 0,
+      "shownTiles": 0,
+      "shownBytes": 0,
+      "byZoom": {},
+      "elevationBytes": 0,
+      "refetchBytes": 0,
+      "visibleByZoom": {
+        "10": 6
+      }
+    },
+    {
+      "scene": 5,
+      "id": "removed-fy2024",
+      "settleMs": 338394,
+      "tiles": 16,
+      "bytes": 532360,
+      "shownTiles": 14,
+      "shownBytes": 417191,
+      "byZoom": {
+        "12": [
+          1,
+          96902,
+          0,
+          0
+        ],
+        "13": [
+          2,
+          194751,
+          2,
+          194751
+        ],
+        "15": [
+          2,
+          41940,
+          2,
+          41940
+        ],
+        "16": [
+          5,
+          102743,
+          4,
+          84476
+        ],
+        "18": [
+          6,
+          96024,
+          6,
+          96024
+        ]
+      },
+      "elevationBytes": 266625,
+      "refetchBytes": 0,
+      "visibleByZoom": {
+        "13": 2,
+        "15": 2,
+        "16": 4,
+        "18": 6
+      }
+    }
+  ]
+}

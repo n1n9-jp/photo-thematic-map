@@ -110,7 +110,12 @@ export interface GsiElevationSourceOptions {
   maxTiles?: number;
   /** 再試行の方針。既定は「標高」の名前で新しく作る。 */
   policy?: TileFetchPolicy;
+  /** 画像の取得（単体テストで差し替える）。既定は fetchImagePixels。 */
+  fetchPixels?: FetchPixels;
 }
+
+/** 画像を取得して RGBA 画素を返す関数（fetchImagePixels と同じ形）。 */
+export type FetchPixels = typeof fetchImagePixels;
 
 /**
  * 標高タイルの取得とキャッシュ（LRU）。
@@ -120,12 +125,14 @@ export class GsiElevationSource {
   /** 再試行の方針（失敗の件数は failedTileCount）。 */
   readonly policy: TileFetchPolicy;
   private readonly maxTiles: number;
+  private readonly fetchPixels: FetchPixels;
   /** 挿入順＝使った順（古い順）。 */
   private readonly cache = new Map<string, Promise<DemTile | null>>();
 
   constructor(options: GsiElevationSourceOptions = {}) {
     this.maxTiles = Math.max(1, options.maxTiles ?? plateauMemoryBudget().elevationMaxTiles);
     this.policy = options.policy ?? new TileFetchPolicy('標高');
+    this.fetchPixels = options.fetchPixels ?? fetchImagePixels;
   }
 
   /** 取得不能になった標高タイルの件数。 */
@@ -151,7 +158,7 @@ export class GsiElevationSource {
       this.cache.set(key, p);
       return p;
     }
-    p = fetchImagePixels(demUrl(kind, z, x, y), undefined, this.policy).then(
+    p = this.fetchPixels(demUrl(kind, z, x, y), undefined, this.policy).then(
       (img) => {
         if (!img) return null;
         img.bitmap.close();

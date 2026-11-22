@@ -1,9 +1,18 @@
 /** 画面の隅に出典を常時表示する小さな要素。 */
+import { orthoSourceFromUrl } from './orthoSource';
+import type { OrthoSource } from './orthoSource';
 
 export const PLATEAU_ATTRIBUTION = '出典：国土交通省 Project PLATEAU（https://www.mlit.go.jp/plateau/）のデータを加工して作成';
 export const GSI_ATTRIBUTION = '標高：国土地理院 標高タイル';
+/** 航空写真を国土地理院の写真に切り替えたとき（`?ortho=gsi`）の出典。 */
+export const GSI_PHOTO_ATTRIBUTION = '航空写真：国土地理院 全国最新写真（シームレス）';
 
-export function addAttribution(parent: HTMLElement = document.body, lines: readonly string[] = [PLATEAU_ATTRIBUTION, GSI_ATTRIBUTION]): HTMLElement {
+/** 確認ページの出典表示の既定の行。航空写真を国土地理院の写真に切り替えたときは、その行を足す。 */
+export function defaultAttributionLines(ortho: OrthoSource = orthoSourceFromUrl()): string[] {
+  return ortho === 'gsi' ? [PLATEAU_ATTRIBUTION, GSI_PHOTO_ATTRIBUTION, GSI_ATTRIBUTION] : [PLATEAU_ATTRIBUTION, GSI_ATTRIBUTION];
+}
+
+export function addAttribution(parent: HTMLElement = document.body, lines: readonly string[] = defaultAttributionLines()): HTMLElement {
   const el = document.createElement('div');
   el.className = 'ptm-attribution';
   el.setAttribute('role', 'contentinfo');
@@ -46,14 +55,19 @@ export function addAttribution(parent: HTMLElement = document.body, lines: reado
 /** 出典の1行を、文字列とリンクの並びで表す。 */
 export type AttributionSegment = string | { text: string; href: string; external?: boolean };
 
-/** 本編の出典表示（2行）。語ごとにリンクを付ける。 */
-export function siteAttributionLines(methodsHref = '#data-and-methods'): AttributionSegment[][] {
+/**
+ * 本編の出典表示（2行）。語ごとにリンクを付ける。
+ * 航空写真を国土地理院の写真に切り替えたとき（`?ortho=gsi`）は、国土地理院の項に「写真」を明記する。
+ */
+export function siteAttributionLines(methodsHref = '#data-and-methods', ortho: OrthoSource = orthoSourceFromUrl()): AttributionSegment[][] {
   return [
     [
       '出典：',
       { text: '国土交通省 PLATEAU', href: 'https://www.mlit.go.jp/plateau/' },
       '・',
-      { text: '国土地理院', href: 'https://maps.gsi.go.jp/development/ichiran.html' },
+      ortho === 'gsi'
+        ? { text: '国土地理院（全国最新写真（シームレス）・標高タイル）', href: 'https://maps.gsi.go.jp/development/ichiran.html' }
+        : { text: '国土地理院', href: 'https://maps.gsi.go.jp/development/ichiran.html' },
       '・',
       { text: '国土数値情報', href: 'https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-N02-2024.html' },
       '・',
