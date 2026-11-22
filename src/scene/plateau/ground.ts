@@ -35,7 +35,7 @@ import { latToTileY, lonToTileX, tileBounds, tileXToLon, tileYToLat } from '../.
 import type { TileBounds } from '../../geo/tiles';
 import { plateauMemoryBudget, releaseAfterUpload } from './budget';
 import { GsiElevationSource, fetchImagePixels, hasValidHeights, sampleDemAt } from './elevation';
-import type { DemKind, DemTile } from './elevation';
+import type { DemKind, DemTile, FetchPixels } from './elevation';
 import { ORTHO_SOURCES, orthoSourceFromUrl, orthoTileUrl } from './orthoSource';
 import type { OrthoSource } from './orthoSource';
 import { TileFetchPolicy, reportTileFailure } from './tileFetch';
@@ -85,6 +85,8 @@ export interface PlateauGroundOptions {
   elevationMaxTiles?: number;
   /** 航空写真・標高の再試行の方針（回数・間隔）。 */
   fetchPolicy?: TileFetchPolicyOptions;
+  /** 航空写真・標高の画像の取得（単体テストで差し替える）。既定は fetchImagePixels。 */
+  fetchPixels?: FetchPixels;
 }
 
 /**
@@ -109,6 +111,8 @@ interface GroundNode {
    * 子孫のタイル（MAX_SKIP_DEPTH 段下まで）が存在するかの判断に使う。
    */
   alphaGrid: Uint8Array | null;
+  /** 各区画のすべての画素が不透明（アルファ 255）か。途中の段を飛ばしてよいかの判断に使う。 */
+  solidGrid: Uint8Array | null;
   children: (GroundNode | null)[] | null;
   /** 細かい順の標高タイル（自分で取得したもの → 祖先のもの）。 */
   dems: DemTile[];
@@ -160,8 +164,8 @@ export class PlateauGround {
   private readonly movingTexelFactor: number;
   private readonly fogMinContrast: number;
   private readonly grazingMinFactor: number;
-  /** このフレームで使う texelScale（カメラが動いている間は粗い）。 */
-  private splitScale = 1.5;
+  /** 新しく読むタイルを選ぶときの texelScale（カメラが動いている間は粗い）。表示の選び方には使わない。 */
+  private requestScale = 1.5;
   private fog: Fog | null = null;
   private readonly prevPos = new Vector3(Number.NaN, 0, 0);
   private readonly prevQuat = new Quaternion();
@@ -169,6 +173,7 @@ export class PlateauGround {
   private stillFrames = STILL_FRAMES;
   private readonly concurrency: number;
   private readonly maxTiles: number;
+  private readonly fetchPixels: FetchPixels;
   private readonly roots = new Map<string, GroundNode>();
   private readonly loaded = new Set<GroundNode>();
   private readonly frustum = new Frustum();
@@ -198,11 +203,13 @@ export class PlateauGround {
     this.movingTexelFactor = Math.max(1, options.movingTexelFactor ?? 4);
     this.fogMinContrast = Math.min(Math.max(options.fogMinContrast ?? 0.25, 0), 1);
     this.grazingMinFactor = Math.min(Math.max(options.grazingMinFactor ?? 0.25, 0.01), 1);
-    this.splitScale = this.texelScale;
+    this.requestScale = this.texelScale;
     this.concurrency = options.concurrency ?? 12;
     this.maxTiles = options.maxTiles ?? budget.groundMaxTiles;
     this.orthoPolicy = new TileFetchPolicy('航空写真', options.fetchPolicy);
+    this.fetchPixels = options.fetchPixels ?? fetchImagePixels;
     this.elevation = new GsiElevationSource({
+      fetchPixels: this.fetchPixels,
       maxTiles: options.elevationMaxTiles ?? budget.elevationMaxTiles,
       policy: new TileFetchPolicy('標高', options.fetchPolicy),
     });
@@ -271,7 +278,7 @@ export class PlateauGround {
     return this.movingTexelFactor > 1 && this.stillFrames < STILL_FRAMES;
   }
 
-  /** カメラの動きを前のフレームと比べ、このフレームで使う細かさ（splitScale）を決める。 */
+  /** カメラの動きを前のフレームと比べ、新しく読むタイルの細かさ（requestScale）を決める。 */
   private trackMotion(cam: PerspectiveCamera): void {
     const q = cam.getWorldQuaternion(new Quaternion());
     if (!Number.isNaN(this.prevPos.x)) {
@@ -282,7 +289,7 @@ export class PlateauGround {
     }
     this.prevPos.copy(this.camPos);
     this.prevQuat.copy(q);
-    this.splitScale = this.cameraSettling ? this.texelScale * this.movingTexelFactor : this.texelScale;
+    this.requestScale = this.cameraSettling ? this.texelScale * this.movingTexelFactor : this.texelScale;
   }
 
   /** 読み込み済みタイル数。 */
@@ -378,6 +385,7 @@ export class PlateauGround {
       state: 'idle',
       mesh: null,
       alphaGrid: null,
+      solidGrid: null,
       children: null,
       dems: parent ? parent.dems : [],
       lastUsed: 0,
@@ -397,12 +405,17 @@ export class PlateauGround {
     return dx * dx + dz * dz <= r * r;
   }
 
-  private wantsSplit(node: GroundNode): boolean {
+  /**
+   * node より細かいタイルにしたいか。scale は texelScale（表示の選び方）か requestScale（新しく読むタイルの選び方）。
+   * 表示はカメラが動いていても止まっていても同じ基準で選ぶので、読み込み済みのタイルは移動中も同じものが表示され、
+   * 地面のメッシュ（と標高）は変わらない。
+   */
+  private wantsSplit(node: GroundNode, scale: number = this.texelScale): boolean {
     if (node.z >= this.maxZoom) return false;
     this.renderer.getSize(this.size);
     const f = this.size.y / 2 / Math.tan(((this.camera.fov / 2) * Math.PI) / 180);
     const d = Math.max(this.distanceTo(node), 1);
-    return (node.sizeM * f * this.grazingFactor(node, d)) / d > IMG * this.splitScale * this.fogRelief(d);
+    return (node.sizeM * f * this.grazingFactor(node, d)) / d > IMG * scale * this.fogRelief(d);
   }
 
   /** 視線と地面の角度による、必要な細かさの倍率（0〜1）。カメラよりタイルが高いときは 1。 */
@@ -423,7 +436,9 @@ export class PlateauGround {
 
   /**
    * 表示するタイルと読み込むタイルを選ぶ。読み込み済みのタイルは、細かくしたいときに子（が全部そろうまでは自分）を表示する。
+   * 子のどれかが取得できなかった（failed）ときは、子へ進まずに自分を表示する（その範囲に地面が欠けないように）。
    * 飛ばした段（skipped）は、子が全部そろったときだけここへ来るので、子を選ぶ。
+   * カメラが動いている間は、表示の選び方は変えず、新しく読むタイルだけを粗くする（requestScale）。
    */
   private select(node: GroundNode, visible: Set<GroundNode>, wanted: GroundNode[]): void {
     if (!this.inView(node)) return;
@@ -443,7 +458,12 @@ export class PlateauGround {
         for (const k of kids) this.select(k, visible, wanted);
         return;
       }
-      for (const k of kids) this.request(k, wanted, 1);
+      const anyFailed = kids.some((k) => k.state === 'failed');
+      if (!anyFailed && (!this.cameraSettling || this.wantsSplit(node, this.requestScale))) {
+        for (const k of kids) this.request(k, wanted, 1);
+      } else {
+        for (const k of kids) k.lastUsed = this.frame;
+      }
     }
     visible.add(node);
   }
@@ -452,14 +472,12 @@ export class PlateauGround {
     return this.inRange(node) && this.frustum.intersectsBox(node.box);
   }
 
-  /** 存在し、範囲と視野に入る子。 */
+  /** 存在し（撮影範囲外でなく）、範囲と視野に入る子。取得できなかった子（failed）も含む。 */
   private viewKids(node: GroundNode): GroundNode[] {
-    return this.childrenOf(node).filter(
-      (k): k is GroundNode => k !== null && k.state !== 'unavailable' && k.state !== 'failed' && this.inView(k),
-    );
+    return this.childrenOf(node).filter((k): k is GroundNode => k !== null && k.state !== 'unavailable' && this.inView(k));
   }
 
-  /** 表示に使える（読み込み済み、または飛ばした段で、子が全部そろっている）か。 */
+  /** 表示に使える（読み込み済み、または飛ばした段で、子が全部そろっている）か。取得できなかったタイルは使えない。 */
   private isComplete(node: GroundNode): boolean {
     if (node.state === 'ready') return true;
     if (node.state !== 'skipped') return false;
@@ -469,12 +487,13 @@ export class PlateauGround {
   /**
    * 親の代わりに表示するために、node（読み込み済みの祖先から depth 段下）を用意する。node 自身もさらに細かくしたい
    * （子を読むことになる）なら、node の画像は読まずに飛ばし、子を用意する（途中の段を読まない）。
-   * 飛ばせるのは、祖先の画像から子孫の有無が分かる MAX_SKIP_DEPTH 段下までで、カメラが動いている間は飛ばさない。
+   * 飛ばせるのは、祖先の画像から子孫の有無が確かに分かる範囲（canSkip）で、カメラが動いている間は飛ばさない。
+   * 飛ばした段の子が取得できなかったら、飛ばすのをやめて自分の画像を読む（その範囲に表示できる画像を用意する）。
    */
   private request(node: GroundNode, wanted: GroundNode[], depth: number): void {
     node.lastUsed = this.frame;
     if (node.state === 'idle') {
-      if (depth < MAX_SKIP_DEPTH && !this.cameraSettling && this.wantsSplit(node)) {
+      if (depth < MAX_SKIP_DEPTH && !this.cameraSettling && this.wantsSplit(node) && this.canSkip(node)) {
         node.state = 'skipped';
         node.children = null;
       } else {
@@ -483,6 +502,13 @@ export class PlateauGround {
       }
     }
     if (node.state !== 'skipped') return;
+    const kids = this.viewKids(node);
+    if (kids.some((k) => k.state === 'failed')) {
+      // 子は残す（読み込み済みの子孫は、自分が読めたあとも使える）
+      node.state = 'idle';
+      wanted.push(node);
+      return;
+    }
     // 細かくしなくてよくなった（カメラが離れた）うえ、子をまだ何も持っていなければ、飛ばすのをやめて自分を読む
     if (!this.wantsSplit(node) && !(node.children ?? []).some((k) => k && (k.state === 'ready' || k.state === 'loading' || k.state === 'skipped'))) {
       node.state = 'idle';
@@ -490,7 +516,20 @@ export class PlateauGround {
       wanted.push(node);
       return;
     }
-    for (const k of this.viewKids(node)) this.request(k, wanted, depth + 1);
+    for (const k of kids) this.request(k, wanted, depth + 1);
+  }
+
+  /**
+   * node の画像を読まずに飛ばしてよいか。読み込み済みの最も近い祖先の画像で、node の範囲の区画とその周りの区画
+   * （祖先の画像の中にあるもの）がすべて不透明なときだけ飛ばす。撮影範囲の端に近い区画は、祖先の段の画像では透明でも
+   * 細かい段にはタイルがあることがある（画像の縁のアルファは 0〜255 の中間値を取る）ので、1 段ずつ読んで確かめる。
+   */
+  private canSkip(node: GroundNode): boolean {
+    for (let a: GroundNode | null = node.parent; a; a = a.parent) {
+      if (!a.solidGrid) continue;
+      return regionSolid(a.solidGrid, node.z - a.z, node.x - (a.x << (node.z - a.z)), node.y - (a.y << (node.z - a.z)));
+    }
+    return false;
   }
 
   private childrenOf(node: GroundNode): (GroundNode | null)[] {
@@ -509,24 +548,18 @@ export class PlateauGround {
     for (let a: GroundNode | null = from; a; a = a.parent) {
       if (!a.alphaGrid) continue;
       const depth = z - a.z;
-      if (depth > MAX_SKIP_DEPTH) return false;
-      const cells = ALPHA_GRID >> depth;
-      const rx = x - (a.x << depth);
-      const ry = y - (a.y << depth);
-      for (let j = ry * cells; j < (ry + 1) * cells; j++) {
-        for (let i = rx * cells; i < (rx + 1) * cells; i++) if (a.alphaGrid[j * ALPHA_GRID + i]) return true;
-      }
-      return false;
+      return regionAny(a.alphaGrid, depth, x - (a.x << depth), y - (a.y << depth));
     }
     return false;
   }
+
 
   private async load(node: GroundNode): Promise<void> {
     node.state = 'loading';
     this.loadingCount++;
     try {
       const [img, ownDem] = await Promise.all([
-        fetchImagePixels(orthoTileUrl(this.ortho, node.z, node.x, node.y), undefined, this.orthoPolicy),
+        this.fetchPixels(orthoTileUrl(this.ortho, node.z, node.x, node.y), undefined, this.orthoPolicy),
         this.loadDem(node),
       ]);
       if (this.disposed) {
@@ -539,6 +572,7 @@ export class PlateauGround {
       }
       node.dems = ownDem ? [ownDem, ...(node.parent?.dems ?? [])] : (node.parent?.dems ?? []);
       node.alphaGrid = alphaGrid(img.pixels, img.bitmap.width, img.bitmap.height, ALPHA_GRID);
+      node.solidGrid = solidAlphaGrid(img.pixels, img.bitmap.width, img.bitmap.height, ALPHA_GRID);
       node.mesh = this.buildMesh(node, img.bitmap);
       this.group.add(node.mesh);
       node.state = 'ready';
@@ -742,6 +776,46 @@ function findFog(obj: Group): Fog | null {
     if (fog instanceof Fog) return fog;
   }
   return null;
+}
+
+/**
+ * ALPHA_GRID×ALPHA_GRID の区画のうち、depth 段下（1〜MAX_SKIP_DEPTH）のタイル (rx, ry)（祖先のタイルの中での位置）の
+ * 範囲の区画に 1 があるか。深さが範囲外なら false。
+ */
+export function regionAny(grid: Uint8Array, depth: number, rx: number, ry: number): boolean {
+  if (depth < 1 || depth > MAX_SKIP_DEPTH) return false;
+  const cells = ALPHA_GRID >> depth;
+  for (let j = ry * cells; j < (ry + 1) * cells; j++) {
+    for (let i = rx * cells; i < (rx + 1) * cells; i++) if (grid[j * ALPHA_GRID + i]) return true;
+  }
+  return false;
+}
+
+/**
+ * ALPHA_GRID×ALPHA_GRID の区画のうち、depth 段下のタイル (rx, ry)（祖先のタイルの中での位置）の範囲の区画と、
+ * その周り 1 区画（格子の中にあるもの）がすべて 1 か。depth は 1〜MAX_SKIP_DEPTH−1（子を祖先の区画で判断できる深さ）。
+ */
+export function regionSolid(grid: Uint8Array, depth: number, rx: number, ry: number): boolean {
+  if (depth < 1 || depth >= MAX_SKIP_DEPTH) return false;
+  const cells = ALPHA_GRID >> depth;
+  const j0 = Math.max(0, ry * cells - 1);
+  const j1 = Math.min(ALPHA_GRID - 1, (ry + 1) * cells);
+  const i0 = Math.max(0, rx * cells - 1);
+  const i1 = Math.min(ALPHA_GRID - 1, (rx + 1) * cells);
+  for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) if (!grid[j * ALPHA_GRID + i]) return false;
+  return true;
+}
+
+/** RGBA 画素を n×n に分けた各区画（行優先）のすべての画素が不透明（アルファ 255）か（1 / 0）。 */
+export function solidAlphaGrid(pixels: ArrayLike<number>, width: number, height: number, n: number): Uint8Array {
+  const out = new Uint8Array(n * n).fill(1);
+  for (let y = 0; y < height; y++) {
+    const row = Math.min(n - 1, Math.floor((y * n) / height));
+    for (let x = 0; x < width; x++) {
+      if ((pixels[(y * width + x) * 4 + 3] ?? 0) < 255) out[row * n + Math.min(n - 1, Math.floor((x * n) / width))] = 0;
+    }
+  }
+  return out;
 }
 
 /** RGBA 画素を n×n に分けた各区画（行優先）に不透明な画素があるか（1 / 0）。 */

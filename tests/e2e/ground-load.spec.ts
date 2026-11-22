@@ -197,3 +197,55 @@ for (const name of Object.keys(VIEWPORTS) as ViewportName[]) {
     if (!QUERY && LABEL !== 'before') expect(rows[0]!.bytes).toBeLessThanOrEqual(SCENE1_ORTHO_LIMIT[name]);
   });
 }
+
+test('場面6（PC 幅）: カメラの移動中と停止後で、地面（と山の裾）の位置関係が変わらない', async ({ browser, baseURL }) => {
+  test.skip(LABEL === 'before' || !!QUERY, '対策後の既定の設定でだけ撮る');
+  mkdirSync('screenshots/ground-load', { recursive: true });
+  const context = await browser.newContext({ viewport: VIEWPORTS.pc, screen: VIEWPORTS.pc, baseURL, deviceScaleFactor: 1 });
+  const page = await context.newPage();
+  const errors = collectErrors(page);
+  await page.goto(`/${QUERY}`);
+  await page.waitForFunction(() => window.__APP_READY__ === true, undefined, { timeout: 180_000 });
+  const scene = SCRIPT.findIndex((s) => s.id === 'removed-15years');
+  await goToScene(page, scene, 0.5);
+  const shownTiles = (): Promise<string[]> =>
+    page.evaluate(() =>
+      (window as unknown as { __PTM_APP__: { city: { ground: { debugTiles(): { z: number; x: number; y: number; visible: boolean }[] } } } }).__PTM_APP__.city.ground
+        .debugTiles()
+        .filter((t) => t.visible)
+        .map((t) => `${t.z}/${t.x}/${t.y}`)
+        .sort(),
+    );
+  const settledTiles = await shownTiles();
+  await page.screenshot({ path: 'screenshots/ground-load/motion-6-settled.png' });
+
+  // 止まっている区間の少し先へスクロールし、カメラが動き始めた（地面は粗いタイルしか新しく読まない）ところを撮る
+  const r0 = await page.evaluate(() => window.__MAIN__!.status().renderCount);
+  await page.evaluate((i) => {
+    const api = window.__MAIN__!;
+    const hold = api.holds()[i] ?? 0.4;
+    window.scrollTo({ top: api.scrollYFor(i, hold + (1 - hold) * 0.02), behavior: 'instant' });
+  }, scene);
+  await page.waitForFunction(
+    (r0) => {
+      const s = window.__MAIN__!.status();
+      return s.renderCount >= r0 + 1 && s.cameraIdleFrames === 0;
+    },
+    r0,
+    { timeout: 300_000, polling: 100 },
+  );
+  await page.screenshot({ path: 'screenshots/ground-load/motion-6-moving.png' });
+  const movingTiles = await shownTiles();
+
+  // 戻って止まったところを撮る
+  await goToScene(page, scene, 0.5);
+  await page.screenshot({ path: 'screenshots/ground-load/motion-6-stopped.png' });
+  const stoppedTiles = await shownTiles();
+  const kept = (a: string[], b: string[]): number => a.filter((t) => b.includes(t)).length / Math.max(a.length, 1);
+  console.log(
+    `[motion] 表示タイル 停止 ${settledTiles.length}枚、移動中 ${movingTiles.length}枚（停止時の ${(kept(settledTiles, movingTiles) * 100).toFixed(0)}% を表示）、戻って停止 ${stoppedTiles.length}枚（${(kept(settledTiles, stoppedTiles) * 100).toFixed(0)}%）`,
+  );
+  writeFileSync('screenshots/ground-load/motion-6.json', JSON.stringify({ settledTiles, movingTiles, stoppedTiles }, null, 2));
+  expect(errors).toEqual([]);
+  await context.close();
+});
