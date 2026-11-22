@@ -2,6 +2,7 @@
  * 本編の末尾の「データと方法」の節の中身。DOM に依存しない形（`MethodsModel`）で組み立て、`render.ts` が DOM にする。
  * 数値はすべて `facts.ts` の定数から組み立てる（本文と食い違わないように。文面に数字を直接書かない）。
  */
+import { DEFAULT_MERGE_DISTANCE_M } from '../../data/stations';
 import { COLUMN_BICYCLES_PER_KM } from '../../scene/stationMarkers';
 import {
   BUILDING_DISTRICTS,
@@ -64,6 +65,8 @@ export const LINKS = {
   press: 'https://www.metro.tokyo.lg.jp/information/press/2026/03/2026032616',
   tocho: 'https://www.zaimu.metro.tokyo.lg.jp/documents/d/zaimu/20l5k201',
   tokyoDome: 'https://www.tokyo-dome.co.jp/dome/about/',
+  containerExport: 'https://ecotopia.earth/article-1045/',
+  containerShipment: 'https://www.p4p.org/p4p-bike-150000-the-whole-story/',
 } as const;
 
 const F = FACTS;
@@ -153,7 +156,7 @@ export function buildMethodsModel(): MethodsModel {
             ],
             [
               strong('駅の数え方。'),
-              `調査の表は、複数の区市町村にまたがる駅を区市町村ごとに別の行で数え、近い複数の駅を1行にまとめています。地図の柱は、同じ場所の行を合算した${nu(STATION_PILLARS)}に立てています。本文の「${nu(F.stationsWithParked)}」「${nu(F.stationsVacancyExceeds)}」は、表の行の数です。`,
+              `調査の表は、複数の区市町村にまたがる駅を区市町村ごとに別の行で数え、近い複数の駅を1行にまとめています。地図の柱は、同じ場所の行を合算し、${DEFAULT_MERGE_DISTANCE_M}メートル以内にある同じ名前の駅もまとめたうえで、放置自転車が1台以上ある${nu(STATION_PILLARS)}に立てています。本文の「${nu(F.stationsWithParked)}」「${nu(F.stationsVacancyExceeds)}」は、表の行の数です。`,
             ],
             [
               strong('撤去台数。'),
@@ -161,7 +164,7 @@ export function buildMethodsModel(): MethodsModel {
             ],
             [
               strong('古い年の値。'),
-              `${PEAK_YEAR}年の${nu(F.peakParked1990)}は、自転車・原動機付自転車・自動二輪車の計です。${PEAK_YEAR}年の値と${LAST_THRESHOLD_YEAR}年までの値は、自転車が100台以上ある駅だけを数えた当時の方式によります。同じ数え方で${SURVEY.year}年を数えると${nu(F.sameMethodParked2025)}です。`,
+              `${PEAK_YEAR}年の${nu(F.peakParked1990)}は、自転車・原動機付自転車・自動二輪車の計です。${PEAK_YEAR}年の値と${LAST_THRESHOLD_YEAR}年までの値は、自転車は100台以上、原動機付自転車と自動二輪車は合わせて50台以上ある駅だけを数えた当時の方式によります。同じ数え方で${SURVEY.year}年を数えると${nu(F.sameMethodParked2025)}です。`,
             ],
           ),
         ],
@@ -184,7 +187,25 @@ export function buildMethodsModel(): MethodsModel {
             `山の大きさは、1台が占める体積を${m3(PA.unitVolumeM3)}、山の斜面の角度（安息角）を${PA.reposeAngleDeg}°と仮定し、PLATEAU の建物と国土地理院の標高から作った街の高さのデータの上に積んだ計算の結果です。実際に積んで測った値ではありません。結果は、1年ぶん（${FISCAL_YEAR}年度、${nu(F.removedFY2024)}）の山で高さ約${nu(F.yearPileHeight)}、${years}年ぶん（${nu(F.removed15Years)}）の山で高さ約${nu(F.cumulativePileHeight)}です。`,
           ),
           p(
-            `山積みの自転車が占める体積の実測値は見つかりませんでした。${m3(PA.unitVolumeM3)}は、整然と詰めた輸出用コンテナの実績（1台あたり約${m3(PA.reference.containerPerBicycleM3)}。40フィートコンテナに${containerBicycles}）と、自転車を直方体として隙間なく並べた場合（約${m3(PA.reference.boxPerBicycleM3)}）の間の推定値です。`,
+            `山を積む場所（1年ぶんは東京駅丸の内口の駅前広場、${years}年ぶんは新宿中央公園）は、身近な建物と大きさを比べるために選んだものです。撤去された自転車が、実際にそこに積まれているわけではありません。`,
+          ),
+          p(
+            `山積みの自転車が占める体積を測った資料は見つかりませんでした。${m3(PA.unitVolumeM3)}は、次の2つの目安の間に置いた推定値です。`,
+          ),
+          ul(
+            [
+              `小さい側の目安：整然と詰めた輸出用のコンテナ。1台あたり約${m3(PA.reference.containerPerBicycleM3)}。40フィートコンテナに${containerBicycles}（`,
+              link('中古自転車の輸出を取材した記事', LINKS.containerExport),
+              'と、',
+              link('自転車を海外へ送る団体の出荷の記録', LINKS.containerShipment),
+              'から）。',
+            ],
+            [
+              `大きい側の目安：1台がちょうど収まる箱の体積。約${m3(PA.reference.boxPerBicycleM3)}。`,
+            ],
+          ),
+          p(
+            `斜面の角度も、自転車の山を測った資料は見つかりませんでした。${PA.reposeAngleDeg}°は仮定の値です。`,
           ),
           p(
             '仮定を変えると、山の高さは変わります。平らな地面に円錐として積んだ場合の概算は、次のとおりです。',

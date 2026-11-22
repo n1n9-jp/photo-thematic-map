@@ -741,6 +741,8 @@ test('「データと方法」の節: 出典表示のリンクから移動でき
   // 節を読んでいる間は、「地図を動かす」ボタンと読み込みの表示が節の上に重ならない
   expect(await page.evaluate(() => getComputedStyle(document.querySelector('.story-free-toggle')!).display)).toBe('none');
   expect(await page.evaluate(() => document.documentElement.classList.contains('ptm-in-methods'))).toBe(true);
+  // 節を読んでいる間は、画面の下端の出典表示が本文に重ならない
+  expect(await page.evaluate(() => getComputedStyle(document.querySelector('.ptm-site-attribution')!).visibility)).toBe('hidden');
   // 本文の列は画面の中央にある（前書きも「先頭へ戻る」も、列の左端が揃う）
   const lefts = await page.evaluate(() => [...document.querySelectorAll<HTMLElement>('.methods__lead, .methods__toc, .methods__item, .methods__back')].map((e) => Math.round(e.getBoundingClientRect().left)));
   expect(new Set(lefts).size).toBe(1);

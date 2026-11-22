@@ -79,7 +79,7 @@ export const FACTS = {
   akihabaraParked: fact(462, '台', SOURCES.stations, { note: '秋葉原駅の行、自転車' }),
   akihabaraInflow: fact(966, '台', SOURCES.stations, { note: '秋葉原駅の行、自転車の乗入台数' }),
   akihabaraParkedShare: fact(47.8, '％', `${CALC}（462 ÷ 966）`, { fractionDigits: 1 }),
-  chiyodaParkedRate: fact(46.5, '％', SOURCES.full, { fractionDigits: 1, note: '区市町村別の自転車の放置率' }),
+  chiyodaParkedRate: fact(46.5, '％', SOURCES.summary, { fractionDigits: 1, note: '区市町村別の自転車の放置率（自転車の乗入台数を分母とする。全文 p.7 は原付・自二を含む乗入台数が分母で 44.4％）' }),
   akihabaraCapacity: fact(782, '台', SOURCES.stations, { note: '秋葉原駅の行、自転車の収容能力' }),
   akihabaraOccupancy: fact(504, '台', SOURCES.stations, { note: '秋葉原駅の行、自転車の実収容台数' }),
   akihabaraVacancy: fact(278, '台分', `${CALC}（782 − 504）`),

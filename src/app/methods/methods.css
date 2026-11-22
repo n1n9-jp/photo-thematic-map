@@ -179,10 +179,18 @@
 
 /*
  * 節を読んでいる間（3D の描画を止めている間。createApp が html に `ptm-in-methods` を付ける）は、
- * 3D の操作や読み込みの表示を出さない（節の上に重ならないように）。出典表示は残す。
+ * 3D の操作や読み込みの表示を出さない（節の上に重ならないように）。
  */
 .ptm-in-methods .story-free-toggle,
 .ptm-in-methods .ptm-loading,
 .ptm-in-methods .ptm-pile-loading {
   display: none !important;
+}
+
+/*
+ * 画面の下端の出典表示も、節を読んでいる間は隠す（狭い画面で本文の行に重なるため。出典は節の中に書いてある）。
+ * 高さ（--ptm-attribution-height）を変えないよう、display ではなく visibility で隠す。
+ */
+.ptm-in-methods .ptm-site-attribution {
+  visibility: hidden;
 }

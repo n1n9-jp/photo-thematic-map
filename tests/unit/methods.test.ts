@@ -6,6 +6,7 @@ import { describe, expect, test } from 'vitest';
 import { buildMethodsModel, modelLinks, modelText, pileHeightRange } from '../../src/app/methods/content';
 import { PILE_SITES } from '../../src/app/modules/pileSites';
 import { PILE_DEVICE_PROFILES } from '../../src/app/modules/pileModule';
+import { DEFAULT_MERGE_DISTANCE_M } from '../../src/data/stations';
 import { COLUMN_BICYCLES_PER_KM } from '../../src/scene/stationMarkers';
 import { PILE_DEFAULTS, computePileScene } from '../../src/scene/pileScene/compute';
 import { latLonToLocal } from '../../src/geo/enu';
@@ -79,7 +80,7 @@ describe('リンク', () => {
 describe('文面の数値は facts.ts の定数と一致する', () => {
   test('放置自転車の台数と数え方', () => {
     expect(text).toContain(`都内全体で${n(FACTS.totalParked)}台）は自転車だけの値`);
-    expect(text).toContain(`同じ場所の行を合算した${n(STATION_PILLARS)}か所に立てています`);
+    expect(text).toContain(`放置自転車が1台以上ある${n(STATION_PILLARS)}か所に立てています`);
     expect(text).toContain(`「${n(FACTS.stationsWithParked)}駅」「${n(FACTS.stationsVacancyExceeds)}駅」は、表の行の数`);
     expect(text).toContain(`${n(FACTS.removedFY2024)}台）は自転車だけの値で、原動機付自転車を含む公表値（${n(REMOVED_FY2024_WITH_MOPEDS)}台）`);
     expect(text).toContain(`${n(FACTS.peakParked1990)}台は、自転車・原動機付自転車・自動二輪車の計`);
@@ -102,7 +103,9 @@ describe('文面の数値は facts.ts の定数と一致する', () => {
     expect(FACTS.yearPileHeight.value).toBe(Math.round(PILES.removedFY2024.heightM));
     expect(FACTS.cumulativePileHeight.value).toBe(Math.round(PILES.removed15Years.heightM));
     expect(text).toContain('実際に積んで測った値ではありません');
-    expect(text).toContain('山積みの自転車が占める体積の実測値は見つかりませんでした');
+    expect(text).toContain('山積みの自転車が占める体積を測った資料は見つかりませんでした');
+    expect(text).toContain(`斜面の角度も、自転車の山を測った資料は見つかりませんでした。${PILE_ASSUMPTIONS.reposeAngleDeg}°は仮定の値です`);
+    expect(text).toContain('撤去された自転車が、実際にそこに積まれているわけではありません');
     expect(text).toContain(`1台あたり約0.13立方メートル。40フィートコンテナに500〜575台`);
     expect(text).toContain('約1.13立方メートル');
   });
@@ -157,6 +160,7 @@ describe('節の中の数字に、本文と食い違うものがない', () => {
   add(TOCHO_HEIGHT_M, 1);
   add(TOKYO_DOME_VOLUME_M3);
   add(COLUMN_BICYCLES_PER_KM);
+  add(DEFAULT_MERGE_DISTANCE_M);
   add(1000 / COLUMN_BICYCLES_PER_KM);
   add(PILE_ASSUMPTIONS.unitVolumeM3, 2);
   add(PILE_ASSUMPTIONS.reposeAngleDeg);
@@ -173,7 +177,8 @@ describe('節の中の数字に、本文と食い違うものがない', () => {
   const r = pileHeightRange();
   for (const v of [...r.year, ...r.fifteenYears]) add(v);
   // 日付・年度・版（facts.ts の SURVEY・FISCAL_YEAR などと、資料の名前に含まれる年度）
-  for (const v of [2025, 2026, 2024, 2010, 2011, 1990, 10, 11, 3, 26, 7, 23, 40, 100, 3, 1, 15]) add(v);
+  // 100・50 は旧方式の基準（自転車100台以上、原付・自二50台以上の駅だけを数える）
+  for (const v of [2025, 2026, 2024, 2010, 2011, 1990, 10, 11, 3, 26, 7, 23, 40, 100, 50, 3, 1, 15]) add(v);
 
   test('数字（桁区切り・小数・「万」を含む）がすべて、facts.ts の定数から出たものか、日付・年度・版のいずれか', () => {
     // 数字の並び（全角を半角にしたうえで）: 1万3,394 / 0.35 / 579万8,477 / 500 など
@@ -231,5 +236,59 @@ describe('建物に使った区（事前変換のメタ情報との照合。変�
     expect(cities((x) => x.type === 'brid')).toEqual([...BUILDING_DISTRICTS.bridges].sort());
     expect(cities((x) => x.level === 'far' && x.lod === 1)).toEqual([...BUILDING_DISTRICTS.far].sort());
     expect([...new Set(t.map((x) => x.year))]).toEqual([DATA_YEARS.plateauBuildings]);
+  });
+});
+
+describe('facts.ts の数値は、公開しているデータ（public/data/bicycles）と一致する', () => {
+  const readJson = (name: string): unknown => JSON.parse(readFileSync(`public/data/bicycles/${name}`, 'utf8'));
+
+  interface StationJson {
+    name: string;
+    parked: { bicycle: number; mopedGeneral: number; mopedSpecific: number; motorcycle: number };
+    occupancy: { bicycle: number };
+    capacity: { bicycle: number };
+    inflow: { bicycle: number };
+  }
+  interface RemovalJson {
+    fiscalYear: number;
+    removed: { total: number; bicycle: number };
+    returned: { bicycle: number };
+    disposed: { bicycle: number };
+  }
+  const stations = (readJson('stations.json') as { stations: StationJson[] }).stations;
+  const removal = (readJson('timeseries.json') as { removal: { series: RemovalJson[] } }).removal.series;
+  const fy = (year: number): RemovalJson => removal.find((r) => r.fiscalYear === year)!;
+
+  test('駅別の表（都内全体、駅の数、秋葉原）', () => {
+    const sum = (f: (s: StationJson) => number): number => stations.reduce((a, s) => a + f(s), 0);
+    expect(sum((s) => s.parked.bicycle)).toBe(FACTS.totalParked.value);
+    expect(stations.filter((s) => s.parked.bicycle > 0).length).toBe(FACTS.stationsWithParked.value);
+    expect(stations.filter((s) => s.parked.bicycle >= 100).length).toBe(FACTS.stationsWithManyParked.value);
+    expect(stations.filter((s) => s.parked.bicycle > 0 && s.capacity.bicycle - s.occupancy.bicycle >= s.parked.bicycle).length).toBe(
+      FACTS.stationsVacancyExceeds.value,
+    );
+    // 1990年と同じ数え方（自転車は100台以上、原付・自二は合わせて50台以上の駅だけ）
+    const oldMethod = sum((s) => {
+      const mopeds = s.parked.mopedGeneral + s.parked.mopedSpecific + s.parked.motorcycle;
+      return (s.parked.bicycle >= 100 ? s.parked.bicycle : 0) + (mopeds >= 50 ? mopeds : 0);
+    });
+    expect(oldMethod).toBe(FACTS.sameMethodParked2025.value);
+
+    const akihabara = stations.filter((s) => s.name === '秋葉原駅');
+    expect(akihabara).toHaveLength(1);
+    expect(akihabara[0]!.parked.bicycle).toBe(FACTS.akihabaraParked.value);
+    expect(akihabara[0]!.inflow.bicycle).toBe(FACTS.akihabaraInflow.value);
+    expect(akihabara[0]!.capacity.bicycle).toBe(FACTS.akihabaraCapacity.value);
+    expect(akihabara[0]!.occupancy.bicycle).toBe(FACTS.akihabaraOccupancy.value);
+  });
+
+  test('撤去・返還・処分の台数', () => {
+    expect(fy(2024).removed.bicycle).toBe(FACTS.removedFY2024.value);
+    expect(fy(2024).removed.total).toBe(REMOVED_FY2024_WITH_MOPEDS.value);
+    expect(fy(2024).returned.bicycle).toBe(FACTS.returnedFY2024.value);
+    expect(fy(2024).disposed.bicycle).toBe(FACTS.disposedFY2024.value);
+    expect(fy(2010).removed.bicycle).toBe(FACTS.removedFY2010.value);
+    const cumulative = removal.filter((r) => r.fiscalYear >= 2010 && r.fiscalYear <= 2024).reduce((a, r) => a + r.removed.bicycle, 0);
+    expect(cumulative).toBe(FACTS.removed15Years.value);
   });
 });
