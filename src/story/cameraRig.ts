@@ -9,6 +9,7 @@ import { TOUCH, type PerspectiveCamera } from 'three';
 import type { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import {
   applyFit,
+  clamp01,
   clipPlanesFor,
   DEFAULT_HOLD,
   keyframeToPose,
@@ -19,6 +20,7 @@ import {
   poseFromCamera,
   poseToCameraPosition,
   samplePathLifted,
+  stageStepPoseAt,
   stopViewFor,
   viewFor,
   type StagePoses,
@@ -108,6 +110,8 @@ export interface CameraRig {
 const CONVERGED = 1e-3;
 /** 経路上の連続位置が、スクロールの位置にこれより近づいたら追いついたとみなす（段階の 1 万分の 1）。 */
 const FOLLOW_CONVERGED = 1e-4;
+/** 経路上の連続位置が、スクロールの位置からこれより離れたら（段階の数）、手前まで切り替えてから追いかける。 */
+const MAX_FOLLOW_GAP = 1;
 /** これより小さな変化は「動いていない」とみなす（描画を省く判定）。 */
 const UNCHANGED = 1e-7;
 const DEG2RAD = Math.PI / 180;
@@ -186,8 +190,15 @@ export function createCameraRig(
   /** 連続位置 at の語りのカメラ（場面の間を移る途中は持ち上げた経路）。 */
   function pathPose(at: number): CameraPose {
     if (reduced()) {
-      // 即時の切り替え: 段階の番号のキーフレーム（場面の始まり）に固定する。
-      return (poses[Math.min(Math.floor(at), poses.length - 1)] as StagePoses).start;
+      // 即時の切り替え: 場面の間は補間せず、段階の番号の場面の構図に固定する。場面の中に経由点があれば、
+      // 進みに応じて経由点ごとに切り替える（場面2 で、増えていく自転車が画面に収まるように）。
+      const last = poses.length - 1;
+      const s = Math.min(Math.max(at, 0), last);
+      const i = Math.min(Math.floor(s), last);
+      const stagePoses = poses[i] as StagePoses;
+      if (stagePoses.stops.length === 0) return stagePoses.start;
+      const h = typeof hold === 'number' ? hold : (hold[i] ?? DEFAULT_HOLD);
+      return stageStepPoseAt(stagePoses, h > 0 ? clamp01((s - i) / h) : 1);
     }
     return samplePathLifted(poses, at, { hold, groundAt, cap: transitionClearance });
   }
@@ -338,6 +349,9 @@ export function createCameraRig(
         current = pathPose(follow);
       } else {
         const k = 1 - Math.exp(-stiffness * Math.max(dtSec, 0));
+        // 2 場面以上離れた位置へ一気に移ったときは、途中の場面を次々に映さず、目標の 1 場面手前へ切り替えてから追いかける
+        const gap = position - follow;
+        if (Math.abs(gap) > MAX_FOLLOW_GAP) follow = position - Math.sign(gap) * MAX_FOLLOW_GAP;
         follow += (position - follow) * k;
         if (Math.abs(position - follow) < FOLLOW_CONVERGED) follow = position;
         const onPath = pathPose(follow);

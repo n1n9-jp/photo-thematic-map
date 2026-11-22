@@ -221,3 +221,68 @@ describe('カメラリグ: 経路に沿って追いかける', () => {
     expect(camera.position.distanceTo(new Vector3(...Object.values(poseToCameraPosition(rig.poseAt(1.2))) as [number, number, number]))).toBeLessThan(1);
   });
 });
+
+describe('カメラリグ: 「動きを減らす」設定と場面の中の経由点', () => {
+  const near: StoryCameraKeyframe = { target: { lat: 35.68, lon: 139.76, alt: 0 }, distance: 20, azimuthDeg: 225, elevationDeg: 45 };
+  const mid: StoryCameraKeyframe = { target: { lat: 35.6805, lon: 139.7605, alt: 0 }, distance: 150, azimuthDeg: 300, elevationDeg: 70 };
+  const far: StoryCameraKeyframe = { target: { lat: 35.681, lon: 139.761, alt: 0 }, distance: 325, azimuthDeg: 0, elevationDeg: 80 };
+  const next: StoryCameraKeyframe = { target: { lat: 35.69, lon: 139.77, alt: 0 }, distance: 2000, azimuthDeg: 0, elevationDeg: 60 };
+  const withStops: StoryCameraKeyframe = { ...near, stops: [{ at: 0.05, camera: near }, { at: 0.5, camera: mid }, { at: 1, camera: far }] };
+
+  it('場面の中では補間せず、進みに応じて「そこまでが収まる」経由点へ切り替わり、場面の終わりでは最後の経由点になる', () => {
+    const { rig, camera, controls } = makeRig([stage('a', withStops), stage('b', next)], 1.5, { reducedMotion: () => true });
+    rig.setHolds([0.4, 0.4]);
+    const distanceAt = (position: number): number => {
+      rig.setPosition(position);
+      rig.update(1 / 60);
+      return camera.position.distanceTo(controls.target);
+    };
+    expect(distanceAt(0)).toBeCloseTo(20, 3);
+    expect(distanceAt(0.02)).toBeCloseTo(20, 3); // 0.05 × 0.4 まで
+    expect(distanceAt(0.1)).toBeCloseTo(150, 3); // 0.25 → 次の経由点（0.5）
+    expect(distanceAt(0.2)).toBeCloseTo(150, 3);
+    expect(distanceAt(0.3)).toBeCloseTo(325, 3); // 0.75 → 最後の経由点
+    expect(distanceAt(0.4)).toBeCloseTo(325, 3);
+    // 次の場面へ移る区間は、場面の終わりの構図のまま。次の場面の番号になったら切り替わる
+    expect(distanceAt(0.9)).toBeCloseTo(325, 3);
+    expect(distanceAt(1)).toBeCloseTo(2000, 3);
+  });
+});
+
+describe('カメラリグ: 2 場面以上離れた位置へ一気に移る', () => {
+  const key = (lat: number, distance: number): StoryCameraKeyframe => ({ target: { lat, lon: 139.76, alt: 0 }, distance, azimuthDeg: 0, elevationDeg: 60 });
+  // 途中の場面（b・c）は遠くの俯瞰。a と d は近い
+  const stages = [stage('a', key(35.68, 100)), stage('b', key(35.7, 30_000)), stage('c', key(35.72, 30_000)), stage('d', key(35.74, 100))];
+
+  it('途中の場面を次々に映さず、目標の 1 場面手前から追いかける', () => {
+    const { rig } = makeRig(stages, 1.5, { reducedMotion: () => false });
+    rig.setHolds([0.4, 0.4, 0.4, 0.4]);
+    rig.setPosition(0, true);
+    rig.update(1 / 60);
+    rig.setPosition(3);
+    const onPathAfter = (from: number, pose: CameraPose): boolean => {
+      // 姿勢が、経路の from 以降のどこかの点と一致する
+      for (let k = 0; k <= 2000; k++) {
+        const q = rig.poseAt(from + ((3 - from) * k) / 2000);
+        if (Math.abs(q.distance - pose.distance) <= Math.max(1, pose.distance * 0.01) && Math.abs(q.target.z - pose.target.z) <= 5) return true;
+      }
+      return false;
+    };
+    for (let n = 0; n < 240; n++) {
+      rig.update(1 / 60);
+      expect(onPathAfter(2, rig.getPose())).toBe(true);
+    }
+    expect(rig.getPose().distance).toBeCloseTo(100, 3);
+  });
+
+  it('1 場面ぶんの移動は、これまでどおり経路を連続してたどる', () => {
+    const { rig } = makeRig(stages, 1.5, { reducedMotion: () => false });
+    rig.setHolds([0.4, 0.4, 0.4, 0.4]);
+    rig.setPosition(0, true);
+    rig.update(1 / 60);
+    rig.setPosition(1);
+    rig.update(1 / 60);
+    // 1 フレーム目は、まだ場面 a の止まっている区間（距離 100 のまま）
+    expect(rig.getPose().distance).toBeCloseTo(100, 3);
+  });
+});

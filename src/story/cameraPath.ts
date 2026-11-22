@@ -104,6 +104,17 @@ export function stagePoseAt(s: StagePoses, u: number): CameraPose {
   return prev.pose;
 }
 
+/**
+ * 場面の中の姿勢を、補間せずに経由点で切り替える（「動きを減らす」設定用）。u 以上の最初の経由点の姿勢を返す。
+ * 経由点は「そこまでに現れたものが収まる」構図なので、先の経由点を使えば、いま表示中のものは画面に収まる。
+ */
+export function stageStepPoseAt(s: StagePoses, u: number): CameraPose {
+  for (const stop of s.stops) {
+    if (u <= stop.at) return stop.pose;
+  }
+  return stageEnd(s);
+}
+
 /** 経由点のない段階の並び（`samplePath` に姿勢の配列を渡したとき）。 */
 function asStages(poses: readonly (CameraPose | StagePoses)[]): StagePoses[] {
   return poses.map((p) => ('start' in p ? p : { start: p, stops: [] }));
