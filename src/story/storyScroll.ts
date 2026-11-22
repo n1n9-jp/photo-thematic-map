@@ -80,7 +80,9 @@ export function createStoryScroll(
         trigger: el,
         // 最初のセクションは上端がページ先頭にあり「上端が画面中央」がスクロール位置 0 より手前になるため、0 から始める。
         start: i === 0 ? 0 : 'top center',
-        end: i === last ? 'max' : 'bottom center',
+        // 最後の場面は、場面の下端が画面の下端に来るまで。文書の最大のスクロール位置（'max'）にすると、
+        // 場面のあとに続く「データと方法」の節の長さぶんだけ最後の場面の進捗の範囲が伸び、カメラが止まる区間が短くなる。
+        end: i === last ? 'bottom bottom' : 'bottom center',
         onUpdate: () => recompute(),
       }),
     );
