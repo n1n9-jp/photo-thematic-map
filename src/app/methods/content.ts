@@ -62,7 +62,7 @@ export const LINKS = {
   surveySummary: 'https://www.tomin-anzen.metro.tokyo.lg.jp/documents/d/tomin-anzen/202603_jitensyagaiyou_summary',
   surveyStations: 'https://www.tomin-anzen.metro.tokyo.lg.jp/documents/d/tomin-anzen/07ekibetsuhouchi',
   press: 'https://www.metro.tokyo.lg.jp/information/press/2026/03/2026032616',
-  tocho: 'https://www.zaimu.metro.tokyo.lg.jp/documents/d/zaimu/R3_ronbun01',
+  tocho: 'https://www.zaimu.metro.tokyo.lg.jp/documents/d/zaimu/20l5k201',
   tokyoDome: 'https://www.tokyo-dome.co.jp/dome/about/',
 } as const;
 
@@ -200,7 +200,7 @@ export function buildMethodsModel(): MethodsModel {
           p('画面の山は、街の建物の形を考えて計算しています。そのため、この概算とは一致しません。'),
           h4('placement-surface', `${years}年ぶんの山の描き方`),
           p(
-            `${years}年ぶんの山は台数が多いため、山の表面近くの自転車だけを描いています。描いているのは約${formatJaCount(drawnLarge.count)}台（表面から深さ${formatDecimal(drawnLarge.surfaceDepthM, 1)}メートルまで。スマートフォンなど小さな端末では約${formatJaCount(drawnSmall.count)}台、深さ${formatDecimal(drawnSmall.surfaceDepthM, 1)}メートルまで）で、表している${nu(F.removed15Years)}の約${drawnShare(drawnLarge.count)}％です。山の内側の自転車は描いていません。1年ぶんの山は、${nu(F.removedFY2024)}をすべて置いています。`,
+            `${years}年ぶんの山は台数が多いため、山の表面近くの自転車だけを描いています。描いているのは${formatJaCount(drawnLarge.count)}台（表面から深さ${formatDecimal(drawnLarge.surfaceDepthM, 1)}メートルまで。スマートフォンなど小さな端末では${formatJaCount(drawnSmall.count)}台、深さ${formatDecimal(drawnSmall.surfaceDepthM, 1)}メートルまで）で、表している${nu(F.removed15Years)}の約${drawnShare(drawnLarge.count)}％です。山の内側の自転車は描いていません。1年ぶんの山は、${nu(F.removedFY2024)}をすべて置いています。`,
           ),
           h4('placement-falling', '自転車が降ってくる動き'),
           p('自転車が上空から降ってくるのは、量が増えていく様子を見せるための演出です。実際の撤去の方法を表したものではありません。'),

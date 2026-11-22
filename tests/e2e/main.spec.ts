@@ -68,8 +68,11 @@ async function goToScene(page: Page, i: number, holdFraction = 0.5): Promise<num
   );
   await expect.poll(() => page.evaluate(() => window.__MAIN__!.getState().stage), { timeout: 120_000 }).toBe(i);
   // スクロールの進捗が反映されるまで待つ（街並みがすぐ出そろうと、反映の前に isSettled() が true になることがある）
+  // 山の場面は1フレームに数秒かかることがあるので、既定の 5 秒では足りない
   await expect
-    .poll(() => page.evaluate(([i, f]) => Math.abs(window.__MAIN__!.getState().progress - (window.__MAIN__!.holds()[i] ?? 0.4) * f), [i, holdFraction] as const))
+    .poll(() => page.evaluate(([i, f]) => Math.abs(window.__MAIN__!.getState().progress - (window.__MAIN__!.holds()[i] ?? 0.4) * f), [i, holdFraction] as const), {
+      timeout: 60_000,
+    })
     .toBeLessThan(0.01);
   await page.waitForFunction(() => window.__MAIN__!.isSettled(), undefined, { timeout: SETTLE_TIMEOUT_MS, polling: 250 });
   return Date.now() - t0;

@@ -125,8 +125,8 @@ describe('文面の数値は facts.ts の定数と一致する', () => {
   test('15年ぶんの山の描き方', () => {
     const L = PILE_SURFACE_PLACED.largeDevice;
     const S = PILE_SURFACE_PLACED.smallDevice;
-    expect(text).toContain(`描いているのは約${formatJaCount(L.count)}台（表面から深さ${L.surfaceDepthM.toFixed(1)}メートルまで`);
-    expect(text).toContain(`約${formatJaCount(S.count)}台、深さ${S.surfaceDepthM.toFixed(1)}メートルまで`);
+    expect(text).toContain(`描いているのは${formatJaCount(L.count)}台（表面から深さ${L.surfaceDepthM.toFixed(1)}メートルまで`);
+    expect(text).toContain(`小さな端末では${formatJaCount(S.count)}台、深さ${S.surfaceDepthM.toFixed(1)}メートルまで`);
     expect(text).toContain(`表している${n(FACTS.removed15Years)}台の約3％`);
     expect(text).toContain(`1年ぶんの山は、${n(FACTS.removedFY2024)}台をすべて置いています`);
   });
