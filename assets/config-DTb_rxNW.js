@@ -1,1 +1,0 @@
-var e={lat:35.68124,lon:139.76712,alt:0},t=1e3,n=36.7,r=`https://tile.plateauview.mlit.go.jp/tiles/plateau-ortho-2024/{z}/{x}/{y}.png`,i=`https://cyberjapandata.gsi.go.jp/xyz/dem5a_png/{z}/{x}/{y}.png`,a=`https://cyberjapandata.gsi.go.jp/xyz/dem_png/{z}/{x}/{y}.png`;export{e as a,i,t as n,r as o,a as r,n as t};
