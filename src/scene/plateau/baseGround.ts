@@ -11,6 +11,9 @@
  *   起伏の付いた地面は海の上が透明なので、東京湾はこの色で見える。マスクを読めないときは、陸の色だけで敷く。
  * - 霧は他の地面と同じ（遠くは空の色に溶ける）。起伏の付いた地面との重なりでちらつかないよう、面は標高 BASE_Y(m) に置く。
  *   起伏の付いた地面（標高 0m 以上、側面のスカートでも -2m 程度まで）より十分下で、俯瞰では見分けがつかない差。
+ * - 陸の面と海の面は深度で競わせない。俯瞰（カメラの高さ数十 km）では 1m の差を深度で分けきれず、海岸の遠い側で
+ *   陸と海が横縞に入れ替わったため。どちらも深度を書かずに不透明な物の最初に描き（陸 → 海の順。`renderOrder`）、
+ *   海は深度の検査もせず陸の上に重ねる。他の物はすべてこの2枚より上にあるので、後から描けば必ず手前に出る。
  */
 import {
   BufferAttribute,
@@ -41,6 +44,8 @@ export const BASE_SEA_COLOR = PALETTE.sea;
 export const BASE_Y = -12;
 /** 海の面は、陸の面より（標高で）この分だけ上。 */
 const SEA_LIFT_M = 1;
+/** 陸の面を描く順（不透明な物の最初）。海の面はこの次。 */
+const LAND_RENDER_ORDER = -3;
 /** 陸の面の半径(m)。カメラの far の上限（400km）を覆う。 */
 const LAND_RADIUS_M = 450_000;
 /** 陸の面の中心を動かす刻み(m)。カメラの動きごとに面が動いて見えないようにする。 */
@@ -67,11 +72,11 @@ export class BaseGround {
       new BufferAttribute(new Float32Array([-r, 0, -r, r, 0, -r, -r, 0, r, r, 0, r]), 3),
     );
     geometry.setIndex([0, 2, 1, 1, 2, 3]);
-    this.land = new Mesh(geometry, new MeshBasicMaterial({ color: BASE_LAND_COLOR, side: DoubleSide }));
+    this.land = new Mesh(geometry, new MeshBasicMaterial({ color: BASE_LAND_COLOR, side: DoubleSide, depthWrite: false }));
     this.land.name = 'base-land';
     this.land.position.y = BASE_Y;
     this.land.frustumCulled = false;
-    this.land.renderOrder = -1;
+    this.land.renderOrder = LAND_RENDER_ORDER;
     this.group.add(this.land);
     this.ready = this.loadMask(maskUrl);
   }
@@ -125,12 +130,14 @@ export class BaseGround {
         map: texture,
         alphaTest: 0.5,
         side: DoubleSide,
+        depthWrite: false,
+        depthTest: false,
       });
       const sea = new Mesh(buildSeaGeometry(), material);
       sea.name = 'base-sea';
       sea.position.y = BASE_Y + SEA_LIFT_M;
       sea.frustumCulled = false;
-      sea.renderOrder = -1;
+      sea.renderOrder = LAND_RENDER_ORDER + 1;
       this.sea = sea;
       this.group.add(sea);
     } catch (err) {
