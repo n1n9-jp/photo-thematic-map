@@ -12,6 +12,7 @@
  */
 import { Vector3 } from 'three';
 import { loadStationSites, type StationSite } from '../../data/stations';
+import type { LabelKeepOut } from '../../scene/placeLabels';
 import { StationMarkers, type OverlayLayout, type Rect } from '../../scene/stationMarkers';
 import { smoothstep } from '../../story/cameraPath';
 import { freeRegionFor } from '../../story/layout';
@@ -224,6 +225,21 @@ class StationsController {
     return animating;
   }
 
+  /** 地名を重ねない形: 柱（底から頂点までの線分）。表示しているときだけ。 */
+  labelKeepOut(): LabelKeepOut | null {
+    const m = this.markers;
+    if (!m || this.active === null || this.visibility === 0) return null;
+    const positions = new Float32Array(m.sites.length * 6);
+    const a = new Vector3();
+    m.sites.forEach((_, i) => {
+      m.base(i, a);
+      positions.set([a.x, a.y, a.z], i * 6);
+      m.anchor(i, a);
+      positions.set([a.x, a.y, a.z], i * 6 + 3);
+    });
+    return { segments: { positions, padPx: 3 } };
+  }
+
   /** いまのカメラでの、柱の底と頂点の画面上の位置。 */
   private screenPositions(): StationScreenPosition[] {
     const m = this.markers;
@@ -285,6 +301,10 @@ class StationSceneModule implements SceneModule {
 
   setProgress(progress: number): void {
     this.shared.setProgress(this.id, progress, this.ctx?.holdOf() ?? 0.4);
+  }
+
+  labelKeepOut(): LabelKeepOut | null {
+    return this.shared.labelKeepOut();
   }
 
   /** 共有する状態は、片方の場面のモジュールだけが毎フレーム進める。 */
