@@ -1,30 +1,23 @@
 /*
- * 「データと方法」の節。本文カード（story.css）と同じ、落ち着いた組版。
- * 背景は不透明の明るい色で、3D の画面は後ろに見せない（読みやすさを優先）。
+ * 「データと方法」の節。本文カード（story.css）と同じトークン（src/styles/tokens.css）で組む。
+ * 背景は不透明の紙の色で、3D の画面は後ろに見せない（読みやすさを優先）。
  * 本編の出典表示（画面の下端に固定）に文末が隠れないよう、下に出典表示の高さ（--ptm-attribution-height）の余白を取る。
  */
 
 .methods {
-  --methods-ink: #1d1d1b;
-  --methods-ink-soft: #55534e;
-  --methods-paper: #faf8f3;
-  --methods-rule: rgba(29, 29, 27, 0.16);
-  --methods-accent: #b8321f;
-  --methods-link: #0b4f8a;
-  --methods-sans: 'Hiragino Kaku Gothic ProN', 'Hiragino Sans', 'Yu Gothic UI', 'Yu Gothic', 'Meiryo', 'Noto Sans JP', 'IPAexGothic', 'IPAPGothic', sans-serif;
-  --methods-serif: 'Hiragino Mincho ProN', 'Yu Mincho', 'Noto Serif JP', 'IPAexMincho', 'IPAPMincho', serif;
-
   position: relative;
   z-index: 1;
   box-sizing: border-box;
   width: 100%;
-  padding: 48px max(16px, env(safe-area-inset-right)) calc(96px + var(--ptm-attribution-height, 0px)) max(16px, env(safe-area-inset-left));
-  background: var(--methods-paper);
-  color: var(--methods-ink);
-  font-family: var(--methods-sans);
-  font-size: 0.95rem;
+  padding: var(--ptm-space-12) max(16px, env(safe-area-inset-right)) calc(96px + var(--ptm-attribution-height, 0px)) max(16px, env(safe-area-inset-left));
+  background: var(--ptm-paper-1);
+  /* 3D の画面との境目。 */
+  box-shadow: 0 -1px 0 var(--ptm-rule-strong);
+  color: var(--ptm-ink-1);
+  font-family: var(--ptm-font-sans);
+  font-size: var(--ptm-text-base);
   line-height: 1.85;
-  letter-spacing: 0.02em;
+  letter-spacing: var(--ptm-tracking-body);
   /* 日本語の折り返しを自然にする（対応ブラウザのみ）。 */
   word-break: auto-phrase;
   overflow-wrap: anywhere;
@@ -39,141 +32,214 @@
 
 .methods h2 {
   margin-top: 0;
-  margin-bottom: 0.6em;
-  padding-top: 12px;
-  border-top: 3px solid var(--methods-accent);
-  font-family: var(--methods-serif);
-  font-size: 1.5rem;
-  line-height: 1.4;
-  letter-spacing: 0.02em;
+  margin-bottom: var(--ptm-space-4);
+  font-size: var(--ptm-text-2xl);
+  font-weight: var(--ptm-weight-bold);
+  line-height: var(--ptm-leading-snug);
+  letter-spacing: var(--ptm-tracking-body);
 }
 
 .methods h3 {
-  margin: 0 0 0.5em;
-  font-family: var(--methods-serif);
-  font-size: 1.2rem;
-  line-height: 1.5;
+  margin: 0 0 var(--ptm-space-3);
+  font-size: var(--ptm-text-xl);
+  font-weight: var(--ptm-weight-bold);
+  line-height: var(--ptm-leading-snug);
 }
 
 .methods h4 {
-  margin: 1.6em 0 0.3em;
-  font-size: 1rem;
+  margin: var(--ptm-space-8) 0 var(--ptm-space-1);
+  font-size: var(--ptm-text-md);
+  font-weight: var(--ptm-weight-bold);
   line-height: 1.6;
 }
 
 .methods p {
   /* 左右の margin は触らない（`.methods > *` の auto で中央に置く） */
-  margin-block: 0.8em;
+  margin-block: var(--ptm-space-3);
+}
+
+.methods strong {
+  font-weight: var(--ptm-weight-bold);
 }
 
 .methods__lead {
-  color: var(--methods-ink-soft);
+  font-size: var(--ptm-text-md);
+  color: var(--ptm-ink-2);
 }
 
 .methods__item {
-  margin-top: 2.6em;
-  padding-top: 1.2em;
-  border-top: 1px solid var(--methods-rule);
+  margin-top: var(--ptm-space-12);
+  padding-top: var(--ptm-space-6);
+  border-top: var(--ptm-hairline) solid var(--ptm-rule-strong);
 }
 
 .methods ul {
-  margin-block: 0.8em;
+  margin-block: var(--ptm-space-3);
   padding-left: 1.3em;
 }
 
 .methods li {
-  margin: 0.55em 0;
+  margin: var(--ptm-space-2) 0;
+}
+
+.methods li::marker {
+  color: var(--ptm-ink-3);
 }
 
 .methods a {
-  color: var(--methods-link);
+  color: var(--ptm-ink-1);
   text-decoration: underline;
+  text-decoration-color: var(--ptm-rule-strong);
+  text-decoration-thickness: 1px;
   text-underline-offset: 3px;
   /* タップしやすいよう、文字の上下にも反応する範囲を取る（行間は 1.85 なので、行の見た目は変わらない）。 */
   padding: 0.3em 0.1em;
-  -webkit-tap-highlight-color: rgba(11, 79, 138, 0.2);
+  border-radius: var(--ptm-radius-sm);
+  -webkit-tap-highlight-color: var(--ptm-accent-soft);
+  transition: text-decoration-color var(--ptm-duration) var(--ptm-ease), background-color var(--ptm-duration) var(--ptm-ease);
+}
+
+.methods a:hover {
+  text-decoration-color: currentColor;
+}
+
+.methods a:active {
+  color: var(--ptm-accent-strong);
 }
 
 .methods a:focus-visible {
-  outline: 3px solid #f2c94c;
-  outline-offset: 1px;
-  border-radius: 2px;
+  outline: none;
+  box-shadow: var(--ptm-focus-ring);
 }
 
 /* 項目の目次。1行1項目で、行全体をタップできる大きさにする。 */
 .methods__toc ul {
-  margin-block: 1em 0;
+  margin-block: var(--ptm-space-6) 0;
   margin-inline: 0;
   padding: 0;
   list-style: none;
+  border-top: var(--ptm-hairline) solid var(--ptm-rule);
 }
 
 .methods__toc li {
   margin: 0;
-  border-bottom: 1px solid var(--methods-rule);
+  border-bottom: var(--ptm-hairline) solid var(--ptm-rule);
 }
 
 .methods__toc a {
-  display: block;
-  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ptm-space-3);
+  min-height: var(--ptm-target);
   box-sizing: border-box;
-  padding: 10px 4px;
+  padding: var(--ptm-space-2) var(--ptm-space-2);
+  font-weight: var(--ptm-weight-medium);
+  line-height: var(--ptm-leading-snug);
   text-decoration: none;
+  border-radius: 0;
+}
+
+/* 行き先が節の中であることを示す、下向きの矢印。 */
+.methods__toc a::after {
+  content: '';
+  flex: none;
+  width: 6px;
+  height: 6px;
+  margin-right: var(--ptm-space-1);
+  border-right: 1.5px solid var(--ptm-ink-3);
+  border-bottom: 1.5px solid var(--ptm-ink-3);
+  transform: translateY(-2px) rotate(45deg);
 }
 
 .methods__toc a:hover {
-  text-decoration: underline;
+  background: var(--ptm-paper-2);
 }
 
-/* 作品の先頭へ戻るリンク。 */
+.methods__toc a:active {
+  background: var(--ptm-paper-3);
+  color: var(--ptm-ink-1);
+}
+
+/* 作品の先頭へ戻るリンク。「地図を動かす」ボタンと同じ形。 */
 .methods p.methods__back {
-  margin-top: 3.2em;
+  margin-top: var(--ptm-space-16);
   text-align: center;
 }
 
 .methods__back a {
-  display: inline-block;
-  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--ptm-target);
   box-sizing: border-box;
-  padding: 10px 28px;
-  color: #fff;
-  background: #1d1d1b;
-  border-radius: 999px;
+  padding: 0 var(--ptm-space-6);
+  color: var(--ptm-on-inverse-1);
+  background: var(--ptm-inverse-solid);
+  border-radius: var(--ptm-radius-pill);
+  box-shadow: var(--ptm-shadow-1);
   text-decoration: none;
-  font-weight: 700;
-  letter-spacing: 0.04em;
+  font-size: var(--ptm-text-sm);
+  font-weight: var(--ptm-weight-bold);
+  line-height: 1;
+  letter-spacing: var(--ptm-tracking-body);
+  transition: background-color var(--ptm-duration) var(--ptm-ease), transform var(--ptm-duration) var(--ptm-ease);
+}
+
+.methods__back a:hover {
+  background: var(--ptm-inverse-hover);
+}
+
+.methods__back a:active {
+  color: var(--ptm-on-inverse-1);
+  background: var(--ptm-inverse-active);
+  transform: translateY(1px);
 }
 
 .methods__back a:focus-visible {
-  outline: 3px solid #f2c94c;
-  outline-offset: 2px;
+  box-shadow: var(--ptm-focus-ring);
 }
 
 @media (min-width: 768px) {
   .methods {
-    padding-top: 80px;
-    font-size: 1rem;
+    padding-top: var(--ptm-space-20);
+    font-size: var(--ptm-text-md);
     line-height: 1.95;
   }
 
   .methods h2 {
-    font-size: 1.75rem;
+    font-size: var(--ptm-text-3xl);
   }
 
   .methods h3 {
-    font-size: 1.3rem;
+    font-size: var(--ptm-text-2xl);
+  }
+
+  .methods__lead {
+    font-size: var(--ptm-text-lg);
   }
 }
 
 /* 狭い画面（幅 360px 未満）: 文字を少し小さくする。 */
 @media (max-width: 359px) {
   .methods {
-    font-size: 0.9rem;
+    font-size: var(--ptm-text-sm);
     line-height: 1.8;
+  }
+
+  .methods__lead {
+    font-size: var(--ptm-text-base);
   }
 
   .methods ul {
     padding-left: 1.1em;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .methods a,
+  .methods__back a {
+    transition: none;
   }
 }
 

@@ -1,4 +1,5 @@
 /** 画面の隅に出典を常時表示する小さな要素。 */
+import '../../styles/tokens.css';
 import { orthoSourceFromUrl } from './orthoSource';
 import type { OrthoSource } from './orthoSource';
 
@@ -86,14 +87,20 @@ const SITE_ATTRIBUTION_CSS = `
   z-index: 10;
   box-sizing: border-box;
   max-width: min(calc(100vw - 16px), 40rem);
-  padding: 2px 8px;
-  font: 12px/1.5 system-ui, -apple-system, 'Hiragino Sans', 'Noto Sans JP', sans-serif;
-  color: #1d1d1b;
-  background: rgba(255, 255, 255, 0.82);
-  border-radius: 4px;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+  padding: var(--ptm-space-1) var(--ptm-space-3);
+  font-family: var(--ptm-font-sans);
+  font-size: var(--ptm-text-xs);
+  line-height: var(--ptm-leading-snug);
+  letter-spacing: var(--ptm-tracking-body);
+  color: var(--ptm-ink-2);
+  background: var(--ptm-surface);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  border-radius: var(--ptm-radius-md);
+  box-shadow: var(--ptm-shadow-1);
 }
 .ptm-site-attribution p { margin: 0; }
+.ptm-site-attribution p + p { color: var(--ptm-ink-3); }
 /* 幅が広い画面では、本文カードが左の列を流れるので、出典表示は右下に置く。 */
 @media (min-width: 768px) {
   .ptm-site-attribution {
@@ -103,15 +110,28 @@ const SITE_ATTRIBUTION_CSS = `
   }
 }
 .ptm-site-attribution a {
+  position: relative;
   display: inline-block;
-  /* タップしやすいよう、文字の上下に余白を取って高さ 24px 以上にする */
-  padding: 4px 1px;
-  color: #0b4f8a;
+  /* 文字の上下に余白を取って高さ 24px 以上にし、見えない範囲（::after）で上下に広げて押せる高さを 44px にする */
+  padding: var(--ptm-space-1) 1px;
+  color: var(--ptm-ink-1);
+  font-weight: var(--ptm-weight-medium);
   text-decoration: underline;
-  text-underline-offset: 2px;
-  -webkit-tap-highlight-color: rgba(11, 79, 138, 0.2);
+  text-decoration-color: var(--ptm-rule-strong);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+  border-radius: var(--ptm-radius-sm);
+  -webkit-tap-highlight-color: var(--ptm-accent-soft);
+  transition: text-decoration-color var(--ptm-duration) var(--ptm-ease), color var(--ptm-duration) var(--ptm-ease);
 }
-.ptm-site-attribution a:focus-visible { outline: 2px solid #f2c94c; outline-offset: 1px; }
+.ptm-site-attribution a::after {
+  content: '';
+  position: absolute;
+  inset: -10px 0;
+}
+.ptm-site-attribution a:hover { text-decoration-color: currentColor; }
+.ptm-site-attribution a:active { color: var(--ptm-accent-strong); }
+.ptm-site-attribution a:focus-visible { outline: none; box-shadow: var(--ptm-focus-ring); }
 `;
 
 /**

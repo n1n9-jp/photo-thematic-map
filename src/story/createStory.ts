@@ -13,6 +13,7 @@ import { freeRegionFor, viewShiftFor } from './layout';
 import { renderStoryCards } from './storyCards';
 import { createStoryScroll, type StoryScroll } from './storyScroll';
 import type { StoryStage } from './types';
+import '../styles/tokens.css';
 import './story.css';
 
 export interface CreateStoryOptions {

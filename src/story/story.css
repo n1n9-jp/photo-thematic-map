@@ -1,4 +1,4 @@
-/* 語りの本文カード。報道のビジュアル記事のような落ち着いた組版。 */
+/* 語りの本文カード。色・書体・余白などは src/styles/tokens.css のトークンを参照する。 */
 
 .story-backdrop {
   position: fixed;
@@ -19,15 +19,6 @@
 }
 
 .story {
-  --story-ink: #1d1d1b;
-  --story-ink-soft: #55534e;
-  --story-paper: rgba(250, 248, 243, 0.8);
-  --story-rule: rgba(29, 29, 27, 0.16);
-  --story-accent: #b8321f;
-  --story-sans: 'Hiragino Kaku Gothic ProN', 'Hiragino Sans', 'Yu Gothic UI', 'Yu Gothic', 'Meiryo',
-    'Noto Sans JP', 'IPAexGothic', 'IPAPGothic', sans-serif;
-  --story-serif: 'Hiragino Mincho ProN', 'Yu Mincho', 'Noto Serif JP', 'IPAexMincho', 'IPAPMincho', serif;
-
   /*
    * カードの配置。JS（storyCards.ts / createStory.ts）もこの値を読む。
    * bottom: 画面の下寄りに、画面の高さの4割以下の小さなカードが並ぶ。上側は 3D の主役のための空き。
@@ -46,8 +37,8 @@
   z-index: 1;
   /* canvas の操作（自由に動かす段階）を邪魔しないよう、カード以外はポインタを通す。 */
   pointer-events: none;
-  font-family: var(--story-sans);
-  color: var(--story-ink);
+  font-family: var(--ptm-font-sans);
+  color: var(--ptm-ink-1);
 }
 
 .story-step {
@@ -97,15 +88,14 @@
   width: calc(100% - var(--story-gutter) * 2);
   max-width: 28rem;
   margin-left: var(--story-gutter);
-  padding: 14px 16px 16px;
+  padding: var(--ptm-space-4);
   /* 止まり終えるころに JS が薄くする（--story-alpha）。 */
   opacity: var(--story-alpha, 1);
-  background: var(--story-paper);
-  -webkit-backdrop-filter: blur(8px);
-  backdrop-filter: blur(8px);
-  border-top: 3px solid var(--story-accent);
-  border-radius: 2px;
-  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.16);
+  background: var(--ptm-surface);
+  -webkit-backdrop-filter: blur(12px) saturate(1.2);
+  backdrop-filter: blur(12px) saturate(1.2);
+  border-radius: var(--ptm-radius-md);
+  box-shadow: var(--ptm-shadow-2);
 }
 
 /* 薄くなって見えないカードは、ポインタも受けない。 */
@@ -113,64 +103,117 @@
   pointer-events: none;
 }
 
+/* 場面の番号と目盛り。番号は左、目盛りは残りの幅いっぱい。 */
 .story-card__index {
-  margin: 0 0 6px;
-  font-size: 0.72rem;
-  letter-spacing: 0.12em;
-  color: var(--story-ink-soft);
+  display: flex;
+  align-items: center;
+  gap: var(--ptm-space-3);
+  margin: 0 0 var(--ptm-space-3);
+  font-size: var(--ptm-text-xs);
+  font-weight: var(--ptm-weight-medium);
+  line-height: 1;
+  letter-spacing: var(--ptm-tracking-label);
   font-variant-numeric: tabular-nums;
+  color: var(--ptm-ink-3);
+}
+
+.story-card__index-label {
+  flex: none;
+}
+
+.story-card__index-current {
+  font-weight: var(--ptm-weight-bold);
+  color: var(--ptm-ink-1);
+}
+
+.story-progress {
+  display: flex;
+  flex: 1;
+  gap: 2px;
+}
+
+.story-progress__step {
+  flex: 1;
+  height: 4px;
+  border-radius: 1px;
+  background: var(--ptm-rule);
+}
+
+.story-progress__step[data-state='done'] {
+  background: var(--ptm-ink-4);
+}
+
+.story-progress__step[data-state='current'] {
+  background: var(--ptm-accent);
 }
 
 .story-card__heading {
   margin: 0;
-  font-family: var(--story-serif);
-  font-size: 1.3rem;
-  font-weight: 700;
-  line-height: 1.4;
-  letter-spacing: 0.02em;
+  font-size: var(--ptm-text-xl);
+  font-weight: var(--ptm-weight-bold);
+  line-height: var(--ptm-leading-snug);
+  letter-spacing: var(--ptm-tracking-body);
+  color: var(--ptm-ink-1);
+  word-break: auto-phrase;
+  overflow-wrap: anywhere;
 }
 
 .story-card__body {
   margin: 0;
-  font-size: 0.92rem;
-  line-height: 1.75;
-  letter-spacing: 0.02em;
+  font-size: var(--ptm-text-base);
+  line-height: var(--ptm-leading-body);
+  letter-spacing: var(--ptm-tracking-body);
+  color: var(--ptm-ink-1);
   /* 日本語の折り返しを自然にする（対応ブラウザのみ）。 */
   word-break: auto-phrase;
   overflow-wrap: anywhere;
 }
 
+/* 数値: カードの主役。見出しの下に細い罫線で区切り、数字・単位・説明の順に、大きさと色で階層を付ける。 */
 .story-stat {
-  margin: 10px 0 0;
-  padding-top: 8px;
-  border-top: 1px solid var(--story-rule);
+  margin: var(--ptm-space-3) 0 0;
+  padding-top: var(--ptm-space-3);
+  border-top: var(--ptm-hairline) solid var(--ptm-rule);
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
-  column-gap: 0.3em;
+  column-gap: var(--ptm-space-1);
 }
 
-.story-stat__value {
-  font-family: var(--story-serif);
-  font-size: clamp(2.2rem, 10vw, 3.4rem);
-  font-weight: 700;
-  line-height: 1.1;
-  letter-spacing: -0.01em;
-  color: var(--story-accent);
+/* 最終値の幅の枠（見えない文字）に、数え上げの途中の値を右揃えで重ねる。 */
+.story-stat__figure {
+  display: inline-grid;
+  font-size: var(--ptm-text-4xl);
+  font-weight: var(--ptm-weight-bold);
+  line-height: var(--ptm-leading-tight);
+  letter-spacing: var(--ptm-tracking-tight);
   font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
+  color: var(--ptm-ink-1);
+}
+
+.story-stat__sizer,
+.story-stat__value {
+  grid-area: 1 / 1;
+  justify-self: end;
+}
+
+.story-stat__sizer {
+  visibility: hidden;
 }
 
 .story-stat__unit {
-  font-size: 1.1rem;
-  font-weight: 700;
+  font-size: var(--ptm-text-lg);
+  font-weight: var(--ptm-weight-bold);
+  color: var(--ptm-ink-2);
 }
 
 .story-stat__label {
   flex-basis: 100%;
-  margin-top: 2px;
-  font-size: 0.76rem;
-  line-height: 1.5;
-  color: var(--story-ink-soft);
+  margin-top: var(--ptm-space-1);
+  font-size: var(--ptm-text-xs);
+  line-height: var(--ptm-leading-snug);
+  color: var(--ptm-ink-3);
 }
 
 /* 自由操作の間は、カードを薄くして地図を見せ、ドラッグを canvas へ通す。 */
@@ -189,29 +232,49 @@
   top: max(12px, env(safe-area-inset-top));
   right: max(12px, env(safe-area-inset-right));
   z-index: 2;
-  min-height: 44px;
-  padding: 10px 18px;
-  font-family: var(--story-sans, sans-serif);
-  font-size: 0.9rem;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  color: #fff;
-  background: #1d1d1b;
-  border: 2px solid #fff;
-  border-radius: 999px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+  box-sizing: border-box;
+  min-width: var(--ptm-target);
+  min-height: var(--ptm-target);
+  padding: 0 var(--ptm-space-5);
+  font-family: var(--ptm-font-sans);
+  font-size: var(--ptm-text-sm);
+  font-weight: var(--ptm-weight-bold);
+  line-height: 1;
+  letter-spacing: var(--ptm-tracking-body);
+  color: var(--ptm-on-inverse-1);
+  background: var(--ptm-inverse-solid);
+  border: 0;
+  border-radius: var(--ptm-radius-pill);
+  box-shadow: var(--ptm-shadow-inverse);
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
   touch-action: manipulation;
+  transition:
+    background-color var(--ptm-duration) var(--ptm-ease),
+    box-shadow var(--ptm-duration) var(--ptm-ease),
+    transform var(--ptm-duration) var(--ptm-ease);
+}
+
+.story-free-toggle:hover {
+  background: var(--ptm-inverse-hover);
+}
+
+.story-free-toggle:active {
+  background: var(--ptm-inverse-active);
+  transform: translateY(1px);
 }
 
 .story-free-toggle[aria-pressed='true'] {
-  background: #b8321f;
+  background: var(--ptm-accent);
+}
+
+.story-free-toggle[aria-pressed='true']:hover {
+  background: var(--ptm-accent-strong);
 }
 
 .story-free-toggle:focus-visible {
-  outline: 3px solid #f2c94c;
-  outline-offset: 2px;
+  outline: none;
+  box-shadow: var(--ptm-focus-ring), var(--ptm-shadow-inverse);
 }
 
 .story-free-toggle[hidden] {
@@ -255,20 +318,33 @@
     width: clamp(360px, 30vw, 400px);
     max-width: none;
     margin-left: clamp(16px, 3vw, 40px);
-    padding: 22px 26px 24px;
+    padding: var(--ptm-space-6);
+  }
+
+  .story-card__index {
+    margin-bottom: var(--ptm-space-4);
   }
 
   .story-card__heading {
-    font-size: 1.55rem;
+    font-size: var(--ptm-text-2xl);
   }
 
   .story-card__body {
-    font-size: 0.98rem;
+    font-size: var(--ptm-text-md);
     line-height: 1.85;
   }
 
-  .story-stat__value {
-    font-size: 3.4rem;
+  .story-stat {
+    margin-top: var(--ptm-space-4);
+    padding-top: var(--ptm-space-4);
+  }
+
+  .story-stat__figure {
+    font-size: var(--ptm-text-5xl);
+  }
+
+  .story-stat__label {
+    margin-top: var(--ptm-space-2);
   }
 
   /* 右下: 出典表示（本編）の上。 */
@@ -283,29 +359,33 @@
 @media (min-width: 768px) and (max-height: 560px) {
   .story-card {
     width: clamp(340px, 34vw, 400px);
-    padding: 12px 16px 14px;
+    padding: var(--ptm-space-3) var(--ptm-space-4);
   }
 
   .story-card__index {
-    margin-bottom: 2px;
+    margin-bottom: var(--ptm-space-2);
   }
 
   .story-card__heading {
-    font-size: 1.2rem;
+    font-size: var(--ptm-text-lg);
   }
 
   .story-card__body {
-    font-size: 0.86rem;
-    line-height: 1.65;
+    font-size: var(--ptm-text-sm);
+    line-height: 1.7;
   }
 
   .story-stat {
-    margin-top: 6px;
-    padding-top: 6px;
+    margin-top: var(--ptm-space-2);
+    padding-top: var(--ptm-space-2);
   }
 
-  .story-stat__value {
-    font-size: 2.2rem;
+  .story-stat__figure {
+    font-size: var(--ptm-text-3xl);
+  }
+
+  .story-stat__label {
+    margin-top: 0;
   }
 }
 
@@ -316,30 +396,44 @@
   }
 
   .story-card {
-    padding: 12px 14px 14px;
+    padding: var(--ptm-space-3) var(--ptm-space-4) var(--ptm-space-4);
+  }
+
+  .story-card__index {
+    margin-bottom: var(--ptm-space-2);
   }
 
   .story-card__heading {
-    font-size: 1.15rem;
+    font-size: var(--ptm-text-lg);
   }
 
   .story-card__body {
-    font-size: 0.86rem;
-    line-height: 1.7;
+    font-size: var(--ptm-text-sm);
+    line-height: 1.75;
+  }
+
+  .story-stat {
+    margin-top: var(--ptm-space-2);
+    padding-top: var(--ptm-space-2);
+  }
+
+  .story-stat__figure {
+    font-size: var(--ptm-text-3xl);
   }
 
   .story-stat__label {
-    font-size: 0.72rem;
+    font-size: var(--ptm-text-2xs);
   }
 }
 
-/* ぼかしを使えない・使わない環境では、背景の透け方を減らして文字を読みやすくする。 */
+/* ぼかしを使わない環境では、背景の透け方を減らして文字を読みやすくする。 */
 @media (prefers-reduced-motion: reduce) {
   .story {
-    --story-paper: rgba(250, 248, 243, 0.92);
+    --ptm-surface: rgba(251, 250, 248, 0.97);
   }
 
-  .story--free .story-card {
+  .story--free .story-card,
+  .story-free-toggle {
     transition: none;
   }
 
@@ -351,6 +445,6 @@
 
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
   .story {
-    --story-paper: rgba(250, 248, 243, 0.92);
+    --ptm-surface: rgba(251, 250, 248, 0.97);
   }
 }
