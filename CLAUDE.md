@@ -31,7 +31,7 @@ E2E は `/opt/pw-browsers/chromium` を使う。preview サーバーのポート
 - `src/data/` 生成データの形式と読み込み（`grids.ts` 街の高さ格子、`buildings.ts` 変換済みの建物のチャンク）
 - `src/geo/` 座標変換（`enu.ts`）
 - `src/sim/` 堆積計算（描画に依存しない純粋ロジック）
-- `src/story/` スクロール連動
+- `src/story/` スクロール連動。表紙（`index.html` の `.ptm-cover`、`cover.css`・`cover.ts`、数値は `content/cover.ts`）は `docs/design/cover/README.md`
 - `src/config.ts` 共有定数（座標原点など）
 - `scripts/` データ取得スクリプト（Node 実行。成果物は `public/` 等へ出力）。`scripts/bake/` は PLATEAU のタイルの取得・復号（`tiles.ts`・`cache.ts`）と、街の高さ格子（`index.ts`）・建物の事前変換（`buildings.ts`）
 - `tests/unit/` vitest、`tests/e2e/` Playwright

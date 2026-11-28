@@ -4,7 +4,7 @@
  *
  * 段階 i の進捗は、セクションの上端が画面中央に来た時点を 0、下端が画面中央に来た時点を 1 とする
  * （セクションには、その段階の本文カードがすべて入っている。進捗はすべてのカードを通して数える）
- * （最初の段階だけ、上端の代わりにスクロール位置 0 を 0 とし、最後の段階だけ、下端の代わりにページ末尾を 1 とする）。
+ * （最初の段階だけ、上端が画面の上端に来た時点（本文がページ先頭から始まるならスクロール位置 0）を 0 とし、最後の段階だけ、下端の代わりにページ末尾を 1 とする）。
  *
  * リサイズや画面の回転でレイアウトが変わったときは、変わる前の位置（段階の番号と進捗）を記録しておき、
  * 計算し直したあとで同じ位置になるスクロール位置へ戻す。
@@ -72,14 +72,18 @@ export function createStoryScroll(
   let frozen = false;
   /** 計算し直しの前に読んでいた位置。 */
   let saved: StoryState | null = null;
+  /** 計算し直しの前のスクロール位置(px)。最初の段階が始まる前（表紙）を読んでいたときに使う。 */
+  let savedScrollY = 0;
   let disposed = false;
 
   sections.forEach((el, i) => {
     triggers.push(
       ScrollTrigger.create({
         trigger: el,
-        // 最初のセクションは上端がページ先頭にあり「上端が画面中央」がスクロール位置 0 より手前になるため、0 から始める。
-        start: i === 0 ? 0 : 'top center',
+        // 最初のセクションは、上端が画面の上端に来た位置から始める。本文がページ先頭から始まるときはスクロール位置 0
+        // （「上端が画面中央」は 0 より手前になる）。前に表紙（index.html の .ptm-cover）があるときは、表紙を通り過ぎた位置。
+        // どちらでも、その位置での本文カードの配置は同じなので、場面1は同じ進み方で始まる。
+        start: i === 0 ? 'top top' : 'top center',
         // 最後の場面は、場面の下端が画面の下端に来るまで。文書の最大のスクロール位置（'max'）にすると、
         // 場面のあとに続く「データと方法」の節の長さぶんだけ最後の場面の進捗の範囲が伸び、カメラが止まる区間が短くなる。
         end: i === last ? 'bottom bottom' : 'bottom center',
@@ -172,6 +176,7 @@ export function createStoryScroll(
     if (frozen) return;
     frozen = true;
     saved = at;
+    savedScrollY = window.scrollY;
   }
 
   /** 計算し直しの後、記録しておいた位置へスクロールを戻す。 */
@@ -181,7 +186,9 @@ export function createStoryScroll(
     saved = null;
     frozen = false;
     if (target) {
-      const y = Math.round(scrollYFor(target.stage, target.progress));
+      // 最初の段階が始まる前（表紙）は進捗では表せないので、元のスクロール位置を、最初の段階の始まりを超えない範囲で保つ。
+      const beforeStart = target.stage === 0 && target.progress <= 0;
+      const y = Math.round(beforeStart ? Math.min(savedScrollY, scrollYFor(0, 0)) : scrollYFor(target.stage, target.progress));
       if (Math.abs(window.scrollY - y) >= 1) {
         window.scrollTo({ top: y, left: 0, behavior: 'instant' });
         ScrollTrigger.update();

@@ -6,6 +6,7 @@ import { createApp } from './app/createApp';
 import { mountMethodsSection } from './app/methods/render';
 import { SCENE_MODULES } from './app/modules';
 import type { DepthMode } from './scene/createScene';
+import { mountCover } from './story/cover';
 
 declare global {
   interface Window {
@@ -17,6 +18,10 @@ declare global {
 const container = document.getElementById('app');
 const storyRoot = document.getElementById('story');
 if (!container || !storyRoot) throw new Error('#app / #story が見つかりません');
+
+// 表紙（index.html に静的に書いてある）。スクロールで上へ抜けるときに薄くする。
+const cover = document.querySelector<HTMLElement>('.ptm-cover');
+if (cover) mountCover(cover);
 
 // 「データと方法」の節は、3D の準備を待たずに先に組む（出典表示のリンクで、読み込み中でも移動できる）
 const methods = mountMethodsSection();

@@ -4,6 +4,9 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
+    <meta name="description" content="東京都の調査で数えられた放置自転車を、実際の台数ぶん、実物大の自転車として東京の街の 3D モデルに置いた非公式の作品。" />
+    <!-- 表紙は JavaScript を待たずに最初の描画で出す（スタイルも head で読む）。 -->
+    <link rel="stylesheet" href="/src/story/cover.css" />
     <title>東京の放置自転車 ― 実数ぶんを街に置く</title>
     <style>
       html, body { margin: 0; background: #bfd9ee; }
@@ -12,6 +15,27 @@
   </head>
   <body>
     <div id="top"></div>
+    <!-- 表紙。数値（{{ptm:キー}}）はビルド時に src/story/content/cover.ts の値で埋まる。 -->
+    <header class="ptm-cover" aria-labelledby="ptm-cover-title">
+      <div class="ptm-cover__panel">
+        <h1 id="ptm-cover-title" class="ptm-cover__title">東京の放置自転車</h1>
+        <p class="ptm-cover__subtitle">駅の周りに置かれたままの自転車を、実際の台数ぶん、東京の街に置いてみる。</p>
+        <p class="ptm-cover__lead">
+          {{ptm:surveyYear}}年{{ptm:surveyMonth}}月の東京都の調査で数えられた、都内の駅周辺の放置自転車は<span class="ptm-cover__num">{{ptm:totalParked}}</span>。{{ptm:fiscalYear}}年度に撤去された自転車は<span class="ptm-cover__num">{{ptm:removedFY2024}}</span>にのぼる。この作品は、その数を実物大の自転車として、東京の街の 3D モデルに置いていく。
+        </p>
+        <dl class="ptm-cover__meta">
+          <div class="ptm-cover__meta-row">
+            <dt>データ</dt>
+            <dd>東京都「駅前放置自転車等の現況と対策」<span class="ptm-cover__nowrap">{{ptm:reportYear}}調査</span><span class="ptm-cover__nowrap">（{{ptm:surveyYear}}年{{ptm:surveyMonth}}月）</span>、<span class="ptm-cover__nowrap">国土交通省 PLATEAU</span> ほか</dd>
+          </div>
+          <div class="ptm-cover__meta-row">
+            <dt>注記</dt>
+            <dd>非公式の作品です。東京都・国土交通省によるものではありません。</dd>
+          </div>
+        </dl>
+        <a class="ptm-cover__cue" href="#story">スクロールして読む<svg class="ptm-cover__cue-mark" width="12" height="16" viewBox="0 0 12 16" aria-hidden="true" focusable="false"><path d="M6 1.5v12.5M1.75 9.75 6 14l4.25-4.25" /></svg></a>
+      </div>
+    </header>
     <div id="app"></div>
     <main id="story"></main>
     <section id="data-and-methods" class="methods" aria-labelledby="data-and-methods-heading">
