@@ -9,6 +9,7 @@
  */
 import { Vector3, type PerspectiveCamera, type Scene, type WebGLRenderer } from 'three';
 import { BicycleField } from '../../../scene/bicycle/field';
+import type { LabelKeepOut } from '../../../scene/placeLabels';
 import type { MeasureTargets } from '../../visibility';
 import { stationLayoutToInstances } from '../../../scene/bicycle/stationInstances';
 import { computeAkihabaraInWorker } from './computeInWorker';
@@ -251,6 +252,16 @@ export class AkihabaraBikes {
     const width = heightPx * camera.aspect;
     this.debug.firstBikeLengthPx = Math.hypot(((a.x - b.x) / 2) * width, ((a.y - b.y) / 2) * heightPx);
     return changed;
+  }
+
+  /**
+   * 地名を重ねない形: 462台すべての位置（まだ現れていない分も含める。台数が増えるたびに地名が動かないように）。
+   * 1台を、全長の半分の半径の円とみなす。
+   */
+  labelKeepOut(): LabelKeepOut | null {
+    const layout = this.result?.layout;
+    if (!layout || !this.field.object.visible || this.debug.shown === 0) return null;
+    return { points: { positions: layout.positions.subarray(0, layout.count * 3), radiusM: layout.bikeLength / 2, minPx: 3 } };
   }
 
   /**

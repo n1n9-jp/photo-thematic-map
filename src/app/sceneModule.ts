@@ -14,6 +14,7 @@
  */
 import type { PerspectiveCamera, Scene, WebGLRenderer } from 'three';
 import type { Vec3 } from '../geo/enu';
+import type { LabelKeepOut } from '../scene/placeLabels';
 import type { MeasureTargets } from './visibility';
 
 export interface SceneModuleContext {
@@ -52,6 +53,11 @@ export interface SceneModule {
    * 確認用の読み出し口で、表示には影響しない。
    */
   measureTargets?(): MeasureTargets | null;
+  /**
+   * 地名（`scene/placeLabels.ts`）を重ねない主役の形（ワールド座標）。場面に入っていて主役を表示しているときだけ返す。
+   * まだ現れていない分（これから増える自転車、積もる前の山）も含めてよい（地名の位置が、主役が増えるたびに変わらない）。
+   */
+  labelKeepOut?(): LabelKeepOut | null;
   dispose(): void;
 }
 

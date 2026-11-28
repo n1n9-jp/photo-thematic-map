@@ -127,6 +127,18 @@
   --ptm-focus-ring: 0 0 0 2px var(--ptm-paper-1), 0 0 0 4px var(--ptm-accent-strong);
   --ptm-duration: 160ms;
   --ptm-ease: cubic-bezier(0.2, 0, 0, 1);
+
+  /* --- 地名（街の上の案内の文字。src/scene/placeLabels.ts） --- */
+  /* 札を付けない墨の文字に、紙の色の縁取り。明るい地面・暗い地面・白い建物のどの上でも読める。 */
+  --ptm-place-ink: var(--ptm-ink-1);
+  --ptm-place-ink-water: var(--ptm-ink-2); /* 川・湾・道路 */
+  --ptm-place-halo: rgba(251, 250, 248, 0.92);
+  --ptm-place-halo-shadow: 1px 0 0 var(--ptm-place-halo), -1px 0 0 var(--ptm-place-halo), 0 1px 0 var(--ptm-place-halo),
+    0 -1px 0 var(--ptm-place-halo), 1px 1px 0 var(--ptm-place-halo), -1px -1px 0 var(--ptm-place-halo),
+    1px -1px 0 var(--ptm-place-halo), -1px 1px 0 var(--ptm-place-halo), 0 0 4px var(--ptm-place-halo);
+  --ptm-tracking-place: 0.12em; /* 地区の名前 */
+  --ptm-tracking-place-wide: 0.3em; /* 川・湾の名前 */
+  --ptm-place-fade: 320ms; /* 地名の出入り */
 }
 
 /* 透明度を下げる設定: 面を不透明に近づけ、背景の透け方をなくす。 */

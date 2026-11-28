@@ -9,6 +9,7 @@
  *   次の場面の場所を読み始める）。自由操作の間は注視点に合わせて動かす。
  * - 描画は必要なフレームだけ行う（カメラが動いた・街並みを読み込み中・中身から要求があった・リサイズした）。
  * - `pauseWhenCovered` の要素（「データと方法」の節）が画面を覆っている間は、3D の画面が見えないので、描画のループを止める。
+ * - 街の上の地名（`placeLabelsLayer.ts`）は、毎フレーム、場面の中身を進めた後に置き直す（駅のラベルと主役を避けるため）。
  */
 import { localToLatLon, latLonToLocal } from '../geo/enu';
 import { createScene, type DepthMode, type SceneContext } from '../scene/createScene';
@@ -25,6 +26,7 @@ import { ElevationCache } from './elevationCache';
 import { createLoadingIndicator } from './loadingIndicator';
 import { watchCover } from './methods/coverWatch';
 import type { SceneModule, SceneModuleContext, SceneModuleFactory } from './sceneModule';
+import { PlaceLabelsLayer } from './placeLabelsLayer';
 import { measureBuildingShare, measureVisibility, type CoverRect, type VisibilityResult } from './visibility';
 
 export interface CreateAppOptions {
@@ -222,6 +224,17 @@ export async function createApp(options: CreateAppOptions): Promise<App> {
   const story = createStory({ scene: ctx, stages, root: options.storyRoot, groundY, rig: { transitionClearance: TRANSITION_CLEARANCE_M } });
   storyRef = story;
 
+  // 街の上の地名（場面ごとの一覧から、カメラの高さと画面の空きに合わせて出す）
+  const placeLabels = new PlaceLabelsLayer({
+    container: options.container,
+    script,
+    story,
+    camera,
+    modules,
+    target: () => controls.target,
+    groundHeight: groundY,
+  });
+
   let activeIndex = -1;
   const unsubscribe = story.scroll.subscribe((state) => {
     if (state.stage === activeIndex) return;
@@ -285,6 +298,7 @@ export async function createApp(options: CreateAppOptions): Promise<App> {
     cameraIdleFrames = moved ? 0 : cameraIdleFrames + 1;
     let needed = moved || renderRequested;
     for (const m of modules) if (m?.update?.(dt)) needed = true;
+    placeLabels.update();
     renderRequested = false;
     if (needed || city.busy) {
       city.update();
@@ -452,6 +466,7 @@ export async function createApp(options: CreateAppOptions): Promise<App> {
       document.documentElement.classList.remove('ptm-in-methods');
       unsubscribe();
       for (const m of modules) m?.dispose();
+      placeLabels.dispose();
       story.dispose();
       city.dispose();
       indicator.dispose();

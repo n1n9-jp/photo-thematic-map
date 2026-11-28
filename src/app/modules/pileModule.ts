@@ -20,6 +20,13 @@ import { isSmallDevice } from '../../scene/plateau/budget';
 import type { SceneModule, SceneModuleContext } from '../sceneModule';
 import { createPileLoadingBadge, type PileLoadingBadge } from './pileLoadingBadge';
 import type { MeasureTargets } from '../visibility';
+import type { LabelKeepOut } from '../../scene/placeLabels';
+import { PILES } from '../../story/content/facts';
+
+/** 格子ごとの、積もりきった山の高さと裾の直径(m)（`facts.ts` の PILES）。 */
+const PILE_DIMENSIONS: Partial<Record<GridName, { heightM: number; diameterM: number }>> = Object.fromEntries(
+  Object.values(PILES).map((p) => [p.grid, { heightM: p.heightM, diameterM: p.diameterM }]),
+);
 
 /** 山の定義。 */
 export interface PileSiteSpec {
@@ -423,6 +430,20 @@ export class PileModule implements SceneModule {
   measureTargets(): MeasureTargets | null {
     if (!this.active || !this.pile || this.pile.driving !== this) return null;
     return this.pile.measureTargets();
+  }
+
+  /**
+   * 地名を重ねない形: 積もりきった山を、裾の直径の 1.05 倍の円錐で囲む（`LabelKeepOut.cones`）。頂上の横（山の後ろの駅舎の屋根など）には
+   * 地名を置ける。計算が終わる前・積もる前から返す（山が積もるにつれて地名が動かないように）。
+   */
+  labelKeepOut(): LabelKeepOut | null {
+    const ctx = this.ctx;
+    if (!this.active || !ctx) return null;
+    const dims = PILE_DIMENSIONS[this.o.site.grid];
+    if (!dims) return null;
+    const { lat, lon } = this.o.site;
+    const base = latLonToLocal({ lat, lon, alt: ctx.groundHeight(lat, lon) });
+    return { cones: [{ base, radiusM: (dims.diameterM / 2) * 1.05, heightM: dims.heightM }] };
   }
 
   private updateBadge(): void {
