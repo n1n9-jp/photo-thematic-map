@@ -113,9 +113,9 @@ const DEM_SIZE = 256;
  */
 const LIGHT = new Vector3(-200, 400, 150).normalize();
 /** 陰影の強さ。平らな面を 1 として、光に向く斜面は明るく、背く斜面は暗くする割合の上限。 */
-export const RELIEF_STRENGTH = 0.22;
+export const RELIEF_STRENGTH = 0.16;
 /** 起伏を読み取りやすくする高さの強調（傾きをこの倍にして陰影を求める。形は変えない）。 */
-export const RELIEF_EXAGGERATION = 3;
+export const RELIEF_EXAGGERATION = 1.5;
 
 /** 子の並び順（北西・北東・南西・南東）に対応する (dx, dy)。 */
 const CHILD_OFFSETS: readonly (readonly [number, number])[] = [
