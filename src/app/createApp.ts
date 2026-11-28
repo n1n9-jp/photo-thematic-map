@@ -139,7 +139,6 @@ export async function createApp(options: CreateAppOptions): Promise<App> {
     minimal: false,
     controls: true,
     depth: options.depth ?? 'logarithmic',
-    skyColor: 0xbfd9ee,
     altitudeFog: true,
     stableViewport: true,
     fov: 45,

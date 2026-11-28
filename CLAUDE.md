@@ -28,6 +28,7 @@ E2E は `/opt/pw-browsers/chromium` を使う。preview サーバーのポート
 
 - `src/scene/` 描画（renderer・シーン・カメラ・PLATEAU 表示）
   - `src/scene/plateau/` PLATEAU の街並み。`stage.ts`（舞台一式）、`bakedBuildings.ts`（変換済みの建物。本編の既定）、`buildings.ts`（建物 3D Tiles を直接読む。確認ページ demos/plateau と本編の `?buildings=live`）、`ground.ts`（地面。国土地理院の標高タイルで起伏を付けた単色の面。航空写真は使わない。下記「地面」）、`elevation.ts`（標高）、`catalog.ts`（tileset 一覧）、`attribution.ts`（出典表示）、`tileFetch.ts`（タイル取得の再試行と失敗の集計）、`budget.ts`（端末に合わせたメモリの上限）、`baseGround.ts`（起伏の付いた地面の下に敷く平らな地面と海、地面の陸と海の色。起伏の付いた地面のない範囲を空の色で抜かさない）
+- `src/scene/palette.ts` 街の配色（空・霧・陸・海・地面の陰影の強さ・建物・光・駅の柱の5色・駐輪場の空きの2色）を1か所にまとめた `PALETTE`。描画のモジュールは色を直接持たずにここを参照する（光は `paletteLights.ts` で作る）。three.js に依存しないので E2E からも読める。色の一覧と狙い、駅の柱の色の検証の数値、変更前と並べた画面は `docs/design/palette/`
 - `src/data/` 生成データの形式と読み込み（`grids.ts` 街の高さ格子、`buildings.ts` 変換済みの建物のチャンク）
 - `src/geo/` 座標変換（`enu.ts`）
 - `src/sim/` 堆積計算（描画に依存しない純粋ロジック）
@@ -51,11 +52,11 @@ E2E は `/opt/pw-browsers/chromium` を使う。preview サーバーのポート
 
 ## 地面
 
-地面に航空写真は使わない（PLATEAU-Ortho も国土地理院の写真も読まない）。`tests/e2e/ground.spec.ts` が、本編の8場面を巡っても航空写真のタイルを要求しないことを確かめ、各場面を PC 幅とスマートフォン幅で `screenshots/ground/` に撮る。変更の前後の画面は `docs/design/ground/`。
+地面に航空写真は使わない（PLATEAU-Ortho も国土地理院の写真も読まない）。`tests/e2e/ground.spec.ts` が、本編の8場面を巡っても航空写真のタイルを要求しないことを確かめ、各場面を PC 幅とスマートフォン幅で `screenshots/ground/` に撮る。変更の前後の画面は `docs/design/ground/`、配色の変更の前後は `docs/design/palette/`。
 
 - `src/scene/plateau/ground.ts` が、標高タイルの四分木（ズーム10〜18。標高は 5m メッシュまでなので、これより細かくしても形と陰影はほぼ変わらない）でカメラからの距離に応じた細かさのメッシュを作る。タイルの画面上の大きさが 256px × `detailScale`（`budget.ts` の `groundDetailScale`。パソコン 1.5・スマートフォン 2）を超えたら子に分ける。
 - 標高タイルを取得するのはズーム15まで（ズーム14まで 10m メッシュ、ズーム15 で 5m メッシュ）。より細かいタイルは祖先の標高を使う。
-- 色は `baseGround.ts` の `BASE_LAND_COLOR`（陸）と `BASE_SEA_COLOR`（海）。各タイルに、陸の色に標高の傾きから求めた控えめな陰影（`RELIEF_STRENGTH`・`RELIEF_EXAGGERATION`。光はシーンの太陽と同じ西南西の上から）を掛けた小さな画像を貼る。標高の無効値（海）は透明にし、下の海の面が見える。陰影の傾きは同じ標高タイルの画素どうしで求める（5m と 10m の境に線を出さない）。
+- 色は配色（`src/scene/palette.ts`）の `land`（陸、`baseGround.ts` の `BASE_LAND_COLOR`）と `sea`（海、`BASE_SEA_COLOR`）。各タイルに、陸の色に標高の傾きから求めた控えめな陰影（配色の `relief` → `RELIEF_STRENGTH`・`RELIEF_EXAGGERATION`。光はシーンの太陽と同じ西南西の上から）を掛けた小さな画像を貼る。標高の無効値（海）は透明にし、下の海の面が見える。陰影の傾きは同じ標高タイルの画素どうしで求める（5m と 10m の境に線を出さない）。
 - 標高タイルを取得できなかった（回線の失敗など）タイルは、祖先の標高（無ければ 0m）で不透明な地面を作って表示し、`retryFailedTiles()` で作り直す。存在しない標高タイル（404）は海とみなす。
 
 ## 静的アセットのパスと favicon
@@ -92,5 +93,5 @@ E2E は `/opt/pw-browsers/chromium` を使う。preview サーバーのポート
 - コミット前に `npm run typecheck`・`npm run lint`・`npm test`・`npm run test:e2e` をすべて通す。
 - アプリは最初のフレーム描画後に `window.__APP_READY__ = true` を設定する。E2E はこれを待つ。
 - コンソールエラー0件を保つ（E2E が検査する）。
-- 文字の載る UI の色・行間・文字サイズ・余白・角丸・影は `src/styles/tokens.css` の `--ptm-*` で書き、値を直接書かない。例外は配置の計算と結び付いた寸法（凡例の幅 292・430・218px と配置の余白、本文カードの配置の変数 `--story-*`、ボタンや表示の `top`・`right` など画面の端からの位置）と、データの色（駅の柱・凡例の色の段階 `COLOR_STEPS`・`VACANCY_COLORS`）。hover の色は `@media (hover: hover)` の中に書き、フォーカスの輪は `--ptm-focus-ring` を要素の影に重ねる（強制カラーで見えるよう、透明の `outline` を持たせる）。
+- 文字の載る UI の色・行間・文字サイズ・余白・角丸・影は `src/styles/tokens.css` の `--ptm-*` で書き、値を直接書かない。例外は配置の計算と結び付いた寸法（凡例の幅 292・430・218px と配置の余白、本文カードの配置の変数 `--story-*`、ボタンや表示の `top`・`right` など画面の端からの位置）と、データの色（駅の柱・凡例の色の段階 `COLOR_STEPS`・`VACANCY_COLORS`。値は `src/scene/palette.ts`）。hover の色は `@media (hover: hover)` の中に書き、フォーカスの輪は `--ptm-focus-ring` を要素の影に重ねる（強制カラーで見えるよう、透明の `outline` を持たせる）。
 - 作業ブランチは `claude/*`。PR のタイトル・本文は日本語。

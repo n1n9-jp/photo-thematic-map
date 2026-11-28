@@ -21,6 +21,8 @@ import {
   type LabelRequest,
   type Rect,
 } from '../../src/scene/stationMarkers';
+import { PALETTE } from '../../src/scene/palette';
+import { CVD_KINDS, deltaE } from './helpers/colorDifference';
 
 const json = JSON.parse(readFileSync(join(__dirname, '../../public/data/bicycles/stations.json'), 'utf8')) as {
   stations: StationRow[];
@@ -174,11 +176,16 @@ describe('色の段階', () => {
     expect([1, 9, 10, 29, 30, 99, 100, 199, 200, 462].map(at)).toEqual([0, 0, 1, 1, 2, 2, 3, 3, 4, 4]);
   });
 
-  it('段階は隙間も重なりもなく、少ない駅ほど明るい', () => {
+  it('段階は隙間も重なりもなく、5色は互いに十分離れている（定性的な配色）', () => {
     for (let i = 1; i < COLOR_STEPS.length; i++) expect(COLOR_STEPS[i]!.min).toBe(COLOR_STEPS[i - 1]!.max! + 1);
     expect(COLOR_STEPS[COLOR_STEPS.length - 1]!.max).toBeNull();
-    const lum = (c: number): number => 0.299 * (c >> 16) + 0.587 * ((c >> 8) & 255) + 0.114 * (c & 255);
-    for (let i = 1; i < COLOR_STEPS.length; i++) expect(lum(COLOR_STEPS[i]!.color)).toBeLessThan(lum(COLOR_STEPS[i - 1]!.color));
+    expect(COLOR_STEPS.map((s) => s.color)).toEqual([...PALETTE.stations]);
+    for (let i = 0; i < COLOR_STEPS.length; i++) {
+      for (let j = i + 1; j < COLOR_STEPS.length; j++) {
+        expect(deltaE(COLOR_STEPS[i]!.color, COLOR_STEPS[j]!.color), `${i}-${j}`).toBeGreaterThanOrEqual(15);
+        for (const kind of CVD_KINDS) expect(deltaE(COLOR_STEPS[i]!.color, COLOR_STEPS[j]!.color, kind), `${i}-${j} ${kind}`).toBeGreaterThanOrEqual(8);
+      }
+    }
   });
 
   it('実データの駅の分布: 最大の段階（200台以上）は2か所だけ', () => {

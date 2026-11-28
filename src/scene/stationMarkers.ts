@@ -11,7 +11,8 @@
  * （`COLUMN_BICYCLES_PER_KM`、`CONE_BICYCLES_PER_KM3`）で決まり、凡例の文言（`markerScaleText`）にそのまま使う。
  * 印はワールド座標の実寸（1単位 = 1m）で置くので、凡例の「1km」は画面上でもそのまま 1km に見える。
  *
- * 色は台数の段階（`COLOR_STEPS`）で決める。少ない駅は淡い黄、多い駅は濃い赤。
+ * 色は台数の段階（`COLOR_STEPS`）で決める。色は配色（`palette.ts`）の色相の違う5色（定性的な配色）で、段階を見分ける助けにする。
+ * 台数の大小は柱の高さと凡例の台数の範囲が伝える。
  * 全体の表示は `setVisibility(0〜1)` で滑らかに切り替えられる（場面の切り替えのフェード用）。
  * 柱の伸び（`setGrowth(0〜1)`）と、色の切り替え（`setColorBlend(0〜1)`: 0 は台数の段階、1 は駐輪場の空きの有無）も
  * 外から動かせる（本編の場面3・4）。
@@ -32,6 +33,7 @@ import {
   Vector3,
   type PerspectiveCamera,
 } from 'three';
+import { PALETTE } from './palette';
 import type { StationSite } from '../data/stations';
 import { latLonToLocal } from '../geo/enu';
 import { smoothstep } from '../story/cameraPath';
@@ -97,17 +99,22 @@ export interface ColorStep {
   label: string;
 }
 
-/** 少ない駅は淡い黄、多い駅は濃い赤。灰色の地面の上でも段階を見分けられる色。 */
-export const COLOR_STEPS: readonly ColorStep[] = [
-  { min: 1, max: 9, color: 0xffe35c, label: '1〜9' },
-  { min: 10, max: 29, color: 0xffa726, label: '10〜29' },
-  { min: 30, max: 99, color: 0xf4511e, label: '30〜99' },
-  { min: 100, max: 199, color: 0xc2185b, label: '100〜199' },
-  { min: 200, max: null, color: 0x6a1b9a, label: '200以上' },
-];
+/**
+ * 台数の段階。色は配色（`palette.ts` の stations）の色相の違う5色で、地面の上で全ての組が見分けられ、
+ * 色覚の違い（P・D・T 型）でも見分けられる（`tests/unit/palette.test.ts`）。
+ */
+export const COLOR_STEPS: readonly ColorStep[] = (
+  [
+    { min: 1, max: 9, label: '1〜9' },
+    { min: 10, max: 29, label: '10〜29' },
+    { min: 30, max: 99, label: '30〜99' },
+    { min: 100, max: 199, label: '100〜199' },
+    { min: 200, max: null, label: '200以上' },
+  ] as const
+).map((s, i) => ({ ...s, color: PALETTE.stations[i]! }));
 
-/** 駐輪場の空きで色分けするときの色。空きが放置台数以上の駅は青、未満の駅は橙。 */
-export const VACANCY_COLORS = { enough: 0x2f8cff, short: 0xff5a1f } as const;
+/** 駐輪場の空きで色分けするときの色（配色 `palette.ts` の vacancy）。空きが放置台数以上の駅は青、未満の駅は橙。 */
+export const VACANCY_COLORS: Readonly<{ enough: number; short: number }> = PALETTE.vacancy;
 
 /** 色分けの凡例（駐輪場の空き）。 */
 export const VACANCY_LEGEND: readonly { color: number; label: string }[] = [

@@ -14,9 +14,7 @@
  */
 import {
   Color,
-  DirectionalLight,
   Fog,
-  HemisphereLight,
   PerspectiveCamera,
   Scene,
   WebGLRenderer,
@@ -31,6 +29,8 @@ import { loadPlateauCatalog, selectTilesets } from './catalog';
 import type { PlateauCatalog } from './catalog';
 import { BaseGround } from './baseGround';
 import { PlateauGround } from './ground';
+import { PALETTE } from '../palette';
+import { createPaletteLights } from '../paletteLights';
 
 /** 建物を読む場所。 */
 export interface PlateauFocus {
@@ -343,7 +343,6 @@ export interface PlateauStage {
   dispose(): void;
 }
 
-const SKY_COLOR = 0xbfd9ee;
 const DEFAULT_OFFSET = { x: 380, y: 560, z: 360 };
 
 export async function createPlateauStage(options: PlateauStageOptions): Promise<PlateauStage> {
@@ -354,14 +353,15 @@ export async function createPlateauStage(options: PlateauStageOptions): Promise<
   container.appendChild(renderer.domElement);
 
   const scene = new Scene();
-  scene.background = new Color(SKY_COLOR);
-  const fog = new Fog(SKY_COLOR, 2500, 9000);
+  scene.background = new Color(PALETTE.sky);
+  const fog = new Fog(PALETTE.fog, 2500, 9000);
   scene.fog = fog;
 
   const camera = new PerspectiveCamera(45, window.innerWidth / window.innerHeight, 1, 40000);
 
-  scene.add(new HemisphereLight(0xeef4ff, 0x8a8170, 1.6));
-  const sun = new DirectionalLight(0xffffff, 1.6);
+  const lights = createPaletteLights(PALETTE.lights);
+  scene.add(lights.hemisphere, lights.ambient);
+  const sun = lights.sun;
   sun.position.set(-300, 600, 400);
   scene.add(sun);
 
