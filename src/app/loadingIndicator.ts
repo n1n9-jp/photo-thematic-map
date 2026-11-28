@@ -12,7 +12,7 @@ const CSS = `
   padding: var(--ptm-space-2) var(--ptm-space-3);
   font-family: var(--ptm-font-sans);
   font-size: var(--ptm-text-xs);
-  line-height: 1;
+  line-height: var(--ptm-leading-none);
   letter-spacing: var(--ptm-tracking-body);
   color: var(--ptm-ink-2);
   background: var(--ptm-surface);

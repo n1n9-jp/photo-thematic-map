@@ -96,6 +96,9 @@
   backdrop-filter: blur(12px) saturate(1.2);
   border-radius: var(--ptm-radius-md);
   box-shadow: var(--ptm-shadow-2);
+  /* 強制カラーでは影が消えるので、透明の輪郭線を持たせておく（システムの色で描かれる）。大きさは変わらない。 */
+  outline: var(--ptm-hairline) solid transparent;
+  outline-offset: calc(var(--ptm-hairline) * -1);
 }
 
 /* 薄くなって見えないカードは、ポインタも受けない。 */
@@ -111,7 +114,7 @@
   margin: 0 0 var(--ptm-space-3);
   font-size: var(--ptm-text-xs);
   font-weight: var(--ptm-weight-medium);
-  line-height: 1;
+  line-height: var(--ptm-leading-none);
   letter-spacing: var(--ptm-tracking-label);
   font-variant-numeric: tabular-nums;
   color: var(--ptm-ink-3);
@@ -239,11 +242,12 @@
   font-family: var(--ptm-font-sans);
   font-size: var(--ptm-text-sm);
   font-weight: var(--ptm-weight-bold);
-  line-height: 1;
+  line-height: var(--ptm-leading-none);
   letter-spacing: var(--ptm-tracking-body);
   color: var(--ptm-on-inverse-1);
   background: var(--ptm-inverse-solid);
-  border: 0;
+  /* 強制カラーでは背景と影が消えるので、透明の枠線を持たせておく（システムの色で描かれる）。 */
+  border: var(--ptm-hairline) solid transparent;
   border-radius: var(--ptm-radius-pill);
   box-shadow: var(--ptm-shadow-inverse);
   cursor: pointer;
@@ -255,8 +259,15 @@
     transform var(--ptm-duration) var(--ptm-ease);
 }
 
-.story-free-toggle:hover {
-  background: var(--ptm-inverse-hover);
+/* hover の色は、ポインタで hover できる端末だけ（タッチ端末で押した後に色が残らないように）。 */
+@media (hover: hover) {
+  .story-free-toggle:hover {
+    background: var(--ptm-inverse-hover);
+  }
+
+  .story-free-toggle[aria-pressed='true']:hover {
+    background: var(--ptm-accent-strong);
+  }
 }
 
 .story-free-toggle:active {
@@ -268,13 +279,33 @@
   background: var(--ptm-accent);
 }
 
-.story-free-toggle[aria-pressed='true']:hover {
-  background: var(--ptm-accent-strong);
+/* フォーカスの輪: どの部品も、要素の影に --ptm-focus-ring を重ねる一重の表現（強制カラーでは輪郭線）。 */
+.story-free-toggle:focus-visible {
+  outline: 2px solid transparent;
+  outline-offset: 2px;
+  box-shadow: var(--ptm-focus-ring), var(--ptm-shadow-inverse);
 }
 
-.story-free-toggle:focus-visible {
-  outline: none;
-  box-shadow: var(--ptm-focus-ring), var(--ptm-shadow-inverse);
+@media (forced-colors: active) {
+  .story-free-toggle {
+    border-color: ButtonText;
+  }
+
+  .story-free-toggle[aria-pressed='true'] {
+    border-color: Highlight;
+  }
+
+  .story-free-toggle:focus-visible {
+    outline-color: Highlight;
+  }
+
+  .story-card {
+    outline-color: CanvasText;
+  }
+
+  .story-progress__step[data-state='current'] {
+    background: Highlight;
+  }
 }
 
 .story-free-toggle[hidden] {
@@ -331,7 +362,7 @@
 
   .story-card__body {
     font-size: var(--ptm-text-md);
-    line-height: 1.85;
+    line-height: var(--ptm-leading-relaxed);
   }
 
   .story-stat {
@@ -372,7 +403,7 @@
 
   .story-card__body {
     font-size: var(--ptm-text-sm);
-    line-height: 1.7;
+    line-height: var(--ptm-leading-compact);
   }
 
   .story-stat {
@@ -409,7 +440,7 @@
 
   .story-card__body {
     font-size: var(--ptm-text-sm);
-    line-height: 1.75;
+    line-height: var(--ptm-leading-compact);
   }
 
   .story-stat {
@@ -422,14 +453,14 @@
   }
 
   .story-stat__label {
-    font-size: var(--ptm-text-2xs);
+    font-size: var(--ptm-text-3xs);
   }
 }
 
 /* ぼかしを使わない環境では、背景の透け方を減らして文字を読みやすくする。 */
 @media (prefers-reduced-motion: reduce) {
   .story {
-    --ptm-surface: rgba(251, 250, 248, 0.97);
+    --ptm-surface: var(--ptm-surface-opaque);
   }
 
   .story--free .story-card,
@@ -443,8 +474,15 @@
   }
 }
 
+@media (prefers-reduced-transparency: reduce) {
+  .story-card {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
   .story {
-    --ptm-surface: rgba(251, 250, 248, 0.97);
+    --ptm-surface: var(--ptm-surface-opaque);
   }
 }

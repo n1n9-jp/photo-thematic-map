@@ -488,10 +488,10 @@ const CSS = `
   letter-spacing:var(--ptm-tracking-body)}
 .sm-labels{position:absolute;inset:0}
 .sm-lines{position:absolute;left:0;top:0;width:100%;height:100%;overflow:visible}
-.sm-lines line{stroke:rgba(251,250,248,.92);stroke-width:1}
+.sm-lines line{stroke:var(--ptm-on-inverse-1);stroke-width:1}
 .sm-lines circle{fill:var(--ptm-paper-1);stroke:var(--ptm-inverse-solid);stroke-width:1}
 .sm-label{position:absolute;left:0;top:0;padding:3px 8px 4px;border-radius:var(--ptm-radius-sm);white-space:nowrap;
-  color:var(--ptm-on-inverse-1);background:var(--ptm-inverse);box-shadow:var(--ptm-shadow-inverse);line-height:1.3;text-align:left}
+  color:var(--ptm-on-inverse-1);background:var(--ptm-inverse);box-shadow:var(--ptm-shadow-inverse);line-height:var(--ptm-leading-label);text-align:left}
 .sm-label-name{display:block;font-size:var(--ptm-text-xs);font-weight:var(--ptm-weight-bold)}
 .sm-label-count{display:block;font-size:var(--ptm-text-xs);font-variant-numeric:tabular-nums;color:var(--ptm-on-inverse-2)}
 .sm-legend{position:absolute;left:10px;bottom:10px;width:292px;box-sizing:border-box;padding:var(--ptm-space-3);
@@ -503,21 +503,29 @@ const CSS = `
 .sm-legend-key svg{flex:none;display:block}
 .sm-legend-scale{font-size:var(--ptm-text-xs);font-weight:var(--ptm-weight-bold);color:var(--ptm-ink-1)}
 .sm-legend-steps{display:flex;flex-wrap:wrap;gap:var(--ptm-space-1) var(--ptm-space-3);margin:var(--ptm-space-2) 0 0;padding:0;list-style:none;
-  font-size:var(--ptm-text-2xs);font-variant-numeric:tabular-nums}
+  font-size:var(--ptm-text-3xs);font-variant-numeric:tabular-nums}
 .sm-legend-steps li{display:flex;align-items:center;gap:var(--ptm-space-1);white-space:nowrap}
-.sm-legend-steps i{display:inline-block;width:12px;height:12px;border-radius:2px;box-shadow:inset 0 0 0 1px rgba(23,25,28,.24)}
+.sm-legend-steps i{display:inline-block;box-sizing:border-box;width:12px;height:12px;border-radius:2px;border:var(--ptm-hairline) solid var(--ptm-swatch-outline)}
+.sm-glyph{stroke:var(--ptm-swatch-outline);stroke-width:1}
+.sm-glyph--neutral{fill:var(--ptm-swatch-neutral)}
+.sm-baseline{stroke:var(--ptm-rule-strong);stroke-width:1}
+/* 強制カラー: 面の輪郭をシステムの色で描き、色の見本はデータの色のまま見せる。 */
+@media (forced-colors:active){
+  .sm-legend,.sm-label{outline:var(--ptm-hairline) solid CanvasText;outline-offset:calc(var(--ptm-hairline) * -1)}
+  .sm-legend-steps i,.sm-legend-key svg{forced-color-adjust:none}
+}
 .sm-legend-steps[hidden]{display:none}
 .sm-legend-vacancy{flex-direction:column;gap:var(--ptm-space-1);font-size:var(--ptm-text-xs)}
 .sm-legend-vacancy[hidden]{display:none}
 .sm-legend-total{margin-top:var(--ptm-space-2);padding-top:var(--ptm-space-2);border-top:var(--ptm-hairline) solid var(--ptm-rule);
   font-size:var(--ptm-text-sm);font-weight:var(--ptm-weight-bold);font-variant-numeric:tabular-nums;color:var(--ptm-ink-1)}
-.sm-legend-note{margin-top:2px;font-size:var(--ptm-text-2xs);color:var(--ptm-ink-3)}
+.sm-legend-note{margin-top:2px;font-size:var(--ptm-text-3xs);color:var(--ptm-ink-3)}
 @media (max-width:480px){
   .sm-label{padding:2px 6px 3px}
-  .sm-label-name,.sm-label-count{font-size:var(--ptm-text-2xs)}
-  .sm-legend{left:6px;right:6px;bottom:6px;width:auto;padding:var(--ptm-space-2) var(--ptm-space-3);font-size:var(--ptm-text-2xs)}
+  .sm-label-name,.sm-label-count{font-size:var(--ptm-text-3xs)}
+  .sm-legend{left:6px;right:6px;bottom:6px;width:auto;padding:var(--ptm-space-2) var(--ptm-space-3);font-size:var(--ptm-text-3xs)}
   .sm-legend-title{font-size:var(--ptm-text-xs);margin-bottom:var(--ptm-space-1)}
-  .sm-legend-scale{font-size:var(--ptm-text-2xs)}
+  .sm-legend-scale{font-size:var(--ptm-text-3xs)}
   .sm-legend-steps{margin-top:var(--ptm-space-1);font-size:var(--ptm-text-3xs);gap:2px var(--ptm-space-2)}
   .sm-legend-total{margin-top:var(--ptm-space-1);padding-top:var(--ptm-space-1);font-size:var(--ptm-text-xs)}
   .sm-legend-note{font-size:var(--ptm-text-3xs)}
@@ -529,15 +537,15 @@ const CSS = `
 .sm-legend--wide .sm-legend-key{grid-column:1;grid-row:2/4}
 .sm-legend--wide .sm-legend-steps{grid-column:2;grid-row:2;margin:0}
 .sm-legend--wide .sm-legend-total{grid-column:2;grid-row:3;margin:0;padding-top:0;border-top:0}
-.sm-legend--wide .sm-legend-note{grid-column:1/-1;margin-top:0;font-size:var(--ptm-text-3xs)}
-.sm-legend.sm-legend--compact{width:218px;padding:6px var(--ptm-space-2);font-size:var(--ptm-text-3xs);line-height:1.35}
-.sm-legend--compact .sm-legend-title{font-size:var(--ptm-text-2xs);margin-bottom:2px}
+.sm-legend--wide .sm-legend-note{grid-column:1/-1;margin-top:0;font-size:var(--ptm-text-3xs);line-height:var(--ptm-leading-label)}
+.sm-legend.sm-legend--compact{width:218px;padding:6px var(--ptm-space-2);font-size:var(--ptm-text-3xs);line-height:var(--ptm-leading-label)}
+.sm-legend--compact .sm-legend-title{font-size:var(--ptm-text-3xs);margin-bottom:2px}
 .sm-legend--compact .sm-legend-key svg{display:none}
 .sm-legend--compact .sm-legend-scale{font-size:var(--ptm-text-3xs)}
-.sm-legend--compact .sm-legend-steps{margin-top:var(--ptm-space-1);font-size:var(--ptm-text-3xs);gap:1px 6px}
+.sm-legend--compact .sm-legend-steps{margin-top:2px;font-size:var(--ptm-text-3xs);gap:1px 6px}
 .sm-legend--compact .sm-legend-steps i{width:8px;height:8px}
 .sm-legend--compact .sm-legend-vacancy{font-size:var(--ptm-text-3xs);gap:2px}
-.sm-legend--compact .sm-legend-total{margin-top:var(--ptm-space-1);padding-top:2px;font-size:var(--ptm-text-2xs)}
+.sm-legend--compact .sm-legend-total{margin-top:2px;padding-top:2px;font-size:var(--ptm-text-3xs)}
 .sm-legend--compact .sm-legend-note{font-size:var(--ptm-text-3xs)}
 `;
 
@@ -577,10 +585,11 @@ function sampleGlyphs(shape: MarkerShape, mode: ColorMode): SVGSVGElement {
   const svg = svgEl('svg', { width, height: maxH + 17, viewBox: `0 0 ${width} ${maxH + 17}` });
   SAMPLE_COUNTS.forEach((n, i) => {
     const cx = colW * i + colW / 2;
-    const color = mode === 'count' ? hex(COLOR_STEPS[colorStepIndex(n)]!.color) : '#c9cdd2';
+    // 色の意味が台数でないときの見本の色と、見本の輪郭は CSS（.sm-glyph--neutral・.sm-glyph）で付ける。
+    const color = mode === 'count' ? hex(COLOR_STEPS[colorStepIndex(n)]!.color) : null;
     const s = sizes[i]!;
     const h = Math.max(1, s.height * scale);
-    const attrs = { fill: color, stroke: 'rgba(23,25,28,.35)', 'stroke-width': 0.8 };
+    const attrs: Record<string, string> = color ? { class: 'sm-glyph', fill: color } : { class: 'sm-glyph sm-glyph--neutral' };
     if (shape === 'column') {
       const w = 11;
       svg.appendChild(svgEl('rect', { x: cx - w / 2, y: base - h, width: w, height: h, ...attrs }));
@@ -592,7 +601,7 @@ function sampleGlyphs(shape: MarkerShape, mode: ColorMode): SVGSVGElement {
     text.textContent = `${n}台`;
     svg.appendChild(text);
   });
-  svg.appendChild(svgEl('line', { x1: 2, y1: base, x2: width - 2, y2: base, stroke: 'rgba(23,25,28,.24)', 'stroke-width': 1 }));
+  svg.appendChild(svgEl('line', { x1: 2, y1: base, x2: width - 2, y2: base, class: 'sm-baseline' }));
   return svg;
 }
 

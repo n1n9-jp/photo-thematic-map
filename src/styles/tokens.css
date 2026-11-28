@@ -35,6 +35,8 @@
   /* 3D の上に浮かぶ面。背景の航空写真や白い建物が透けても、本文が AA を保つ不透明度。 */
   --ptm-surface: rgba(251, 250, 248, 0.94);
   --ptm-surface-solid: #fbfaf8;
+  /* ぼかしを使わない・透明度を下げる設定の環境の面。 */
+  --ptm-surface-opaque: rgba(251, 250, 248, 0.97);
 
   /* --- 色: 墨の面（地図の上の小さなラベル・主ボタン） --- */
   --ptm-inverse: rgba(23, 25, 28, 0.9);
@@ -54,6 +56,10 @@
   --ptm-rule: rgba(23, 25, 28, 0.12);
   --ptm-rule-strong: rgba(23, 25, 28, 0.24);
   --ptm-hairline: 1px;
+  /* 凡例の色の見本と大きさの見本の輪郭。黄色（1〜9台）も紙の面の上で輪郭が分かる濃さ。 */
+  --ptm-swatch-outline: rgba(23, 25, 28, 0.55);
+  /* 色の意味が台数でないときの、大きさの見本の色。 */
+  --ptm-swatch-neutral: var(--ptm-ink-4);
 
   /* --- 書体 --- */
   --ptm-font-ja: 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Noto Sans JP', 'Noto Sans CJK JP', 'BIZ UDPGothic',
@@ -61,8 +67,7 @@
   --ptm-font-sans: 'PTM Inter', var(--ptm-font-ja);
 
   /* --- 文字サイズの段階（16px = 1rem） --- */
-  --ptm-text-3xs: 0.625rem; /* 10px 小さくした凡例だけ */
-  --ptm-text-2xs: 0.6875rem; /* 11px */
+  --ptm-text-3xs: 0.6875rem; /* 11px 最小（凡例の注記・出典の補足） */
   --ptm-text-xs: 0.75rem; /* 12px 注記・出典 */
   --ptm-text-sm: 0.8125rem; /* 13px ラベル・ボタン */
   --ptm-text-base: 0.9375rem; /* 15px 本文（狭い画面） */
@@ -78,9 +83,15 @@
   --ptm-weight-medium: 500;
   --ptm-weight-bold: 700;
 
+  --ptm-leading-none: 1; /* ボタン・1行の表示 */
   --ptm-leading-tight: 1.15; /* 数値 */
+  --ptm-leading-label: 1.3; /* 地図の上のラベル・小さくした凡例 */
   --ptm-leading-snug: 1.45; /* 見出し・注記 */
+  --ptm-leading-heading: 1.6; /* 本文の中の小見出し */
+  --ptm-leading-compact: 1.7; /* 和文の本文（狭い画面・低い画面） */
   --ptm-leading-body: 1.8; /* 和文の本文 */
+  --ptm-leading-relaxed: 1.85; /* 和文の本文（広い画面のカード・「データと方法」） */
+  --ptm-leading-loose: 1.95; /* 「データと方法」（広い画面） */
 
   --ptm-tracking-tight: -0.02em; /* 大きな数字 */
   --ptm-tracking-body: 0.02em;
@@ -117,3 +128,12 @@
   --ptm-duration: 160ms;
   --ptm-ease: cubic-bezier(0.2, 0, 0, 1);
 }
+
+/* 透明度を下げる設定: 面を不透明に近づけ、背景の透け方をなくす。 */
+@media (prefers-reduced-transparency: reduce) {
+  :root {
+    --ptm-surface: var(--ptm-surface-opaque);
+    --ptm-inverse: var(--ptm-inverse-solid);
+  }
+}
+

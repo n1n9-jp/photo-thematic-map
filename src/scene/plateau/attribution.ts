@@ -129,9 +129,17 @@ const SITE_ATTRIBUTION_CSS = `
   position: absolute;
   inset: -10px 0;
 }
-.ptm-site-attribution a:hover { text-decoration-color: currentColor; }
+/* hover の色は、ポインタで hover できる端末だけ（タッチ端末で押した後に色が残らないように）。 */
+@media (hover: hover) {
+  .ptm-site-attribution a:hover { text-decoration-color: currentColor; }
+}
 .ptm-site-attribution a:active { color: var(--ptm-accent-strong); }
-.ptm-site-attribution a:focus-visible { outline: none; box-shadow: var(--ptm-focus-ring); }
+/* フォーカスの輪は他の部品と同じ一重の表現。強制カラーでは影が消えるので、透明の輪郭線をシステムの色で描く。 */
+.ptm-site-attribution a:focus-visible { outline: 2px solid transparent; outline-offset: 1px; box-shadow: var(--ptm-focus-ring); }
+@media (forced-colors: active) {
+  .ptm-site-attribution { border: var(--ptm-hairline) solid CanvasText; }
+  .ptm-site-attribution a:focus-visible { outline-color: Highlight; }
+}
 `;
 
 /**

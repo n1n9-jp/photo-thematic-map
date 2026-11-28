@@ -16,7 +16,7 @@
   color: var(--ptm-ink-1);
   font-family: var(--ptm-font-sans);
   font-size: var(--ptm-text-base);
-  line-height: 1.85;
+  line-height: var(--ptm-leading-relaxed);
   letter-spacing: var(--ptm-tracking-body);
   /* 日本語の折り返しを自然にする（対応ブラウザのみ）。 */
   word-break: auto-phrase;
@@ -50,7 +50,7 @@
   margin: var(--ptm-space-8) 0 var(--ptm-space-1);
   font-size: var(--ptm-text-md);
   font-weight: var(--ptm-weight-bold);
-  line-height: 1.6;
+  line-height: var(--ptm-leading-heading);
 }
 
 .methods p {
@@ -99,16 +99,29 @@
   transition: text-decoration-color var(--ptm-duration) var(--ptm-ease), background-color var(--ptm-duration) var(--ptm-ease);
 }
 
-.methods a:hover {
-  text-decoration-color: currentColor;
+/* hover の色は、ポインタで hover できる端末だけ（タッチ端末で押した後に色が残らないように）。 */
+@media (hover: hover) {
+  .methods a:hover {
+    text-decoration-color: currentColor;
+  }
+
+  .methods__toc a:hover {
+    background: var(--ptm-paper-2);
+  }
+
+  .methods__back a:hover {
+    background: var(--ptm-inverse-hover);
+  }
 }
 
 .methods a:active {
   color: var(--ptm-accent-strong);
 }
 
+/* 強制カラーでは影のフォーカスの輪が消えるので、透明の輪郭線を重ねておく（システムの色で描かれる）。 */
 .methods a:focus-visible {
-  outline: none;
+  outline: 2px solid transparent;
+  outline-offset: 2px;
   box-shadow: var(--ptm-focus-ring);
 }
 
@@ -152,10 +165,6 @@
   transform: translateY(-2px) rotate(45deg);
 }
 
-.methods__toc a:hover {
-  background: var(--ptm-paper-2);
-}
-
 .methods__toc a:active {
   background: var(--ptm-paper-3);
   color: var(--ptm-ink-1);
@@ -176,18 +185,16 @@
   padding: 0 var(--ptm-space-6);
   color: var(--ptm-on-inverse-1);
   background: var(--ptm-inverse-solid);
+  /* 強制カラーでは背景が消えるので、透明の枠線を持たせておく（システムの色で描かれる）。 */
+  border: var(--ptm-hairline) solid transparent;
   border-radius: var(--ptm-radius-pill);
   box-shadow: var(--ptm-shadow-1);
   text-decoration: none;
   font-size: var(--ptm-text-sm);
   font-weight: var(--ptm-weight-bold);
-  line-height: 1;
+  line-height: var(--ptm-leading-none);
   letter-spacing: var(--ptm-tracking-body);
   transition: background-color var(--ptm-duration) var(--ptm-ease), transform var(--ptm-duration) var(--ptm-ease);
-}
-
-.methods__back a:hover {
-  background: var(--ptm-inverse-hover);
 }
 
 .methods__back a:active {
@@ -196,15 +203,26 @@
   transform: translateY(1px);
 }
 
+/* フォーカスの輪は「地図を動かす」ボタンと同じ表現（要素の影に --ptm-focus-ring を重ねる）。 */
 .methods__back a:focus-visible {
-  box-shadow: var(--ptm-focus-ring);
+  box-shadow: var(--ptm-focus-ring), var(--ptm-shadow-1);
+}
+
+@media (forced-colors: active) {
+  .methods a:focus-visible {
+    outline-color: Highlight;
+  }
+
+  .methods__back a {
+    border-color: ButtonText;
+  }
 }
 
 @media (min-width: 768px) {
   .methods {
     padding-top: var(--ptm-space-20);
     font-size: var(--ptm-text-md);
-    line-height: 1.95;
+    line-height: var(--ptm-leading-loose);
   }
 
   .methods h2 {
@@ -224,7 +242,7 @@
 @media (max-width: 359px) {
   .methods {
     font-size: var(--ptm-text-sm);
-    line-height: 1.8;
+    line-height: var(--ptm-leading-body);
   }
 
   .methods__lead {
