@@ -66,6 +66,7 @@ export const LINKS = {
   tokyoDome: 'https://www.tokyo-dome.co.jp/dome/about/',
   containerExport: 'https://ecotopia.earth/article-1045/',
   containerShipment: 'https://www.p4p.org/p4p-bike-150000-the-whole-story/',
+  inspiration: 'https://www.reuters.com/graphics/ENVIRONMENT-PLASTIC/0100B275155/',
 } as const;
 
 const F = FACTS;
@@ -122,6 +123,11 @@ export function buildMethodsModel(): MethodsModel {
         blocks: [
           p('この作品は、個人が非営利で作りました。国土交通省、国土地理院、東京都が作成・監修・保証したものではありません。'),
           p('元のデータは加工して使っています。作品の数字や絵が、元の資料と同じとは限りません。'),
+          p(
+            '統計の実数ぶんの物を街に積み上げて量を示す表現は、',
+            link('Reuters Graphics「Drowning in plastic」', LINKS.inspiration),
+            'に着想を得ました。この作品のデータ、3Dモデル、コード、文章は独自に作ったもので、Reuters とは関係がありません。',
+          ),
         ],
       },
       {
