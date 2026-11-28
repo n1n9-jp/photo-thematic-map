@@ -1,10 +1,7 @@
 import {
-  AmbientLight,
   BoxGeometry,
   Color,
-  DirectionalLight,
   Fog,
-  HemisphereLight,
   Mesh,
   MeshStandardMaterial,
   PerspectiveCamera,
@@ -14,6 +11,8 @@ import {
 } from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { GROUND_SIZE_M, REFERENCE_BOX_SIZE_M } from '../config';
+import { PALETTE } from './palette';
+import { createPaletteLights } from './paletteLights';
 
 /**
  * 深度バッファの方式。
@@ -46,8 +45,6 @@ export interface SceneContext<C extends OrbitControls | null = OrbitControls> {
   dispose(): void;
 }
 
-const SKY_COLOR = 0x9ec9ee;
-
 export interface AltitudeFogOptions {
   /** カメラの高さ 0 のときの霧の始まり(m)。既定 1500。 */
   near?: number;
@@ -70,7 +67,7 @@ export interface CreateSceneOptions {
   controls?: boolean;
   /** 深度バッファの方式（既定 standard）。reversed が使えない環境では logarithmic になる。 */
   depth?: DepthMode;
-  /** 背景（空）の色。既定 0x9ec9ee。霧の色も同じにする。 */
+  /** 背景（空）の色。既定は配色（`palette.ts`）の空の色。霧の色も同じにする。 */
   skyColor?: number;
   /**
    * 霧をカメラの高さに合わせて変える（俯瞰で街が霞みすぎない）。`render()` のたびに更新する。
@@ -136,7 +133,7 @@ export function createScene(container: HTMLElement, options: CreateSceneOptions 
   canvas.style.height = '100%';
   container.appendChild(canvas);
 
-  const sky = options.skyColor ?? SKY_COLOR;
+  const sky = options.skyColor ?? PALETTE.sky;
   const scene = new Scene();
   scene.background = new Color(sky);
   const fog = new Fog(sky, 800, 3000);
@@ -148,9 +145,9 @@ export function createScene(container: HTMLElement, options: CreateSceneOptions 
   const camera = new PerspectiveCamera(options.fov ?? 50, size0.w / size0.h, options.near ?? 1, options.far ?? 20000);
   camera.position.set(40, 30, 50);
 
-  scene.add(new HemisphereLight(0xdcecff, 0x6b6558, 0.6));
-  scene.add(new AmbientLight(0xffffff, 0.4));
-  const sun = new DirectionalLight(0xffffff, 2.0);
+  const lights = createPaletteLights(PALETTE.lights);
+  scene.add(lights.hemisphere, lights.ambient);
+  const sun = lights.sun;
   sun.position.set(-200, 400, 150);
   scene.add(sun);
 

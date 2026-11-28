@@ -45,6 +45,7 @@ import { latLonToLocal, localToLatLon } from '../../geo/enu';
 import { latToTileY, lonToTileX, tileBounds, tileXToLon, tileYToLat } from '../../geo/tiles';
 import type { TileBounds } from '../../geo/tiles';
 import { BASE_LAND_COLOR } from './baseGround';
+import { PALETTE } from '../palette';
 import { plateauMemoryBudget, releaseAfterUpload } from './budget';
 import { GsiElevationSource, fetchImagePixels, hasValidHeights, sampleDem } from './elevation';
 import type { DemKind, DemTile, FetchPixels } from './elevation';
@@ -144,10 +145,10 @@ const DEM_SIZE = 256;
  * 建物の明暗と地面の起伏の明暗の向きをそろえる。
  */
 const LIGHT = new Vector3(-200, 400, 150).normalize();
-/** 陰影の強さ。平らな面を 1 として、光に向く斜面は明るく、背く斜面は暗くする割合の上限。 */
-export const RELIEF_STRENGTH = 0.16;
-/** 起伏を読み取りやすくする高さの強調（傾きをこの倍にして陰影を求める。形は変えない）。 */
-export const RELIEF_EXAGGERATION = 1.5;
+/** 陰影の強さ（配色 `palette.ts` の relief.strength）。平らな面を 1 として、光に向く斜面は明るく、背く斜面は暗くする割合の上限。 */
+export const RELIEF_STRENGTH = PALETTE.relief.strength;
+/** 起伏を読み取りやすくする高さの強調（配色の relief.exaggeration。傾きをこの倍にして陰影を求める。形は変えない）。 */
+export const RELIEF_EXAGGERATION = PALETTE.relief.exaggeration;
 
 /** 子の並び順（北西・北東・南西・南東）に対応する (dx, dy)。 */
 const CHILD_OFFSETS: readonly (readonly [number, number])[] = [

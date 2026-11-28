@@ -34,7 +34,7 @@ for (const s of SCRIPT) {
 }
 
 const container = document.getElementById('app')!;
-const ctx = createScene(container, { minimal: false, controls: true, depth: 'logarithmic', skyColor: 0xbfd9ee, altitudeFog: true, fov: 45 });
+const ctx = createScene(container, { minimal: false, controls: true, depth: 'logarithmic', altitudeFog: true, fov: 45 });
 const { camera, renderer, scene: three, controls } = ctx;
 addSiteAttribution(document.body);
 

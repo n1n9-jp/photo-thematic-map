@@ -32,6 +32,7 @@ import { GEOID_HEIGHT_M, ORIGIN } from '../../config';
 import { curvatureRadii, ecefToGeodetic, enuBasis, geodeticToEcef } from '../../geo/ecef';
 import type { Ecef } from '../../geo/ecef';
 import { latLonToLocal, localMetersPerDegree, localToLatLon } from '../../geo/enu';
+import { PALETTE } from '../palette';
 import { plateauMemoryBudget, releaseAfterUpload } from './budget';
 import type { BuildingCacheBudget } from './budget';
 import { TileFetchPolicy, reportTileFailure } from './tileFetch';
@@ -77,7 +78,7 @@ let sharedWhite: MeshLambertMaterial | null = null;
  * 屋上と壁、壁どうしの向きの違いが明暗で読み取れる。真っ白に飛ばないよう、色は少しだけ灰色に寄せる。
  */
 export function whiteBuildingMaterial(): MeshLambertMaterial {
-  sharedWhite ??= new MeshLambertMaterial({ color: 0xe9e7e2, flatShading: true });
+  sharedWhite ??= new MeshLambertMaterial({ color: PALETTE.building, flatShading: true });
   return sharedWhite;
 }
 

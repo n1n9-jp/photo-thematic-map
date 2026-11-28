@@ -4,9 +4,9 @@
  * 起伏の付いた地面を敷かない範囲（遠く、23区の周りより外）と、その地面が透明にしている海（標高の無効値）が、
  * 背景の空の色で抜けて見えないよう、少し下に広い範囲を覆う面を置く。
  *
- * - 陸の色: 白い建物・自転車の山・赤いアクセントと調和する、明るさが中ほどの、わずかに温かい灰色（`BASE_LAND_COLOR`）。起伏の付いた地面も
+ * - 陸の色: 配色（`src/scene/palette.ts`）の land（`BASE_LAND_COLOR`）。起伏の付いた地面も
  *   同じ色に控えめな陰影を掛けて描くので、両者の境目は見分けがつかない。カメラの真下に追従する正方形の1枚。
- * - 海の色: 陸より暗く、空より濃い青灰色（`BASE_SEA_COLOR`）。海陸マスク（`public/data/basemap/landmask.png`、
+ * - 海の色: 配色の sea（`BASE_SEA_COLOR`）。海陸マスク（`public/data/basemap/landmask.png`、
  *   国土地理院の標高の無効値から作る。`src/geo/landmask.ts`）の範囲（関東の沿岸）だけ、陸の面のすぐ上に重ねる。
  *   起伏の付いた地面は海の上が透明なので、東京湾はこの色で見える。マスクを読めないときは、陸の色だけで敷く。
  * - 霧は他の地面と同じ（遠くは空の色に溶ける）。起伏の付いた地面との重なりでちらつかないよう、面は標高 BASE_Y(m) に置く。
@@ -31,11 +31,12 @@ import { latLonToLocal } from '../../geo/enu';
 import { latToTileY, tileXToLon, tileYToLat } from '../../geo/tiles';
 import { assetUrl } from '../../paths';
 import { fetchImagePixels } from './elevation';
+import { PALETTE } from '../palette';
 
-/** 陸の色（明るさが中ほどの、わずかに温かい灰色）。起伏の付いた地面（`ground.ts`）もこの色に陰影を掛けて描く。 */
-export const BASE_LAND_COLOR = 0x77746d;
-/** 海の色（陸より暗く、空より濃い青灰色）。 */
-export const BASE_SEA_COLOR = 0x5f7f96;
+/** 陸の色（配色 `palette.ts` の land）。起伏の付いた地面（`ground.ts`）もこの色に陰影を掛けて描く。 */
+export const BASE_LAND_COLOR = PALETTE.land;
+/** 海の色（配色 `palette.ts` の sea）。 */
+export const BASE_SEA_COLOR = PALETTE.sea;
 /** 面を置く標高(m)。 */
 export const BASE_Y = -12;
 /** 海の面は、陸の面より（標高で）この分だけ上。 */

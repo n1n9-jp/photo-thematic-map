@@ -7,6 +7,7 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import { SCRIPT } from '../../src/story/content/script';
+import { PALETTE } from '../../src/scene/palette';
 import { freeRegionFor } from '../../src/story/layout';
 import { checkPileScene, PILE_SCENES, settlePile, type PileMetric } from './pileHelpers';
 import { BuildingSolids } from './buildingSolids';
@@ -614,10 +615,11 @@ async function expectLegendClearOfPillars(page: Page): Promise<void> {
   expect(hidden.map((s) => `${s.name}（${s.bicycles}台）`)).toEqual([]);
 }
 
-/** 背景の空の色（`createApp` の skyColor）で描かれている画素の数。起伏の付いた地面と、その下の単色の地面が敷かれていれば、俯瞰の画面には現れない。 */
+/** 背景の空の色（既定の配色 `palette.ts` の sky）で描かれている画素の数。起伏の付いた地面と、その下の単色の地面が敷かれていれば、俯瞰の画面には現れない。 */
 async function skyColoredPixels(page: Page): Promise<number> {
   const png = await page.screenshot();
-  return page.evaluate(async (b64) => {
+  const sky = [(PALETTE.sky >> 16) & 255, (PALETTE.sky >> 8) & 255, PALETTE.sky & 255] as const;
+  return page.evaluate(async ([b64, sky]) => {
     const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
     const bitmap = await createImageBitmap(new Blob([bytes], { type: 'image/png' }));
     const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
@@ -626,10 +628,10 @@ async function skyColoredPixels(page: Page): Promise<number> {
     const { data } = ctx.getImageData(0, 0, bitmap.width, bitmap.height);
     let n = 0;
     for (let i = 0; i < data.length; i += 4) {
-      if (Math.abs(data[i]! - 0xbf) <= 2 && Math.abs(data[i + 1]! - 0xd9) <= 2 && Math.abs(data[i + 2]! - 0xee) <= 2) n++;
+      if (Math.abs(data[i]! - sky[0]) <= 2 && Math.abs(data[i + 1]! - sky[1]) <= 2 && Math.abs(data[i + 2]! - sky[2]) <= 2) n++;
     }
     return n;
-  }, png.toString('base64'));
+  }, [png.toString('base64'), sky] as const);
 }
 
 const LEGEND_SCALE = '柱の高さ 1km ＝ 50台';
