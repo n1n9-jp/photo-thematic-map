@@ -1,6 +1,6 @@
 {
   "formatVersion": 1,
-  "inputHash": "312e0175afbb95675ba436e853f5e9627efe1fa6a676fb462848ac2fa4fcdf10",
+  "inputHash": "c7068d4e95a155e6a172be23c2b0fa7ce3ee35487765f77bb66f0991204a7887",
   "generatedAt": "2026-11-22",
   "coordinates": "CLAUDE.md の座標規約（平らな地図）。X=東, Y=標高(m, 東京湾平均海面), Z=南, 1単位=1m, 原点 35.68124, 139.76712。頂点ごとに ECEF → 緯度経度・楕円体高 → latLonToLocal（高さ = 楕円体高 − GEOID_HEIGHT_M 36.7m）。",
   "levels": {
