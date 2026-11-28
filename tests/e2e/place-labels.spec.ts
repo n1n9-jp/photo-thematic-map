@@ -4,7 +4,8 @@ import { expect, test, type Page } from '@playwright/test';
 /**
  * 街の上の地名（src/scene/placeLabels.ts）。
  * - 確認ページ: 準備完了・コンソールエラー0件・地名が重ならずに出ること。`screenshots/place-labels.png`。
- * - 本編: 8場面のそれぞれで地名が出て、互いに・本文カード・凡例・駅のラベル・出典表示と重ならず、画面に収まること。
+ * - 本編: 8場面のそれぞれで地名が出て、互いに・本文カード・凡例・駅のラベル・出典表示・主役（自転車・山・柱を画面に投影した
+ *   範囲 `keepOutRects`）と重ならず、画面に収まること。地名の矩形は、実際に出ている `.pl-label.is-shown` の要素の矩形で確かめる。
  *   場面の間を移る途中は地名を出さないこと。画面は `screenshots/place-labels/<画面>-<場面の番号>-<id>.png`
  *   （docs/design/place-labels/ の画像はここから選んで写す）。
  */
@@ -17,6 +18,15 @@ interface Box {
 }
 
 const hit = (a: Box, b: Box): boolean => a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+
+/** 出ている地名の要素の矩形（ページの左上が原点。canvas の入れ物は画面いっぱい）。 */
+const shownLabelBoxes = (page: Page): Promise<(Box & { name: string })[]> =>
+  page.evaluate(() =>
+    [...document.querySelectorAll<HTMLElement>('.pl-label.is-shown')].map((el) => {
+      const r = el.getBoundingClientRect();
+      return { name: el.textContent ?? '', x: r.left, y: r.top, w: r.width, h: r.height };
+    }),
+  );
 
 function collectErrors(page: Page): string[] {
   const errors: string[] = [];
@@ -53,7 +63,8 @@ test.describe('確認ページ', () => {
     await expect.poll(() => page.evaluate(() => window.__PLACE_LABELS_DEMO__!.shown().length), { timeout: 60_000 }).toBeGreaterThanOrEqual(3);
     // 出入りの不透明度の切り替えが終わるのを待つ
     await page.waitForTimeout(800);
-    const shown = await page.evaluate(() => window.__PLACE_LABELS_DEMO__!.shown());
+    const shown = await shownLabelBoxes(page);
+    expect(shown.length).toBeGreaterThanOrEqual(3);
     expectClear(shown, [], page.viewportSize()!, 'demo');
     // 地名はスクリーンリーダーに読ませない（装飾）
     await expect(page.locator('.pl-overlay')).toHaveAttribute('aria-hidden', 'true');
@@ -81,15 +92,21 @@ async function goToScene(page: Page, i: number, holdFraction = 0.5): Promise<voi
 
 interface Shown {
   scene: string | null;
-  labels: (Box & { name: string; id: string })[];
+  labels: (Box & { name: string })[];
   obstacles: Box[];
+  keepOut: Box[];
 }
 
-const readLabels = (page: Page): Promise<Shown> =>
-  page.evaluate(() => {
-    const api = window.__PLACE_LABELS__!;
-    return { scene: api.scene(), labels: api.shown().map((l) => ({ ...l })), obstacles: api.obstacles() };
+const readLabels = async (page: Page): Promise<Shown> => {
+  const api = await page.evaluate(() => {
+    const a = window.__PLACE_LABELS__!;
+    return { scene: a.scene(), obstacles: a.obstacles(), keepOut: a.keepOut().map((r) => ({ ...r })), count: a.shown().length };
   });
+  const labels = await shownLabelBoxes(page);
+  // 内部の一覧と、画面に出ている要素の数が合う
+  expect(labels.length).toBe(api.count);
+  return { scene: api.scene, labels, obstacles: api.obstacles, keepOut: api.keepOut };
+};
 
 const VIEWPORTS = [
   { name: 'pc', width: 1280, height: 720, scenes: [0, 1, 2, 3, 4, 5, 6, 7] },
@@ -115,7 +132,7 @@ test.describe('本編の地名', () => {
         const s = await readLabels(page);
         expect(s.scene).toBe(ids[i]);
         expect(s.labels.length, `${vp.name} 場面${i + 1} の地名`).toBeGreaterThanOrEqual(1);
-        expectClear(s.labels, s.obstacles, { width: vp.width, height: vp.height }, `${vp.name} 場面${i + 1}`);
+        expectClear(s.labels, [...s.obstacles, ...s.keepOut], { width: vp.width, height: vp.height }, `${vp.name} 場面${i + 1}`);
         summary[`${i + 1} ${ids[i]}`] = s.labels.map((l) => l.name);
         await page.screenshot({ path: `screenshots/place-labels/${vp.name}-${i + 1}-${ids[i]}.png` });
       }
@@ -124,21 +141,33 @@ test.describe('本編の地名', () => {
     });
   }
 
-  test('場面の間を移る途中は地名を出さず、次の場面に着くと出す', async ({ page }) => {
+  test('止まっているあいだは置き直さず、場面の間を移る途中は地名を出さない', async ({ page }) => {
     const errors = collectErrors(page);
     await page.goto('/');
     await page.waitForFunction(() => window.__APP_READY__ === true, undefined, { timeout: 180_000 });
     await goToScene(page, 1);
     expect((await readLabels(page)).labels.length).toBeGreaterThan(0);
+    // カメラもスクロールも変わらないあいだは、地名を置き直さない（DOM を読まない）
+    const before = await page.evaluate(() => window.__PLACE_LABELS__!.updates());
+    await page.waitForTimeout(1500);
+    expect(await page.evaluate(() => window.__PLACE_LABELS__!.updates())).toBe(before);
     // 場面2 の、カメラが止まっている区間の後（場面3 へ移る途中）
     await page.evaluate(() => {
       const api = window.__MAIN__!;
       const hold = api.holds()[1] ?? 0.4;
       window.scrollTo({ top: api.scrollYFor(1, hold + (1 - hold) * 0.5), behavior: 'instant' });
     });
-    await expect.poll(() => page.evaluate(() => window.__PLACE_LABELS__!.scene())).toBeNull();
-    await expect.poll(() => page.evaluate(() => window.__PLACE_LABELS__!.shown().length)).toBe(0);
-    await expect.poll(() => page.locator('.pl-label.is-shown').count()).toBe(0);
+    // 場面は null、内部の一覧も画面の要素も 0 件。落ちたときに状態が分かるよう、まとめて読む
+    const transit = (): Promise<string> =>
+      page.evaluate(() => {
+        const api = window.__PLACE_LABELS__!;
+        const st = window.__MAIN__!.getState();
+        const els = [...document.querySelectorAll('.pl-label.is-shown')].map((e) => e.textContent);
+        return JSON.stringify({ scene: api.scene(), shown: api.shown().length, elements: els, stage: st.stage, progress: Number(st.progress.toFixed(3)) });
+      });
+    await expect
+      .poll(transit, { timeout: 30_000 })
+      .toMatch(/"scene":null,"shown":0,"elements":\[\]/);
     expect(errors).toEqual([]);
   });
 });

@@ -111,6 +111,9 @@ class StationsController {
   private colorBlend = 0;
   private layoutCache: { key: string; layout: OverlayLayout } | null = null;
   private disposed = false;
+  /** 地名を重ねない形（柱の伸びが同じあいだは作り直さない）。 */
+  private keepOutCache: LabelKeepOut | null = null;
+  private keepOutGrowth = -1;
 
   get isDisposed(): boolean {
     return this.disposed;
@@ -225,10 +228,14 @@ class StationsController {
     return animating;
   }
 
-  /** 地名を重ねない形: 柱（底から頂点までの線分）。表示しているときだけ。 */
+  /**
+   * 地名を重ねない形: 柱（底から頂点までの線分）。表示しているときだけ。柱の伸びが変わったときだけ作り直し、
+   * 変わらないあいだは同じオブジェクトを返す（呼び出し側は参照で変化を見分ける）。
+   */
   labelKeepOut(): LabelKeepOut | null {
     const m = this.markers;
     if (!m || this.active === null || this.visibility === 0) return null;
+    if (this.keepOutCache && this.keepOutGrowth === m.growth) return this.keepOutCache;
     const positions = new Float32Array(m.sites.length * 6);
     const a = new Vector3();
     m.sites.forEach((_, i) => {
@@ -237,7 +244,9 @@ class StationsController {
       m.anchor(i, a);
       positions.set([a.x, a.y, a.z], i * 6 + 3);
     });
-    return { segments: { positions, padPx: 3 } };
+    this.keepOutGrowth = m.growth;
+    this.keepOutCache = { segments: { positions, padPx: 3 } };
+    return this.keepOutCache;
   }
 
   /** いまのカメラでの、柱の底と頂点の画面上の位置。 */

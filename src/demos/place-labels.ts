@@ -1,12 +1,12 @@
 /**
- * 確認ページ: 街の上の地名（`scene/placeLabels.ts`）。台本の場面のカメラで PLATEAU の街並み（変換済みの建物と航空写真の地面）を見せ、
+ * 確認ページ: 街の上の地名（`scene/placeLabels.ts`）。台本の場面のカメラで PLATEAU の街並み（変換済みの建物と、標高の起伏を付けた単色の地面）を見せ、
  * その場面の地名を重ねる。マウスでカメラを動かすと、カメラの高さに応じて出す地名の段階が変わる。
  *
  * URL パラメータ
  * - scene: 台本の場面 id（既定 akihabara-462）。場面の中でカメラが動く場面（場面2）は、場面の終わりのカメラ。
  */
 import { createScene } from '../scene/createScene';
-import { PlaceLabels, type ShownPlaceLabel } from '../scene/placeLabels';
+import { ChangeTracker, PlaceLabels, type ShownPlaceLabel } from '../scene/placeLabels';
 import { addSiteAttribution } from '../scene/plateau/attribution';
 import { PlateauCity } from '../scene/plateau/stage';
 import { applyFit, clipPlanesFor, keyframeToPose, poseToCameraPosition, stopViewFor, viewFor } from '../story/cameraPath';
@@ -81,6 +81,8 @@ const attributionRect = (): { x: number; y: number; w: number; h: number }[] => 
 };
 
 let frames = 0;
+const tracker = new ChangeTracker();
+const sig = new Float64Array(34);
 renderer.setAnimationLoop(() => {
   controls.update();
   const h = Math.max(1, heightAboveGround());
@@ -92,12 +94,20 @@ renderer.setAnimationLoop(() => {
   }
   city.update();
   ctx.render();
-  labels.update(camera, {
-    bounds: { x: 0, y: 0, w: container.clientWidth, h: container.clientHeight },
-    obstacles: attributionRect(),
-    heightAboveGround: h,
-    target: controls.target,
-  });
+  // カメラと画面の大きさが変わったフレームだけ置き直す（本編と同じく、変わらないフレームでは DOM を読まない）
+  camera.updateMatrixWorld();
+  sig.set(camera.matrixWorld.elements, 0);
+  sig.set(camera.projectionMatrix.elements, 16);
+  sig[32] = container.clientWidth;
+  sig[33] = container.clientHeight;
+  if (tracker.changed(sig) || labels.dirty || labels.animating) {
+    labels.update(camera, {
+      bounds: { x: 0, y: 0, w: container.clientWidth, h: container.clientHeight },
+      obstacles: attributionRect(),
+      heightAboveGround: h,
+      target: controls.target,
+    });
+  }
   if (++frames === 2) requestAnimationFrame(() => (window.__APP_READY__ = true));
 });
 

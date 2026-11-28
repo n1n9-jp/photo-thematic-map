@@ -81,6 +81,8 @@ export class AkihabaraBikes {
   readonly field = new BicycleField();
   markers: BikeMarkers | null = null;
   result: (AkihabaraLayoutResult & { loadMs: number }) | null = null;
+  private keepOutFor: unknown = null;
+  private keepOutCache: LabelKeepOut | null = null;
   private ctx: AkihabaraBikesContext | null = null;
   private initPromise: Promise<void> | null = null;
   private group = -1;
@@ -261,7 +263,12 @@ export class AkihabaraBikes {
   labelKeepOut(): LabelKeepOut | null {
     const layout = this.result?.layout;
     if (!layout || !this.field.object.visible || this.debug.shown === 0) return null;
-    return { points: { positions: layout.positions.subarray(0, layout.count * 3), radiusM: layout.bikeLength / 2, minPx: 3 } };
+    // 配置は変わらないので一度だけ作り、同じオブジェクトを返す（呼び出し側は参照で変化を見分ける）
+    if (this.keepOutFor !== layout) {
+      this.keepOutFor = layout;
+      this.keepOutCache = { points: { positions: layout.positions.subarray(0, layout.count * 3), radiusM: layout.bikeLength / 2, minPx: 3 } };
+    }
+    return this.keepOutCache;
   }
 
   /**

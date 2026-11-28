@@ -386,6 +386,8 @@ export class PileModule implements SceneModule {
   private progress = 0;
   private badge: PileLoadingBadge | null = null;
   private unsubscribe: (() => void) | null = null;
+  private keepOutCache: LabelKeepOut | null = null;
+  private keepOutGround = Number.NaN;
 
   constructor(private readonly o: PileModuleOptions) {
     this.id = o.id;
@@ -442,8 +444,13 @@ export class PileModule implements SceneModule {
     const dims = PILE_DIMENSIONS[this.o.site.grid];
     if (!dims) return null;
     const { lat, lon } = this.o.site;
-    const base = latLonToLocal({ lat, lon, alt: ctx.groundHeight(lat, lon) });
-    return { cones: [{ base, radiusM: (dims.diameterM / 2) * 1.05, heightM: dims.heightM }] };
+    // 地表の高さ（標高タイルの読み込みで決まる）が同じあいだは、同じオブジェクトを返す（呼び出し側は参照で変化を見分ける）
+    const ground = ctx.groundHeight(lat, lon);
+    if (this.keepOutCache && this.keepOutGround === ground) return this.keepOutCache;
+    const base = latLonToLocal({ lat, lon, alt: ground });
+    this.keepOutGround = ground;
+    this.keepOutCache = { cones: [{ base, radiusM: (dims.diameterM / 2) * 1.05, heightM: dims.heightM }] };
+    return this.keepOutCache;
   }
 
   private updateBadge(): void {

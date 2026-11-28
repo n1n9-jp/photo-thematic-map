@@ -7,10 +7,14 @@
  * - 地名を置く範囲は、本文カードに覆われていない範囲（駅のラベルと同じ `readOverlayLayout`）。
  * - 重ねないもの: 本文カード・表紙・出典表示・自由操作のボタン・読み込みの表示・駅のラベルと凡例（DOM の矩形）と、
  *   いまの場面の主役（`SceneModule.labelKeepOut`）。
+ * - 毎フレームの負荷: カメラの行列・スクロール位置・画面の大きさ・場面・主役の形（モジュールが作り置いたもの）・読み込みの表示の
+ *   状態を、確保なしで前のフレームと比べ（`ChangeTracker`）、どれも変わらず、変わってから `SETTLE_MS` が過ぎ、消えかけの地名も
+ *   なければ、DOM を読まずに戻る。変わってからしばらく読み続けるのは、本文カード・駅のラベル・凡例の不透明度の切り替え
+ *   （0.35 秒）が、カメラが止まった後にも進むため。
  */
 import type { PerspectiveCamera } from 'three';
 import { localToLatLon } from '../geo/enu';
-import { PlaceLabels, type LabelKeepOut, type PlaceEntry, type Rect, type ShownPlaceLabel } from '../scene/placeLabels';
+import { ChangeTracker, PlaceLabels, type LabelKeepOut, type PlaceEntry, type Rect, type ShownPlaceLabel } from '../scene/placeLabels';
 import { placesForScene, SCENE_PLACE_NAMES } from '../story/content/placeNames';
 import type { ScriptScene } from '../story/content/script';
 import type { Story } from '../story/createStory';
@@ -20,6 +24,8 @@ import type { SceneModule } from './sceneModule';
 /** 一度に出す地名の数の上限（PC 幅・スマートフォン幅）。 */
 const MAX_LABELS_WIDE = 8;
 const MAX_LABELS_NARROW = 5;
+/** 何かが変わってから、DOM を読み続ける時間(ms)。本文カード・駅のラベル・凡例の不透明度の切り替え（最長 0.35 秒）が終わるまで。 */
+const SETTLE_MS = 600;
 
 /** 地名を重ねない DOM の要素。 */
 const OBSTACLE_SELECTOR = [
@@ -37,6 +43,10 @@ export interface PlaceLabelsDebug {
   shown(): readonly ShownPlaceLabel[];
   /** 重ねない DOM の矩形（canvas の入れ物の座標）。 */
   obstacles(): Rect[];
+  /** 主役を画面に投影した矩形（重ねない範囲。canvas の入れ物の座標）。 */
+  keepOut(): readonly Rect[];
+  /** 地名を置き直した回数（変わらないフレームで置き直していないことの確認用）。 */
+  updates(): number;
 }
 
 declare global {
@@ -94,6 +104,16 @@ export class PlaceLabelsLayer {
   private sceneId: string | null = null;
   private layoutCache: { key: string; bounds: Rect; compact: boolean } | null = null;
   private lastObstacles: Rect[] = [];
+  private readonly tracker = new ChangeTracker();
+  /** 比べる値（確保しない）: カメラの行列 16 × 2、スクロール 2、大きさ 3、場面、主役の形の版、読み込みの表示 2。 */
+  private readonly values = new Float64Array(16 * 2 + 2 + 3 + 1 + 1 + 2);
+  private keepOutRef: LabelKeepOut | null = null;
+  private keepOutVersion = 0;
+  private settleUntil = 0;
+  private updateCount = 0;
+  /** 読み込みの表示（data-state が 'loading' の間は障害物になる）。生きた一覧なので、毎フレーム探さない。 */
+  private readonly loadingEls = document.getElementsByClassName('ptm-loading');
+  private readonly pileLoadingEls = document.getElementsByClassName('ptm-pile-loading');
 
   constructor(private readonly o: PlaceLabelsLayerOptions) {
     this.labels = new PlaceLabels(o.container, { groundHeight: o.groundHeight });
@@ -102,6 +122,8 @@ export class PlaceLabelsLayer {
       scene: () => this.sceneId,
       shown: () => this.labels.shown(),
       obstacles: () => this.lastObstacles,
+      keepOut: () => this.labels.keepOut(),
+      updates: () => this.updateCount,
     };
   }
 
@@ -116,7 +138,13 @@ export class PlaceLabelsLayer {
     return here !== undefined && here === SCENE_PLACE_NAMES[this.o.script[stage + 1]!.id] ? stage : -1;
   }
 
-  /** 毎フレーム呼ぶ。 */
+  /** 読み込みの表示の状態（読み込み中なら 1）。 */
+  private static loadingState(list: HTMLCollectionOf<Element>): number {
+    const el = list[0] as HTMLElement | undefined;
+    return el && el.dataset.state !== 'idle' ? 1 : 0;
+  }
+
+  /** 毎フレーム呼ぶ。何も変わらないフレームでは、DOM を読まずに戻る。 */
   update(): void {
     const index = this.currentStage();
     const id = index >= 0 ? (this.o.script[index]?.id ?? null) : null;
@@ -126,7 +154,33 @@ export class PlaceLabelsLayer {
       this.labels.setPlaces([]);
       this.labels.setPlaces(id ? (this.entries.get(id) ?? []) : []);
     }
+    const keepOut: LabelKeepOut | null = index >= 0 ? (this.o.modules[index]?.labelKeepOut?.() ?? null) : null;
+    if (keepOut !== this.keepOutRef) {
+      this.keepOutRef = keepOut;
+      this.keepOutVersion++;
+    }
+
+    // 変化の判定（DOM のレイアウトを読まない値だけ）
+    const camera = this.o.camera;
+    camera.updateMatrixWorld();
     const c = this.o.container;
+    const v = this.values;
+    v.set(camera.matrixWorld.elements, 0);
+    v.set(camera.projectionMatrix.elements, 16);
+    v[32] = window.scrollX;
+    v[33] = window.scrollY;
+    v[34] = c.clientWidth;
+    v[35] = c.clientHeight;
+    v[36] = window.innerHeight;
+    v[37] = index;
+    v[38] = this.keepOutVersion;
+    v[39] = PlaceLabelsLayer.loadingState(this.loadingEls);
+    v[40] = PlaceLabelsLayer.loadingState(this.pileLoadingEls);
+    const now = performance.now();
+    if (this.tracker.changed(v)) this.settleUntil = now + SETTLE_MS;
+    if (now > this.settleUntil && !this.labels.dirty && !this.labels.animating) return;
+
+    this.updateCount++;
     const key = `${c.clientWidth}x${c.clientHeight}|${window.innerHeight}|${id}`;
     if (this.layoutCache?.key !== key) {
       const layout = readOverlayLayout(c);
@@ -134,10 +188,9 @@ export class PlaceLabelsLayer {
     }
     const obstacles = readLabelObstacles(c);
     this.lastObstacles = obstacles;
-    const keepOut: LabelKeepOut | null = index >= 0 ? (this.o.modules[index]?.labelKeepOut?.() ?? null) : null;
-    const cam = this.o.camera.position;
+    const cam = camera.position;
     const ll = localToLatLon({ x: cam.x, y: 0, z: cam.z });
-    this.labels.update(this.o.camera, {
+    this.labels.update(camera, {
       bounds: this.layoutCache.bounds,
       obstacles,
       keepOut,
