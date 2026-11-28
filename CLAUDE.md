@@ -93,4 +93,5 @@ E2E は `/opt/pw-browsers/chromium` を使う。preview サーバーのポート
 - コミット前に `npm run typecheck`・`npm run lint`・`npm test`・`npm run test:e2e` をすべて通す。
 - アプリは最初のフレーム描画後に `window.__APP_READY__ = true` を設定する。E2E はこれを待つ。
 - コンソールエラー0件を保つ（E2E が検査する）。
+- 文字の載る UI の色・行間・文字サイズ・余白・角丸・影は `src/styles/tokens.css` の `--ptm-*` で書き、値を直接書かない。例外は配置の計算と結び付いた寸法（凡例の幅 292・430・218px と配置の余白、本文カードの配置の変数 `--story-*`、ボタンや表示の `top`・`right` など画面の端からの位置）と、データの色（駅の柱・凡例の色の段階 `COLOR_STEPS`・`VACANCY_COLORS`）。hover の色は `@media (hover: hover)` の中に書き、フォーカスの輪は `--ptm-focus-ring` を要素の影に重ねる（強制カラーで見えるよう、透明の `outline` を持たせる）。
 - 作業ブランチは `claude/*`。PR のタイトル・本文は日本語。
