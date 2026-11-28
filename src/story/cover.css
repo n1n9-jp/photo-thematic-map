@@ -203,7 +203,7 @@
     --cover-subtitle-size: var(--ptm-text-base);
     --cover-lead-size: var(--ptm-text-sm);
     --cover-lead-leading: 1.7;
-    --cover-meta-size: var(--ptm-text-2xs);
+    --cover-meta-size: var(--ptm-text-3xs);
     --cover-pad: var(--ptm-space-4);
     --cover-gap-title: var(--ptm-space-2);
     --cover-gap-section: var(--ptm-space-3);
@@ -262,7 +262,7 @@
     --cover-subtitle-size: var(--ptm-text-sm);
     --cover-lead-size: var(--ptm-text-sm);
     --cover-lead-leading: 1.6;
-    --cover-meta-size: var(--ptm-text-2xs);
+    --cover-meta-size: var(--ptm-text-3xs);
     --cover-pad: var(--ptm-space-4);
     --cover-gap-title: var(--ptm-space-1);
     --cover-gap-section: var(--ptm-space-2);
