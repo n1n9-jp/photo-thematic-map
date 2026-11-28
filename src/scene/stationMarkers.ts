@@ -522,13 +522,14 @@ const CSS = `
   .sm-legend-total{margin-top:var(--ptm-space-1);padding-top:var(--ptm-space-1);font-size:var(--ptm-text-xs)}
   .sm-legend-note{font-size:var(--ptm-text-3xs)}
 }
-.sm-legend.sm-legend--wide{display:grid;grid-template-columns:auto 1fr;column-gap:var(--ptm-space-4);row-gap:var(--ptm-space-1);align-items:center;
-  padding:var(--ptm-space-3)}
+/* 横長の凡例は、地図の上側の余白に収まるよう高さを抑える（柱を隠さない）。 */
+.sm-legend.sm-legend--wide{display:grid;grid-template-columns:auto 1fr;column-gap:var(--ptm-space-4);row-gap:2px;align-items:center;
+  padding:var(--ptm-space-2) var(--ptm-space-3)}
 .sm-legend--wide .sm-legend-title{grid-column:1/-1;margin-bottom:0}
 .sm-legend--wide .sm-legend-key{grid-column:1;grid-row:2/4}
 .sm-legend--wide .sm-legend-steps{grid-column:2;grid-row:2;margin:0}
-.sm-legend--wide .sm-legend-total{grid-column:2;grid-row:3;margin:0;padding-top:var(--ptm-space-1)}
-.sm-legend--wide .sm-legend-note{grid-column:1/-1;margin-top:2px}
+.sm-legend--wide .sm-legend-total{grid-column:2;grid-row:3;margin:0;padding-top:0;border-top:0}
+.sm-legend--wide .sm-legend-note{grid-column:1/-1;margin-top:0;font-size:var(--ptm-text-3xs)}
 .sm-legend.sm-legend--compact{width:218px;padding:6px var(--ptm-space-2);font-size:var(--ptm-text-3xs);line-height:1.35}
 .sm-legend--compact .sm-legend-title{font-size:var(--ptm-text-2xs);margin-bottom:2px}
 .sm-legend--compact .sm-legend-key svg{display:none}
