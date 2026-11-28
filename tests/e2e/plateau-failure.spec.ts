@@ -39,6 +39,8 @@ for (const c of CASES) {
     expect(requests - atReady).toBeLessThanOrEqual(6);
     // 失敗した件数を外から読める
     expect(stats[c.statKey]).toBeGreaterThan(0);
+    // 標高を取得できなくても、地面（0m の不透明な面）は表示される
+    if (c.statKey === 'elevationFailed') expect(stats.groundTiles).toBeGreaterThan(0);
     // コンソールエラーは、ブラウザが失敗した要求ごとに出すもの以外は出さない
     expect(errors.filter((e) => !e.includes('net::ERR_FAILED'))).toEqual([]);
     expect(errors.length).toBeLessThanOrEqual(requests);

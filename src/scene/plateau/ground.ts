@@ -10,8 +10,10 @@
  * - 子タイルの有無は親の画像の陸の範囲から判断し、海だけの範囲には地面を作らない。
  *   標高タイルも、親の標高が無効値だけの範囲は要求しない（存在しないタイルの 404 をコンソールに出さない）。
  * - 標高タイルは、ズーム14までは同じズームの 10m メッシュ、それより細かいタイルはズーム15 の 5m メッシュを取得し、
- *   さらに細かいタイルは祖先の標高を使う（新たには取得しない）。取得できないときは祖先の標高（無ければ 0m）で作る。
- *   取得の再試行と失敗の集計は `tileFetch.ts`。
+ *   さらに細かいタイルは祖先の標高を使う（新たには取得しない）。存在しない標高タイル（404。海の上）は「陸がない」とみなす。
+ * - 標高タイルを取得できなかった（回線の失敗などで、再試行の上限に達した）タイルは、祖先の標高（無ければ 0m）で、
+ *   無効値も海とせずに不透明な地面を作って表示し（地面が抜けて物が浮かないように）、子にも同じ扱いを引き継ぐ。
+ *   `retryFailedTiles()` で、そのタイルから下を作り直す。取得の再試行と失敗の集計は `tileFetch.ts`。
  * - メモリ: 保持するタイル数に上限を設け、使っていないタイルの画像・標高の参照・木の枝を解放する。
  *   画像と UV は GPU へ転送した後に CPU 側から解放する。
  */
@@ -43,7 +45,7 @@ import { BASE_LAND_COLOR } from './baseGround';
 import { plateauMemoryBudget, releaseAfterUpload } from './budget';
 import { GsiElevationSource, fetchImagePixels, hasValidHeights, sampleDem } from './elevation';
 import type { DemKind, DemTile, FetchPixels } from './elevation';
-import { TileFetchPolicy, reportTileFailure } from './tileFetch';
+import { TileFetchPolicy, TileUnavailableError, reportTileFailure } from './tileFetch';
 import type { TileFetchPolicyOptions } from './tileFetch';
 
 export interface PlateauGroundOptions {
@@ -53,7 +55,10 @@ export interface PlateauGroundOptions {
   radiusM?: number;
   /** 最も粗いズーム。既定 10。 */
   minZoom?: number;
-  /** 最も細かいズーム。既定 19（1 タイル約 60m、頂点の間隔 約 4m で 5m メッシュの標高を写せる）。 */
+  /**
+   * 最も細かいズーム。既定 18（1 タイル約 124m、頂点の間隔 約 7.7m、画像の 1 画素 約 1m）。標高は 5m メッシュまでなので、
+   * これより細かくしても地面の形と陰影はほぼ変わらない。
+   */
   maxZoom?: number;
   /**
    * タイルを子に分ける基準。タイルの画面上の大きさが TILE_PX×この値(px) を超えたら分ける。大きいほど粗いタイルで済ませる。
@@ -74,8 +79,8 @@ export interface PlateauGroundOptions {
   fetchPixels?: FetchPixels;
 }
 
-/** unavailable: 陸がない（海だけの範囲）。failed: 標高を復号できなかった。 */
-type NodeState = 'idle' | 'loading' | 'ready' | 'unavailable' | 'failed';
+/** unavailable: 陸がない（海だけの範囲）。 */
+type NodeState = 'idle' | 'loading' | 'ready' | 'unavailable';
 
 interface GroundNode {
   z: number;
@@ -93,6 +98,11 @@ interface GroundNode {
   children: (GroundNode | null)[] | null;
   /** 細かい順の標高タイル（自分で取得したもの → 祖先のもの）。 */
   dems: DemTile[];
+  /**
+   * 自分か祖先が標高タイルを取得できず、その代わりの標高で作った（不透明な地面）。読み込み後に確定する。
+   * retryFailedTiles() で、このタイルから下を作り直す。
+   */
+  fallback: boolean;
   lastUsed: number;
 }
 
@@ -162,7 +172,7 @@ export class PlateauGround {
     this.radiusM = options.radiusM ?? 6000;
     this.rootBounds = options.rootBounds;
     this.minZoom = options.minZoom ?? 10;
-    this.maxZoom = options.maxZoom ?? 19;
+    this.maxZoom = options.maxZoom ?? 18;
     const budget = plateauMemoryBudget();
     this.detailScale = options.detailScale ?? budget.groundDetailScale;
     this.concurrency = options.concurrency ?? 12;
@@ -242,13 +252,30 @@ export class PlateauGround {
     return this.elevation.failedTileCount;
   }
 
-  /** 取得できなかったタイルを、次のフレームから取り直す（配信サーバーに再び接続できたときなど）。 */
+  /**
+   * 標高タイルを取得できなかったタイルを、次のフレームから取り直す（配信サーバーに再び接続できたときなど）。
+   * 代わりの標高で作ったタイル（fallback）から下を捨てて作り直す。作り直すまでは、親のタイルが表示される。
+   */
   retryFailedTiles(): void {
     this.elevation.policy.reset();
-    // 取得できなかった標高タイルは null としてキャッシュしているので、キャッシュごと捨てる
+    // 取得できなかった標高タイルは失敗としてキャッシュしているので、キャッシュごと捨てる
     this.elevation.dispose();
+    const drop = (node: GroundNode): void => {
+      for (const child of node.children ?? []) if (child) drop(child);
+      if (this.loaded.has(node)) {
+        this.unload(node);
+        this.loaded.delete(node);
+      }
+      if (node.state !== 'loading') node.state = 'idle';
+      node.children = null;
+      node.land = null;
+      node.fallback = false;
+    };
     const visit = (node: GroundNode): void => {
-      if (node.state === 'failed') node.state = 'idle';
+      if (node.fallback) {
+        drop(node);
+        return;
+      }
       for (const child of node.children ?? []) if (child) visit(child);
     };
     for (const root of this.roots.values()) visit(root);
@@ -315,6 +342,7 @@ export class PlateauGround {
       land: null,
       children: null,
       dems: parent ? parent.dems : [],
+      fallback: false,
       lastUsed: 0,
     };
   }
@@ -343,12 +371,11 @@ export class PlateauGround {
 
   /**
    * 表示するタイルと読み込むタイルを選ぶ。読み込み済みのタイルは、細かくしたいときに子（が全部そろうまでは自分）を表示する。
-   * 子のどれかが読めなかった（failed）ときは、子へ進まずに自分を表示する（その範囲に地面が欠けないように）。
    */
   private select(node: GroundNode, visible: Set<GroundNode>, wanted: GroundNode[]): void {
     if (!this.inView(node)) return;
     node.lastUsed = this.frame;
-    if (node.state === 'unavailable' || node.state === 'failed') return;
+    if (node.state === 'unavailable') return;
     if (node.state !== 'ready') {
       if (node.state === 'idle') wanted.push(node);
       return;
@@ -359,10 +386,9 @@ export class PlateauGround {
         for (const k of kids) this.select(k, visible, wanted);
         return;
       }
-      const anyFailed = kids.some((k) => k.state === 'failed');
       for (const k of kids) {
         k.lastUsed = this.frame;
-        if (!anyFailed && k.state === 'idle') wanted.push(k);
+        if (k.state === 'idle') wanted.push(k);
       }
     }
     visible.add(node);
@@ -372,7 +398,7 @@ export class PlateauGround {
     return this.inRange(node) && this.frustum.intersectsBox(node.box);
   }
 
-  /** 陸があり、範囲と視野に入る子。読めなかった子（failed）も含む。 */
+  /** 陸があり、範囲と視野に入る子。 */
   private viewKids(node: GroundNode): GroundNode[] {
     return this.childrenOf(node).filter((k): k is GroundNode => k !== null && k.state !== 'unavailable' && this.inView(k));
   }
@@ -389,11 +415,24 @@ export class PlateauGround {
   private async load(node: GroundNode): Promise<void> {
     node.state = 'loading';
     this.loadingCount++;
+    // 待っている間に親が解放されても（dems が空になる）、読み始めたときの親の標高で作る
+    const parentDems = node.parent?.dems ?? [];
+    const parentFallback = node.parent?.fallback ?? false;
     try {
-      const ownDem = await this.loadDem(node);
+      let ownDem: DemTile | null = null;
+      let failed = false;
+      try {
+        ownDem = await this.loadDem(node, parentDems, parentFallback);
+      } catch (err) {
+        // 再試行の上限に達した（TileUnavailableError。報告は tileFetch.ts がまとめて行う）か、標高を復号できなかった
+        failed = true;
+        if (!(err instanceof TileUnavailableError)) reportTileFailure('標高');
+      }
       if (this.disposed) return;
-      node.dems = ownDem ? [ownDem, ...(node.parent?.dems ?? [])] : (node.parent?.dems ?? []);
-      const surface = buildSurface(node.z, node.x, node.y, node.dems);
+      node.dems = ownDem ? [ownDem, ...parentDems] : parentDems;
+      node.fallback = failed || (parentFallback && !ownDem);
+      // 標高がまったくない（最も粗い段から取得できなかった）ときは、0m の不透明な地面にする
+      const surface = buildSurface(node.z, node.x, node.y, node.dems, TEX, node.fallback && node.dems.length === 0);
       node.land = quadrantsWithAlpha(surface.pixels, TEX, TEX);
       if (!node.land.some(Boolean)) {
         node.state = 'unavailable';
@@ -403,10 +442,6 @@ export class PlateauGround {
       this.group.add(node.mesh);
       node.state = 'ready';
       this.loaded.add(node);
-    } catch (err) {
-      // 再試行の上限に達した（TileUnavailableError。報告は tileFetch.ts がまとめて行う）か、標高を復号できなかった
-      node.state = 'failed';
-      if (!(err instanceof Error && err.name === 'TileUnavailableError')) reportTileFailure('標高');
     } finally {
       this.loadingCount--;
     }
@@ -414,25 +449,29 @@ export class PlateauGround {
 
   /**
    * このタイルのために新たに取得する標高タイル（ズーム14までは同じズームの 10m メッシュ、それより細かいタイルは
-   * ズーム15 の 5m メッシュ）。親が自分の標高を取得できていない範囲や、親の標高に有効値が無い範囲は取得しない。
+   * ズーム15 の 5m メッシュ）。祖先の標高で足りる細かいタイルと、親が自分の標高を取得して有効値が無いと分かっている範囲
+   * （海）は取得しない。親が代わりの標高で作られた（fallback）ときは、範囲の判断ができないので取得を試す。
+   * 存在しない（404）なら null、取得できなければ TileUnavailableError を投げる。
    */
-  private async loadDem(node: GroundNode): Promise<DemTile | null> {
+  private async loadDem(node: GroundNode, parentDems: readonly DemTile[], parentFallback: boolean): Promise<DemTile | null> {
     const { z, parent } = node;
     const zt = demZoom(z);
     const kind: DemKind = zt === GSI_DEM5A_ZOOM ? 'dem5a' : 'dem10';
     const tx = node.x >> (z - zt);
     const ty = node.y >> (z - zt);
     if (parent) {
-      const ancestorDem = parent.dems[0];
-      if (!ancestorDem || ancestorDem.z >= zt) return null;
-      if (ancestorDem.z !== demZoom(parent.z)) return null;
-      const scale = 2 ** (zt - ancestorDem.z);
-      const size = Math.max(1, DEM_SIZE / scale);
-      const ox = Math.floor((tx - ancestorDem.x * scale) * size);
-      const oy = Math.floor((ty - ancestorDem.y * scale) * size);
-      if (!hasValidHeights(ancestorDem, ox, oy, ox + size, oy + size)) return null;
+      const ancestorDem = parentDems[0];
+      if (ancestorDem && ancestorDem.z >= zt) return null;
+      if (!parentFallback) {
+        if (!ancestorDem || ancestorDem.z !== demZoom(parent.z)) return null;
+        const scale = 2 ** (zt - ancestorDem.z);
+        const size = Math.max(1, DEM_SIZE / scale);
+        const ox = Math.floor((tx - ancestorDem.x * scale) * size);
+        const oy = Math.floor((ty - ancestorDem.y * scale) * size);
+        if (!hasValidHeights(ancestorDem, ox, oy, ox + size, oy + size)) return null;
+      }
     }
-    return this.elevation.getTile(kind, zt, tx, ty);
+    return this.elevation.loadTile(kind, zt, tx, ty);
   }
 
   private buildMesh(node: GroundNode, surface: GroundSurface): Mesh {
@@ -594,6 +633,8 @@ class DemSampler {
   /** 標高タイルごとの、列 i・行 j の画素位置（タイルの外なら NaN）。 */
   private readonly px: Float64Array[];
   private readonly py: Float64Array[];
+  /** 直前の at() の値を引いた標高タイルの番号（dems の添字。無効なら −1）。 */
+  lastSource = -1;
 
   constructor(
     private readonly dems: readonly DemTile[],
@@ -635,26 +676,45 @@ class DemSampler {
       const py = this.py[k]![jj]!;
       if (Number.isNaN(px) || Number.isNaN(py)) continue;
       const h = sampleDem(this.dems[k]!, px, py);
-      if (!Number.isNaN(h)) return h;
+      if (!Number.isNaN(h)) {
+        this.lastSource = k;
+        return h;
+      }
     }
+    this.lastSource = -1;
     return Number.NaN;
   }
 }
 
 export interface GroundSurface {
-  /** TEX×TEX の RGBA（sRGB）。陸は陸の色に陰影を掛けた色で不透明、海（標高の無効値）は透明。 */
+  /** TEX×TEX の RGBA（sRGB）。陸は陸の色に陰影を掛けた色で不透明、海（標高の無効値）は透明（opaque のときは不透明）。 */
   pixels: Uint8Array;
 }
 
 /**
  * タイル (z, x, y) に貼る画像を、細かい順の標高タイルから作る。各画素の中心の標高を引き、上下左右の画素との差から
  * 傾きを求めて、光（LIGHT）に向く斜面を明るく、背く斜面を暗くする（平らな面は陸の色のまま）。
+ * 隣の画素が別の標高タイル（5m メッシュの縁の外で 10m メッシュから引いたなど）の値なら、その差は使わず片側の差で求める
+ * （標高タイルの縁に陰影の線が出ないように）。opaque なら、標高の無効値も透明にせず陸の色にする。
  */
-export function buildSurface(z: number, x: number, y: number, dems: readonly DemTile[], size: number = TEX): GroundSurface {
+export function buildSurface(
+  z: number,
+  x: number,
+  y: number,
+  dems: readonly DemTile[],
+  size: number = TEX,
+  opaque = false,
+): GroundSurface {
   const sampler = new DemSampler(dems, z, x, y, size, 1, 0.5);
   const w = size + 2;
   const heights = new Float32Array(w * w);
-  for (let j = -1; j <= size; j++) for (let i = -1; i <= size; i++) heights[(j + 1) * w + (i + 1)] = sampler.at(i, j);
+  const sources = new Int8Array(w * w);
+  for (let j = -1; j <= size; j++) {
+    for (let i = -1; i <= size; i++) {
+      heights[(j + 1) * w + (i + 1)] = sampler.at(i, j);
+      sources[(j + 1) * w + (i + 1)] = sampler.lastSource;
+    }
+  }
   // 画素の間隔(m)。タイルはメルカトルの正方形なので、東西と南北はほぼ同じ
   const a = latLonToLocal({ lat: tileYToLat(y, z), lon: tileXToLon(x, z) });
   const b = latLonToLocal({ lat: tileYToLat(y + 1, z), lon: tileXToLon(x + 1, z) });
@@ -664,7 +724,9 @@ export function buildSurface(z: number, x: number, y: number, dems: readonly Dem
   const g0 = (BASE_LAND_COLOR >> 8) & 255;
   const b0 = BASE_LAND_COLOR & 255;
   const pixels = new Uint8Array(size * size * 4);
-  const h = (i: number, j: number): number => heights[(j + 1) * w + (i + 1)] ?? Number.NaN;
+  /** 画素 (i, j) の標高。中心の画素 (ci, cj) と別の標高タイルの値なら NaN。 */
+  const h = (i: number, j: number, ci: number, cj: number): number =>
+    sources[(j + 1) * w + (i + 1)] === sources[(cj + 1) * w + (ci + 1)] ? (heights[(j + 1) * w + (i + 1)] ?? Number.NaN) : Number.NaN;
   /** 片側が無効なら、もう片側との差で傾きを求める。 */
   const slope = (hm: number, hc: number, hp: number, step: number): number => {
     if (!Number.isNaN(hm) && !Number.isNaN(hp)) return (hp - hm) / (2 * step);
@@ -675,17 +737,17 @@ export function buildSurface(z: number, x: number, y: number, dems: readonly Dem
   for (let j = 0; j < size; j++) {
     for (let i = 0; i < size; i++) {
       const k = (j * size + i) * 4;
-      const hc = h(i, j);
+      const hc = heights[(j + 1) * w + (i + 1)] ?? Number.NaN;
       let shade = 1;
       if (!Number.isNaN(hc)) {
-        const sx = slope(h(i - 1, j), hc, h(i + 1, j), dx) * RELIEF_EXAGGERATION;
-        const sz = slope(h(i, j - 1), hc, h(i, j + 1), dz) * RELIEF_EXAGGERATION;
+        const sx = slope(h(i - 1, j, i, j), hc, h(i + 1, j, i, j), dx) * RELIEF_EXAGGERATION;
+        const sz = slope(h(i, j - 1, i, j), hc, h(i, j + 1, i, j), dz) * RELIEF_EXAGGERATION;
         shade = reliefShade(sx, sz);
       }
       pixels[k] = Math.min(255, Math.round(r0 * shade));
       pixels[k + 1] = Math.min(255, Math.round(g0 * shade));
       pixels[k + 2] = Math.min(255, Math.round(b0 * shade));
-      pixels[k + 3] = Number.isNaN(hc) ? 0 : 255;
+      pixels[k + 3] = opaque || !Number.isNaN(hc) ? 255 : 0;
     }
   }
   return { pixels };

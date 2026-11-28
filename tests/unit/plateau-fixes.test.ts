@@ -267,6 +267,19 @@ describe("GsiElevationSource のキャッシュ", () => {
     expect(source.size).toBe(0);
   });
 
+  it("loadTile は、存在しない（404）タイルを null、取得できなかったタイルを TileUnavailableError で返す", async () => {
+    const policy = new TileFetchPolicy(
+      "標高",
+      { maxAttempts: 1, breakerThreshold: 1000 },
+      ((url: string) =>
+        url.includes("/1/1.png") ? Promise.resolve(new Response(null, { status: 404 })) : Promise.reject(new TypeError("Failed to fetch"))) as unknown as typeof fetch,
+    );
+    const source = new GsiElevationSource({ policy });
+    expect(await source.loadTile("dem10", 14, 1, 1)).toBeNull();
+    await expect(source.loadTile("dem10", 14, 1, 2)).rejects.toBeInstanceOf(TileUnavailableError);
+    expect(await source.getTile("dem10", 14, 1, 2)).toBeNull();
+  });
+
   it("標高タイルを取得できなくても elevationAt は 0 を返す", async () => {
     const policy = new TileFetchPolicy("標高", { maxAttempts: 1 }, (() =>
       Promise.reject(new TypeError("Failed to fetch"))) as typeof fetch);

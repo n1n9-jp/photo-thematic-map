@@ -119,14 +119,15 @@ export type FetchPixels = typeof fetchImagePixels;
 
 /**
  * 標高タイルの取得とキャッシュ（LRU）。
- * 取得できなかったタイル（存在しない・上限まで再試行しても失敗）は null として覚え、要求し直さない。
+ * 存在しないタイル（404。海の上など）は null として、取得できなかったタイル（上限まで再試行しても失敗）は失敗として覚え、
+ * どちらも要求し直さない（取得できなかったタイルは、キャッシュを空にすれば取り直す）。
  */
 export class GsiElevationSource {
   /** 再試行の方針（失敗の件数は failedTileCount）。 */
   readonly policy: TileFetchPolicy;
   private readonly maxTiles: number;
   private readonly fetchPixels: FetchPixels;
-  /** 挿入順＝使った順（古い順）。 */
+  /** 挿入順＝使った順（古い順）。取得できなかったタイルは TileUnavailableError で拒否される Promise。 */
   private readonly cache = new Map<string, Promise<DemTile | null>>();
 
   constructor(options: GsiElevationSourceOptions = {}) {
@@ -149,7 +150,20 @@ export class GsiElevationSource {
    * 標高タイルを取得する（同じタイルは 1 回だけ取得）。存在しない・取得できなければ null。
    * キャッシュから外れたタイルも、呼び出し側が持っている参照は使い続けられる。
    */
-  getTile(kind: DemKind, z: number, x: number, y: number): Promise<DemTile | null> {
+  async getTile(kind: DemKind, z: number, x: number, y: number): Promise<DemTile | null> {
+    try {
+      return await this.loadTile(kind, z, x, y);
+    } catch (err) {
+      if (err instanceof TileUnavailableError) return null;
+      throw err;
+    }
+  }
+
+  /**
+   * getTile と同じだが、取得できなかった（上限まで再試行しても失敗した）タイルは TileUnavailableError を投げる。
+   * 存在しないタイル（海の上など）は null。地面は、この 2 つを区別して、取得できなかった範囲を取り直せるようにする。
+   */
+  loadTile(kind: DemKind, z: number, x: number, y: number): Promise<DemTile | null> {
     const key = `${kind}/${z}/${x}/${y}`;
     let p = this.cache.get(key);
     if (p) {
@@ -165,12 +179,13 @@ export class GsiElevationSource {
         return { kind, z, x, y, heights: decodeDemPixels(img.pixels) };
       },
       (err: unknown) => {
-        if (err instanceof TileUnavailableError) return null;
-        // 復号の失敗など。キャッシュに残さず、次に要求されたときに取り直す
-        if (this.cache.get(key) === p) this.cache.delete(key);
+        // 取得不能はキャッシュに残し、要求し直さない。復号の失敗などは残さず、次に要求されたときに取り直す
+        if (!(err instanceof TileUnavailableError) && this.cache.get(key) === p) this.cache.delete(key);
         throw err;
       },
     );
+    // 取得不能で拒否された Promise を、誰も待っていなくても未処理の拒否にしない
+    p.catch(() => undefined);
     this.cache.set(key, p);
     while (this.cache.size > this.maxTiles) {
       const oldest = this.cache.keys().next().value;

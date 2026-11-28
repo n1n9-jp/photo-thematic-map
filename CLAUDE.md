@@ -52,9 +52,10 @@ E2E は `/opt/pw-browsers/chromium` を使う。preview サーバーのポート
 
 地面に航空写真は使わない（PLATEAU-Ortho も国土地理院の写真も読まない）。`tests/e2e/ground.spec.ts` が、本編の8場面を巡っても航空写真のタイルを要求しないことを確かめ、各場面を PC 幅とスマートフォン幅で `screenshots/ground/` に撮る。変更の前後の画面は `docs/design/ground/`。
 
-- `src/scene/plateau/ground.ts` が、標高タイルの四分木（ズーム10〜19）でカメラからの距離に応じた細かさのメッシュを作る。タイルの画面上の大きさが 256px × `detailScale`（`budget.ts` の `groundDetailScale`。パソコン 1.5・スマートフォン 2）を超えたら子に分ける。
+- `src/scene/plateau/ground.ts` が、標高タイルの四分木（ズーム10〜18。標高は 5m メッシュまでなので、これより細かくしても形と陰影はほぼ変わらない）でカメラからの距離に応じた細かさのメッシュを作る。タイルの画面上の大きさが 256px × `detailScale`（`budget.ts` の `groundDetailScale`。パソコン 1.5・スマートフォン 2）を超えたら子に分ける。
 - 標高タイルを取得するのはズーム15まで（ズーム14まで 10m メッシュ、ズーム15 で 5m メッシュ）。より細かいタイルは祖先の標高を使う。
-- 色は `baseGround.ts` の `BASE_LAND_COLOR`（陸）と `BASE_SEA_COLOR`（海）。各タイルに、陸の色に標高の傾きから求めた控えめな陰影（`RELIEF_STRENGTH`・`RELIEF_EXAGGERATION`。光はシーンの太陽と同じ西南西の上から）を掛けた小さな画像を貼る。標高の無効値（海）は透明にし、下の海の面が見える。
+- 色は `baseGround.ts` の `BASE_LAND_COLOR`（陸）と `BASE_SEA_COLOR`（海）。各タイルに、陸の色に標高の傾きから求めた控えめな陰影（`RELIEF_STRENGTH`・`RELIEF_EXAGGERATION`。光はシーンの太陽と同じ西南西の上から）を掛けた小さな画像を貼る。標高の無効値（海）は透明にし、下の海の面が見える。陰影の傾きは同じ標高タイルの画素どうしで求める（5m と 10m の境に線を出さない）。
+- 標高タイルを取得できなかった（回線の失敗など）タイルは、祖先の標高（無ければ 0m）で不透明な地面を作って表示し、`retryFailedTiles()` で作り直す。存在しない標高タイル（404）は海とみなす。
 
 ## 静的アセットのパスと favicon
 
