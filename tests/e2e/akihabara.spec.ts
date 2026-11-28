@@ -3,7 +3,7 @@
  */
 import { expect, test, type Page } from '@playwright/test';
 
-// ソフトウェア描画（SwiftShader）では、地上の目線の航空写真と建物の読み込みに数分かかる
+// ソフトウェア描画（SwiftShader）では、地上の目線の地面と建物の読み込みに数分かかる
 test.describe.configure({ timeout: 600_000 });
 
 async function open(page: Page, query: string): Promise<string[]> {

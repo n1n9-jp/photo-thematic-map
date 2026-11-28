@@ -1,5 +1,5 @@
 /**
- * PLATEAU の街並み（建物 3D Tiles ＋ 航空写真の地面）を表示する舞台一式。
+ * PLATEAU の街並み（建物 3D Tiles ＋ 標高の起伏を付けた単色の地面）を表示する舞台一式。
  *
  * - `PlateauCity`: 既存のシーンに足す街並み。建物は白で描く（写真テクスチャは使わない）。建物の読み方は 2 つ:
  *   - `buildings: 'baked'`（本編の既定）: 変換済みの建物（`public/data/buildings/`。`npm run data:buildings`）を
@@ -8,7 +8,8 @@
  *     LOD2 テクスチャなし（lod2_no_texture）の 3D Tiles を直接読む。詳細度は画面上の誤差で選ぶので、遠くの建物は粗いタイルで済む。
  *     `setFocus()` で読み込む区を差し替えられる（本編はカメラの注視点＝場面の場所に合わせて切り替える）。
  *   地面の半径と建物の表示はカメラの高さに合わせて変える（高さ 28km の俯瞰では建物を描かず、地面を23区全体に敷く）。
- *   航空写真の下には、広い範囲を覆う単色の地面と海（`baseGround.ts`）を敷き、航空写真のない範囲が空の色で抜けないようにする。
+ *   地面（`ground.ts`）は国土地理院の標高タイルで起伏を付けた単色の面で、航空写真は使わない。その下に、広い範囲を覆う
+ *   平らな地面と海（`baseGround.ts`）を敷き、起伏の付いた地面を敷かない範囲（遠く・海）が空の色で抜けないようにする。
  * - `createPlateauStage`: renderer・カメラ・OrbitControls まで含めた単独の舞台（確認ページ demos/plateau 用）。
  */
 import {
@@ -58,15 +59,15 @@ export interface PlateauCityOptions {
   groundMinRadiusM?: number;
   /** カメラの高さ 1m あたりに地面の半径を広げる量(m)。既定 1.8（仰角 55° 前後の俯瞰で画面の端まで敷ける）。 */
   groundRadiusPerHeight?: number;
-  /** 航空写真の最も粗いタイル（ズーム10）を要求する範囲。既定 `ORTHO_ROOT_BOUNDS`。 */
+  /** 起伏の付いた地面の最も粗いタイル（ズーム10）を作る範囲。既定 `GROUND_ROOT_BOUNDS`。 */
   groundRootBounds?: { west: number; south: number; east: number; north: number };
 }
 
 /**
- * 航空写真（PLATEAU-Ortho、ズーム10）が揃っている範囲（23区とその周り）。
- * これより外の最も粗いタイルは 404 になるので要求しない。2026-11 にズーム10 のタイルの有無を調べて決めた。
+ * 起伏の付いた地面を敷く範囲（23区とその周り、ズーム10 のタイルの単位）。これより外は、下に敷いた平らな地面と海だけにして、
+ * 標高タイルを読まない（俯瞰でも霧で霞む距離）。
  */
-export const ORTHO_ROOT_BOUNDS = { west: 139.22, south: 35.47, east: 140.27, north: 36.03 } as const;
+export const GROUND_ROOT_BOUNDS = { west: 139.22, south: 35.47, east: 140.27, north: 36.03 } as const;
 
 /** 連続でこのフレーム数だけ読み込み待ちがなければ「出そろった」とみなす。 */
 const SETTLE_FRAMES = 10;
@@ -106,7 +107,7 @@ export interface PlateauCityStatus {
 
 export class PlateauCity {
   readonly ground: PlateauGround;
-  /** 航空写真の下に敷く単色の地面と海（航空写真のない範囲を空の色で抜かさない）。 */
+  /** 起伏の付いた地面の下に敷く平らな地面と海（起伏の付いた地面のない範囲を空の色で抜かさない）。 */
   readonly baseGround: BaseGround;
   /** 建物と地面の初回読み込みが終わると解決する。 */
   readonly ready: Promise<void>;
@@ -129,7 +130,7 @@ export class PlateauCity {
       camera: options.camera,
       renderer: options.renderer,
       radiusM: options.groundMinRadiusM ?? 6000,
-      rootBounds: options.groundRootBounds ?? ORTHO_ROOT_BOUNDS,
+      rootBounds: options.groundRootBounds ?? GROUND_ROOT_BOUNDS,
     });
     options.scene.add(this.ground.group);
     this.baseGround = new BaseGround();
@@ -208,11 +209,11 @@ export class PlateauCity {
     return [...this.layers.values()];
   }
 
-  /** 取得できなかったタイルの数（建物・航空写真・標高）。 */
-  get failedTileCount(): { buildings: number; ground: number; elevation: number } {
+  /** 取得できなかったタイルの数（建物・標高）。 */
+  get failedTileCount(): { buildings: number; elevation: number } {
     let buildings = this.baked?.failedCount ?? 0;
     for (const layer of this.layers.values()) buildings += layer.failedTileCount;
-    return { buildings, ground: this.ground.failedTileCount, elevation: this.ground.failedElevationTileCount };
+    return { buildings, elevation: this.ground.failedElevationTileCount };
   }
 
   /** 取得できなかったタイルを取り直す（配信サーバーに再び接続できたときなど）。 */

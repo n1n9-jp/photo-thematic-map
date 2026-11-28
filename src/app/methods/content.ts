@@ -54,7 +54,6 @@ export const METHODS_HEADING_ID = 'data-and-methods-heading';
 /** リンク先（すべて https）。 */
 export const LINKS = {
   plateau: 'https://www.mlit.go.jp/plateau/',
-  plateauOrtho: 'https://docs.plateauview.mlit.go.jp/datasets/ortho/',
   gsiTiles: 'https://maps.gsi.go.jp/development/ichiran.html',
   stationsN02: 'https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-N02-2024.html',
   threeJs: 'https://threejs.org/',
@@ -243,16 +242,10 @@ export function buildMethodsModel(): MethodsModel {
               `カメラが近づく場所の建物の詳細な形（LOD2）は、${list(BUILDING_DISTRICTS.detail)}。橋梁・高架は、${list(BUILDING_DISTRICTS.bridges)}。遠景の箱形の建物（LOD1）は、${list(BUILDING_DISTRICTS.far)}（${BUILDING_DISTRICTS.far.length}区）です。`,
             ],
             [
-              strong('航空写真。'),
-              '出典：',
-              link('国土交通省 Project PLATEAU（PLATEAU-Ortho）', LINKS.plateauOrtho),
-              `、${DATA_YEARS.plateauOrtho}年度。`,
-            ],
-            [
-              strong('標高と海岸線。'),
+              strong('地面の起伏と海岸線。'),
               '出典：',
               link('国土地理院「地理院タイル」（標高タイル）', LINKS.gsiTiles),
-              'を加工して作成しました。海岸線は、標高タイルの無効値（海）から作っています。',
+              'を加工して作成しました。地面は航空写真を使わない単色の面で、起伏とその陰影を標高タイルから、海岸線を標高タイルの無効値（海）から作っています。',
             ],
             [
               strong('駅の位置。'),

@@ -1,16 +1,18 @@
 /**
- * PlateauGround のタイルの選び方を、偽の renderer と偽の画像・標高の取得で Node 上で確かめる。
- * - 途中の段を飛ばしても、表示中のタイルが範囲と視野を隙間なく・重なりなく覆う。
- * - 子の取得に失敗した範囲には、祖先の画像が表示される。
- * - カメラを動かしてから止めると、読み込みが落ち着く。移動中と停止後で地面の高さが変わらない。
+ * PlateauGround（標高の起伏を付けた単色の地面）を、偽の renderer と偽の標高の取得で Node 上で確かめる。
+ * - 表示中のタイルが範囲と視野を隙間なく・重なりなく覆う。
+ * - 取得するのは標高タイルだけで、地面のメッシュの高さは標高に合う。
+ * - 海（標高の無効値）だけの範囲には地面を作らない。
+ * - 標高を復号できないタイルの範囲には、祖先のタイルが表示される。
  */
 import { describe, expect, it } from 'vitest';
 import { Mesh, PerspectiveCamera, Plane, Ray, Raycaster, Vector3 } from 'three';
 import type { WebGLRenderer } from 'three';
 import { latLonToLocal, localToLatLon } from '../../src/geo/enu';
 import { latToTileY, lonToTileX, tileXToLon, tileYToLat } from '../../src/geo/tiles';
-import type { FetchPixels } from '../../src/scene/plateau/elevation';
-import { PlateauGround, regionAny, regionSolid } from '../../src/scene/plateau/ground';
+import { BASE_LAND_COLOR } from '../../src/scene/plateau/baseGround';
+import type { DemTile, FetchPixels } from '../../src/scene/plateau/elevation';
+import { PlateauGround, RELIEF_STRENGTH, buildSurface, reliefShade } from '../../src/scene/plateau/ground';
 
 const W = 800;
 const H = 600;
@@ -19,9 +21,10 @@ const renderer = {
   capabilities: { getMaxAnisotropy: () => 8 },
 } as unknown as WebGLRenderer;
 
+/** 標高(m)。NaN は無効値（海）。 */
 type Height = (lat: number, lon: number) => number;
 const FLAT: Height = () => 20;
-/** 波打つ起伏（振幅 8m、波長 数百 m）。平面ではないので、粗いタイルのメッシュでは高さが変わる。 */
+/** 波打つ起伏（振幅 8m、波長 数百 m）。 */
 const HILLS: Height = (lat, lon) => {
   const p = latLonToLocal({ lat, lon });
   return 20 + 8 * Math.sin(p.x / 60) * Math.cos(p.z / 45);
@@ -29,40 +32,40 @@ const HILLS: Height = (lat, lon) => {
 
 interface FakeOptions {
   height?: Height;
-  /** 取得できない航空写真のタイル（'z/x/y'）。 */
-  fail?: Set<string>;
+  /** 復号に失敗する標高タイル（'kind z/x/y'）。 */
+  broken?: Set<string>;
 }
 
-/** 偽の取得。航空写真は全面不透明、標高は height を国土地理院の符号化で返す。取得した URL を記録する。 */
+/** 偽の取得。標高は height を国土地理院の符号化（無効値は R=128, G=0, B=0）で返す。取得した URL を記録する。 */
 function fakeFetch(opts: FakeOptions = {}): { fetch: FetchPixels; log: string[] } {
   const log: string[] = [];
   const height = opts.height ?? FLAT;
   const fetch: FetchPixels = async (url) => {
     await Promise.resolve();
-    const m = /\/(\d+)\/(\d+)\/(\d+)\.(png|jpg)$/.exec(url);
+    const m = /\/(dem5a_png|dem_png)\/(\d+)\/(\d+)\/(\d+)\.png$/.exec(url);
+    log.push(url);
     if (!m) throw new Error(`unexpected url ${url}`);
-    const [z, x, y] = [Number(m[1]), Number(m[2]), Number(m[3])];
+    const kind = m[1] === 'dem5a_png' ? 'dem5a' : 'dem10';
+    const [z, x, y] = [Number(m[2]), Number(m[3]), Number(m[4])];
+    if (opts.broken?.has(`${kind} ${z}/${x}/${y}`)) throw new Error('broken');
     const bitmap = { width: 256, height: 256, close: () => undefined } as unknown as ImageBitmap;
     const pixels = new Uint8ClampedArray(256 * 256 * 4);
-    if (url.includes('/dem')) {
-      log.push(`dem ${url.includes('dem5a') ? 'dem5a' : 'dem10'} ${z}/${x}/${y}`);
-      for (let j = 0; j < 256; j++) {
-        const lat = tileYToLat(y + (j + 0.5) / 256, z);
-        for (let i = 0; i < 256; i++) {
-          const v = Math.round(height(lat, tileXToLon(x + (i + 0.5) / 256, z)) * 100);
-          const k = (j * 256 + i) * 4;
+    for (let j = 0; j < 256; j++) {
+      const lat = tileYToLat(y + (j + 0.5) / 256, z);
+      for (let i = 0; i < 256; i++) {
+        const h = height(lat, tileXToLon(x + (i + 0.5) / 256, z));
+        const k = (j * 256 + i) * 4;
+        if (Number.isNaN(h)) {
+          pixels[k] = 128;
+        } else {
+          const v = Math.round(h * 100);
           pixels[k] = (v >> 16) & 255;
           pixels[k + 1] = (v >> 8) & 255;
           pixels[k + 2] = v & 255;
-          pixels[k + 3] = 255;
         }
+        pixels[k + 3] = 255;
       }
-      return { bitmap, pixels };
     }
-    const key = `${z}/${x}/${y}`;
-    log.push(`ortho ${key}`);
-    if (opts.fail?.has(key)) throw Object.assign(new Error(`failed ${key}`), { name: 'TileUnavailableError' });
-    pixels.fill(255);
     return { bitmap, pixels };
   };
   return { fetch, log };
@@ -85,15 +88,14 @@ function makeGround(camera: PerspectiveCamera, fetch: FetchPixels): PlateauGroun
     maxZoom: 18,
     maxTiles: 2000,
     elevationMaxTiles: 500,
-    texelScale: 1.5,
-    ortho: 'plateau',
+    detailScale: 1.5,
     fetchPixels: fetch,
   });
 }
 
 const tick = (): Promise<void> => new Promise((r) => setTimeout(r, 0));
 
-/** 読み込みが落ち着く（needsUpdate が偽のまま 20 フレーム続く）まで update する。 */
+/** 読み込みが落ち着く（needsUpdate が偽のまま 20 フレーム続き、ready が解決する）まで update する。 */
 async function settle(g: PlateauGround, maxFrames = 5000): Promise<void> {
   let quiet = 0;
   for (let i = 0; i < maxFrames; i++) {
@@ -152,42 +154,65 @@ function meshHeightAt(g: PlateauGround, x: number, z: number): number {
 
 const ORIGIN_VIEW = { pos: new Vector3(0, 400, 600), target: new Vector3(0, 20, 0) };
 
-describe('PlateauGround のタイルの選び方', () => {
-  it('途中の段を飛ばしても、表示中のタイルが範囲と視野を隙間なく・重なりなく覆う', async () => {
+describe('PlateauGround（標高の起伏を付けた単色の地面）', () => {
+  it('表示中のタイルが範囲と視野を隙間なく・重なりなく覆い、取得するのは標高タイルだけ', async () => {
     const camera = makeCamera(ORIGIN_VIEW.pos, ORIGIN_VIEW.target);
     const { fetch, log } = fakeFetch();
     const g = makeGround(camera, fetch);
     await settle(g);
     const visible = expectCovered(g, camera, 20);
     expect(Math.max(...visible.map((t) => t.z))).toBeGreaterThanOrEqual(16);
-    // 途中の段を飛ばしている（親を読まずに読んだタイルがある）
-    const ortho = new Set(log.filter((l) => l.startsWith('ortho ')).map((l) => l.slice(6)));
-    const skippedParent = [...ortho].some((k) => {
-      const [z, x, y] = k.split('/').map(Number) as [number, number, number];
-      return z > 13 && !ortho.has(`${z - 1}/${x >> 1}/${y >> 1}`);
-    });
-    expect(skippedParent).toBe(true);
+    expect(log.length).toBeGreaterThan(0);
+    for (const url of log) expect(url).toMatch(/^https:\/\/cyberjapandata\.gsi\.go\.jp\/xyz\/(dem5a_png|dem_png)\//);
+    // 5m メッシュはズーム15、10m メッシュはズーム14まで
+    for (const url of log) {
+      const z = Number(/\/(\d+)\/\d+\/\d+\.png$/.exec(url)![1]);
+      expect(url.includes('dem5a_png') ? z === 15 : z <= 14).toBe(true);
+    }
     g.dispose();
   });
 
-  it('子の1枚が取得できないとき、その範囲に祖先の画像が表示され、隙間ができない', async () => {
-    const camera = makeCamera(ORIGIN_VIEW.pos, ORIGIN_VIEW.target);
-    // まず失敗なしで、注視点の真下に表示される細かいタイルを調べる
-    const probe = makeGround(camera, fakeFetch().fetch);
-    await settle(probe);
-    const ll = localToLatLon({ x: 0, y: 0, z: 0 });
-    const shown = probe.debugTiles().find((t) => t.visible && contains(t, ll.lat, ll.lon))!;
-    probe.dispose();
-    expect(shown.z).toBeGreaterThanOrEqual(15);
-
-    const failKey = `${shown.z}/${shown.x}/${shown.y}`;
-    const { fetch, log } = fakeFetch({ fail: new Set([failKey]) });
-    const g = makeGround(camera, fetch);
+  it('地面のメッシュの高さが標高に合う（起伏のある場所）', async () => {
+    const camera = makeCamera(new Vector3(0, 170, 60), new Vector3(0, 20, 0));
+    const g = makeGround(camera, fakeFetch({ height: HILLS }).fetch);
     await settle(g);
-    expect(log).toContain(`ortho ${failKey}`);
+    for (const [x, z] of [
+      [0, 0],
+      [12, -7],
+      [-25, 30],
+    ] as const) {
+      const ll = localToLatLon({ x, y: 0, z });
+      expect(Math.abs(meshHeightAt(g, x, z) - HILLS(ll.lat, ll.lon))).toBeLessThan(0.8);
+    }
+    g.dispose();
+  });
+
+  it('海（標高の無効値）だけの範囲にはタイルを作らず、陸の範囲は覆う', async () => {
+    // 原点より南は海
+    const coast: Height = (lat, lon) => (latLonToLocal({ lat, lon }).z > 300 ? Number.NaN : 5);
+    const camera = makeCamera(new Vector3(0, 1500, 1200), new Vector3(0, 0, 300));
+    const g = makeGround(camera, fakeFetch({ height: coast }).fetch);
+    await settle(g);
+    const visible = g.debugTiles().filter((t) => t.visible);
+    expect(visible.length).toBeGreaterThan(0);
+    const north = (t: Tile): number => latLonToLocal({ lat: tileYToLat(t.y, t.z), lon: tileXToLon(t.x, t.z) }).z;
+    // 北端が海岸線より南のタイル（海だけ）は作らない
+    for (const t of visible) expect(north(t)).toBeLessThan(300);
+    // 陸の地点は覆われている
+    const land = localToLatLon({ x: 0, y: 0, z: 0 });
+    expect(visible.filter((t) => contains(t, land.lat, land.lon)).length).toBe(1);
+    g.dispose();
+  });
+
+  it('標高を復号できないタイルの範囲には、祖先のタイルが表示され、隙間ができない', async () => {
+    const camera = makeCamera(ORIGIN_VIEW.pos, ORIGIN_VIEW.target);
+    const ll = localToLatLon({ x: 0, y: 0, z: 0 });
+    const key = `dem5a 15/${Math.floor(lonToTileX(ll.lon, 15))}/${Math.floor(latToTileY(ll.lat, 15))}`;
+    const g = makeGround(camera, fakeFetch({ broken: new Set([key]) }).fetch);
+    await settle(g);
     const visible = expectCovered(g, camera, 20);
     const here = visible.find((t) => contains(t, ll.lat, ll.lon))!;
-    expect(isAncestor(here, shown)).toBe(true);
+    expect(here.z).toBeLessThan(15);
     g.dispose();
   });
 
@@ -201,83 +226,59 @@ describe('PlateauGround のタイルの選び方', () => {
       camera.updateMatrixWorld();
       g.update();
       await tick();
-      // 最初のフレームは比べる前のフレームがないので、2 フレーム目から「動いている」になる
-      if (i > 0) expect(g.needsUpdate).toBe(true);
     }
-    expect(resolved).toBe(false);
     await settle(g);
     await tick();
     expect(g.needsUpdate).toBe(false);
     expect(resolved).toBe(true);
     g.dispose();
   });
-
-  it('移動中と停止後で、同じ地点の地面のメッシュの高さが同じ', async () => {
-    const camera = makeCamera(new Vector3(0, 170, 60), new Vector3(0, 20, 0));
-    const g = makeGround(camera, fakeFetch({ height: HILLS }).fetch);
-    await settle(g);
-    const q = latLonToLocal(localToLatLon({ x: 0, y: 0, z: 40 }));
-    const settled = meshHeightAt(g, q.x, q.z);
-    const qll = localToLatLon({ x: q.x, y: 0, z: q.z });
-    /** 地点 Q を含む表示中のタイル。 */
-    const shown = (): string =>
-      g
-        .debugTiles()
-        .filter((t) => t.visible && contains(t, qll.lat, qll.lon))
-        .map((t) => `${t.z}/${t.x}/${t.y}`)
-        .join(',');
-    const before = shown();
-    expect(Number(before.split('/')[0])).toBe(18);
-    // 少しずつ動かす（移動中）。Q を表示するタイルは変わらない
-    for (let i = 0; i < 15; i++) {
-      camera.position.x += 1;
-      camera.updateMatrixWorld();
-      g.update();
-      await tick();
-      expect(g.needsUpdate).toBe(true);
-      expect(meshHeightAt(g, q.x, q.z)).toBeCloseTo(settled, 6);
-      expect(shown()).toBe(before);
-    }
-    await settle(g);
-    expect(meshHeightAt(g, q.x, q.z)).toBeCloseTo(settled, 6);
-    g.dispose();
-  });
 });
 
-describe('祖先の画像の区画による子孫の判断', () => {
-  const grid = (cells: [number, number][]): Uint8Array => {
-    const g = new Uint8Array(64);
-    for (const [i, j] of cells) g[j * 8 + i] = 1;
-    return g;
-  };
+/** 1 枚の標高タイル（ズーム15、原点を含む）を height から作る。 */
+function demTile(height: Height): DemTile {
+  const ll = localToLatLon({ x: 0, y: 0, z: 0 });
+  const z = 15;
+  const x = Math.floor(lonToTileX(ll.lon, z));
+  const y = Math.floor(latToTileY(ll.lat, z));
+  const heights = new Float32Array(256 * 256);
+  for (let j = 0; j < 256; j++) {
+    for (let i = 0; i < 256; i++) heights[j * 256 + i] = height(tileYToLat(y + (j + 0.5) / 256, z), tileXToLon(x + (i + 0.5) / 256, z));
+  }
+  return { kind: 'dem5a', z, x, y, heights };
+}
 
-  it('深さ1〜3の区画の対応（深さ1は4×4区画、2は2×2区画、3は1区画）', () => {
-    const g = grid([[7, 7]]); // 南東の端の区画だけ
-    expect(regionAny(g, 1, 1, 1)).toBe(true);
-    expect(regionAny(g, 1, 0, 1)).toBe(false);
-    expect(regionAny(g, 2, 3, 3)).toBe(true);
-    expect(regionAny(g, 2, 2, 3)).toBe(false);
-    expect(regionAny(g, 3, 7, 7)).toBe(true);
-    expect(regionAny(g, 3, 6, 7)).toBe(false);
-    expect(regionAny(g, 4, 15, 15)).toBe(false);
+describe('地面のタイルの画像（陸の色と陰影、海は透明）', () => {
+  const r0 = (BASE_LAND_COLOR >> 16) & 255;
+
+  it('平らな陸は陸の色のまま不透明、海（無効値）は透明', () => {
+    // タイルの東半分が海
+    const dem = demTile(() => 12);
+    for (let j = 0; j < 256; j++) for (let i = 128; i < 256; i++) dem.heights[j * 256 + i] = Number.NaN;
+    const { pixels } = buildSurface(dem.z, dem.x, dem.y, [dem], 16);
+    const west = (8 * 16 + 1) * 4;
+    const east = (8 * 16 + 14) * 4;
+    expect(pixels[west + 3]).toBe(255);
+    expect(pixels[west]).toBe(r0);
+    expect(pixels[east + 3]).toBe(0);
   });
 
-  it('飛ばすのは、範囲の区画と周りの区画がすべて不透明なときだけ', () => {
-    const full = new Uint8Array(64).fill(1);
-    expect(regionSolid(full, 1, 0, 0)).toBe(true);
-    expect(regionSolid(full, 2, 1, 2)).toBe(true);
-    // 深さ2のタイル (1, 1) は区画 (2..3, 2..3)。周りは (1..4, 1..4)
-    const holeNear = full.slice();
-    holeNear[4 * 8 + 4] = 0; // 周りの区画が透明
-    expect(regionSolid(holeNear, 2, 1, 1)).toBe(false);
-    const holeFar = full.slice();
-    holeFar[6 * 8 + 6] = 0; // 離れた区画が透明
-    expect(regionSolid(holeFar, 2, 1, 1)).toBe(true);
-    // 範囲の区画そのものが透明
-    const holeIn = full.slice();
-    holeIn[2 * 8 + 3] = 0;
-    expect(regionSolid(holeIn, 2, 1, 1)).toBe(false);
-    // 深さ3（子が4段下になる）は飛ばさない
-    expect(regionSolid(full, 3, 0, 0)).toBe(false);
+  it('光（西南西の上）に向く斜面は明るく、背く斜面は暗い。差は RELIEF_STRENGTH 以内', () => {
+    // 西に向かって下る（東ほど高い）斜面は、西からの光に向く
+    const towardLight = reliefShade(0.2, 0);
+    const away = reliefShade(-0.2, 0);
+    expect(towardLight).toBeGreaterThan(1);
+    expect(away).toBeLessThan(1);
+    expect(reliefShade(0, 0)).toBeCloseTo(1, 6);
+    for (const s of [-5, -1, 1, 5]) {
+      expect(reliefShade(s, s)).toBeGreaterThanOrEqual(1 - RELIEF_STRENGTH - 1e-9);
+      expect(reliefShade(s, -s)).toBeLessThanOrEqual(1 + RELIEF_STRENGTH + 1e-9);
+    }
+    // 東へ上る（西を向く）斜面は明るく、西へ上る（東を向く）斜面は暗い
+    const lit = demTile((lat, lon) => latLonToLocal({ lat, lon }).x * 0.1);
+    const shaded = demTile((lat, lon) => -latLonToLocal({ lat, lon }).x * 0.1);
+    const k = (8 * 16 + 8) * 4;
+    expect(buildSurface(lit.z, lit.x, lit.y, [lit], 16).pixels[k]!).toBeGreaterThan(r0);
+    expect(buildSurface(shaded.z, shaded.x, shaded.y, [shaded], 16).pixels[k]!).toBeLessThan(r0);
   });
 });

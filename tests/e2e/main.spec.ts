@@ -15,7 +15,7 @@ import { measureScene, VISIBILITY_GOALS, type ScenePhase, type VisibilityRow } f
 // ソフトウェア描画（SwiftShader）では PLATEAU の読み込みと描画に時間がかかる
 test.setTimeout(5_400_000);
 
-// 地上の目線の場面（1・8）は航空写真の細かいタイルの読み込みに、山の場面（5・6・7）は山と街並みの描画に時間がかかる。
+// 地上の目線の場面（1・8）は地面の細かいタイルと建物の読み込みに、山の場面（5・6・7）は山と街並みの描画に時間がかかる。
 // ソフトウェア描画で、ほかの E2E と並行して動くと 10 分を超えることがある。
 const SETTLE_TIMEOUT_MS = 1_200_000;
 
@@ -614,7 +614,7 @@ async function expectLegendClearOfPillars(page: Page): Promise<void> {
   expect(hidden.map((s) => `${s.name}（${s.bicycles}台）`)).toEqual([]);
 }
 
-/** 背景の空の色（`createApp` の skyColor）で描かれている画素の数。航空写真・単色の地面が敷かれていれば、俯瞰の画面には現れない。 */
+/** 背景の空の色（`createApp` の skyColor）で描かれている画素の数。起伏の付いた地面と、その下の単色の地面が敷かれていれば、俯瞰の画面には現れない。 */
 async function skyColoredPixels(page: Page): Promise<number> {
   const png = await page.screenshot();
   return page.evaluate(async (b64) => {
@@ -682,7 +682,7 @@ test('場面3・4（PC 幅）: 柱が伸びて489か所・合計13,394台が立�
   await expectLegendClearOfPillars(page);
   // 23区の駅の柱の大半が、本文カードに覆われていない範囲に収まる
   await expectWardsInFreeRegion(page);
-  // 航空写真のない範囲も単色の地面で埋まり、空の色で抜けた範囲がない
+  // 起伏の付いた地面のない範囲も単色の地面で埋まり、空の色で抜けた範囲がない
   expect(await skyColoredPixels(page)).toBeLessThan(200);
   await page.screenshot({ path: 'screenshots/main-3.png' });
 
@@ -771,7 +771,8 @@ type LoadKind = 'buildingsBaked' | 'buildingsLive' | 'ortho' | 'elevation' | 'ot
 function loadKind(url: string): LoadKind {
   if (url.includes('/data/buildings/')) return 'buildingsBaked';
   if (/assets\.cms\.plateau\.reearth\.io/.test(url)) return 'buildingsLive';
-  if (/plateauview\.mlit\.go\.jp\/tiles\//.test(url)) return 'ortho';
+  // 航空写真（PLATEAU-Ortho・国土地理院の写真）。地面に写真を使わないので 0 のはず
+  if (/plateauview\.mlit\.go\.jp\/tiles\/|cyberjapandata\.gsi\.go\.jp\/xyz\/seamlessphoto\//.test(url)) return 'ortho';
   if (/cyberjapandata\.gsi\.go\.jp/.test(url)) return 'elevation';
   return 'other';
 }
@@ -822,6 +823,7 @@ test('変換済みの建物で、場面ごとの読み込み量（種類別）�
   for (const r of rows) {
     console.log(`場面${String(r.scene)} ${String(r.id)}: 計 ${((r.bytes as number) / 1e6).toFixed(1)} MB（建物 ${((r.buildingsBaked as number) / 1e6).toFixed(1)} MB）${((r.settleMs as number) / 1000).toFixed(1)} s`);
     expect(r.buildingsLive).toBe(0);
+    expect(r.ortho).toBe(0);
     // 1 つの場面で読む建物は 10MB 以下
     expect(r.buildingsBaked as number).toBeLessThanOrEqual(10e6);
   }

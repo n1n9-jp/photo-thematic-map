@@ -20,23 +20,8 @@ export const REFERENCE_BOX_SIZE_M = 10;
  */
 export const GEOID_HEIGHT_M = 36.7;
 
-/**
- * PLATEAU 航空写真（PLATEAU-Ortho）の XYZ タイル。最大ズーム 19、最小ズーム 10。
- * 提供元の文書（https://docs.plateauview.mlit.go.jp/datasets/ortho/）が示すホスト。
- * 以前の api.plateauview.mlit.go.jp は要求のたびにこのホストへ 307 で転送する。
- */
-export const PLATEAU_ORTHO_URL = 'https://tile.plateauview.mlit.go.jp/tiles/plateau-ortho-2024/{z}/{x}/{y}.png';
-export const PLATEAU_ORTHO_MAX_ZOOM = 19;
-
 /** 国土地理院 標高タイル（PNG）。5m メッシュ（ズーム15のみ）と 10m メッシュ（ズーム0〜14）。 */
 export const GSI_DEM5A_URL = 'https://cyberjapandata.gsi.go.jp/xyz/dem5a_png/{z}/{x}/{y}.png';
 export const GSI_DEM5A_ZOOM = 15;
 export const GSI_DEM10_URL = 'https://cyberjapandata.gsi.go.jp/xyz/dem_png/{z}/{x}/{y}.png';
 export const GSI_DEM10_MAX_ZOOM = 14;
-
-/**
- * 国土地理院「全国最新写真（シームレス）」の XYZ タイル（JPEG、最大ズーム 18）。航空写真の出典を替える比較用（`?ortho=gsi`）。
- * 仕様: https://maps.gsi.go.jp/development/ichiran.html
- */
-export const GSI_PHOTO_URL = 'https://cyberjapandata.gsi.go.jp/xyz/seamlessphoto/{z}/{x}/{y}.jpg';
-export const GSI_PHOTO_MAX_ZOOM = 18;

@@ -97,7 +97,7 @@ export interface ColorStep {
   label: string;
 }
 
-/** 少ない駅は淡い黄、多い駅は濃い赤。灰色〜緑の地面・航空写真の上でも段階を見分けられる色。 */
+/** 少ない駅は淡い黄、多い駅は濃い赤。灰色の地面の上でも段階を見分けられる色。 */
 export const COLOR_STEPS: readonly ColorStep[] = [
   { min: 1, max: 9, color: 0xffe35c, label: '1〜9' },
   { min: 10, max: 29, color: 0xffa726, label: '10〜29' },

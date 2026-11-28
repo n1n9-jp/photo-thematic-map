@@ -68,7 +68,6 @@ describe('リンク', () => {
     for (const href of [
       'https://www.tomin-anzen.metro.tokyo.lg.jp/kotsu/jitensha/houchi/0000001962',
       'https://www.mlit.go.jp/plateau/',
-      'https://docs.plateauview.mlit.go.jp/datasets/ortho/',
       'https://maps.gsi.go.jp/development/ichiran.html',
       'https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-N02-2024.html',
     ]) {
@@ -136,7 +135,7 @@ describe('文面の数値は facts.ts の定数と一致する', () => {
 
   test('出典: 年度・都庁の高さ・東京ドームの容積', () => {
     expect(text).toContain(`3D都市モデル（東京都、${DATA_YEARS.plateauBuildings}年度）`);
-    expect(text).toContain(`${DATA_YEARS.plateauOrtho}年度`);
+    expect(text).not.toContain('航空写真。');
     expect(text).toContain(`鉄道データ、国土交通省、${DATA_YEARS.stations}年度`);
     expect(text).toContain(`都庁第一本庁舎の高さ（${formatDecimal(TOCHO_HEIGHT_M, 1)}メートル）`);
     expect(text).toContain(`東京ドームの容積（約${formatJaCount(TOKYO_DOME_VOLUME_M3)}立方メートル）`);

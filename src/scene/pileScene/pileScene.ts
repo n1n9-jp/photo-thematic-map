@@ -233,7 +233,7 @@ export function createPileSceneFromResult(
   // 暗い面
   const shell = createShellMesh(result, texture, SHELL_OFFSET[mode], options.shellColor ?? PILE_SHELL_COLOR);
   object.add(shell.mesh);
-  // 裾の接地の影（航空写真の地面と、まばらな自転車の境目をなじませる）
+  // 裾の接地の影（地面と、まばらな自転車の境目をなじませる）
   const rim = createRimShadow(result, texture);
   object.add(rim.mesh);
 
@@ -537,7 +537,7 @@ const RIM_MAX_THICKNESS = 1.6;
 
 /**
  * 山の裾の接地の影。地表（屋上を含む）の少し上に、厚さの薄い裾だけ半透明の暗い面を張る。
- * 自転車がまばらな裾で航空写真がそのまま見えて、山の縁が切り抜いたように見えるのを和らげる。
+ * 自転車がまばらな裾で地面がそのまま見えて、山の縁が切り抜いたように見えるのを和らげる。
  */
 function createRimShadow(result: PileComputeResult, texture: DataArrayTexture): ShellMesh {
   const { layerWidth: lw, layerHeight: lh, layerRect, layerGround, fractions } = result;

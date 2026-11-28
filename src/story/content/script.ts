@@ -3,7 +3,7 @@
  *
  * カメラは `StoryCameraKeyframe`（注視点・距離・方位・仰角）。高さと水平距離で考えた値は
  * `cameraFrom()` で距離・仰角に直す。`place` は場面の街並み（建物を読む区を選ぶ中心と半径）。
- * 俯瞰の場面は null（建物を読まず、航空写真の地面だけを見せる）。
+ * 俯瞰の場面は null（建物を読まず、地面だけを見せる）。
  */
 import { latLonToLocal } from '../../geo/enu';
 import { distanceForHeight } from '../cameraPath';
