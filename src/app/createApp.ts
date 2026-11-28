@@ -345,6 +345,9 @@ export async function createApp(options: CreateAppOptions): Promise<App> {
     for (const c of document.querySelectorAll<HTMLElement>('.story-card')) {
       if (Number(getComputedStyle(c).opacity) > 0.05) add(c);
     }
+    for (const el of document.querySelectorAll<HTMLElement>('.ptm-cover__panel')) {
+      if (Number(getComputedStyle(el).opacity) > 0.05) add(el);
+    }
     for (const el of document.querySelectorAll<HTMLElement>('.ptm-site-attribution, .story-free-toggle')) {
       if (!el.hidden && getComputedStyle(el).display !== 'none') add(el);
     }

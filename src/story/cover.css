@@ -1,0 +1,320 @@
+/*
+ * 表紙（ページの最初の1画面）。index.html の <head> で読み、JavaScript を待たずに最初の描画で出す。
+ * 背景には固定された 3D の街（場面1の秋葉原）が見え、表紙はその上を普通にスクロールして上へ抜けていく。
+ * 表紙の高さぶんだけ下に本文（#story）が続き、場面1の進捗は #story の上端が画面の上端に来たときに 0 になる
+ * （storyScroll.ts）。表紙が画面にある間、場面1のカードは表紙の下端より下にある。
+ *
+ * 色・書体・余白は、この先頭の変数にまとめる（本文カードの共通の値ができたら差し替える）。
+ * 余白は 4px の倍数。
+ */
+.ptm-cover {
+  --cover-ink: #1d1d1b;
+  --cover-ink-soft: #4f4d48;
+  --cover-paper: rgba(250, 248, 243, 0.94);
+  --cover-rule: rgba(29, 29, 27, 0.16);
+  --cover-accent: #b8321f;
+  --cover-sans: 'Hiragino Kaku Gothic ProN', 'Hiragino Sans', 'Yu Gothic UI', 'Yu Gothic', 'Meiryo', 'Noto Sans JP',
+    'IPAexGothic', 'IPAPGothic', sans-serif;
+  --cover-shadow: 0 1px 2px rgba(0, 0, 0, 0.08), 0 8px 24px rgba(0, 0, 0, 0.12);
+  --cover-radius: 2px;
+  --cover-space-1: 4px;
+  --cover-space-2: 8px;
+  --cover-space-3: 12px;
+  --cover-space-4: 16px;
+  --cover-space-5: 20px;
+  --cover-space-6: 24px;
+  --cover-space-8: 32px;
+  --cover-space-10: 40px;
+  --cover-gutter: var(--cover-space-4);
+  --cover-pad: var(--cover-space-5);
+  --cover-title-size: 2rem;
+  --cover-subtitle-size: 1rem;
+  --cover-lead-size: 0.875rem;
+  --cover-lead-leading: 1.8;
+  --cover-meta-size: 0.75rem;
+  /* 画面の上端に空ける範囲（読み込みの表示が右上に出る）。 */
+  --cover-top-reserve: 56px;
+  /* 画面の下端に空ける範囲（出典表示）。出典表示の高さは JS が --ptm-attribution-height に書く。読み込み前の既定は2行ぶん。 */
+  --cover-bottom-reserve: calc(var(--ptm-attribution-height, 44px) + max(6px, env(safe-area-inset-bottom, 0px)) + var(--cover-space-4));
+
+  position: relative;
+  z-index: 1;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  /* アドレスバーの出入りで高さが変わらないよう、小さい方のビューポートの高さ（バーが出ている間も全体が見える）。 */
+  min-height: 100vh;
+  min-height: 100svh;
+  padding: var(--cover-top-reserve) max(var(--cover-gutter), env(safe-area-inset-right, 0px)) var(--cover-bottom-reserve)
+    max(var(--cover-gutter), env(safe-area-inset-left, 0px));
+  /* 3D の操作（canvas）は表紙の空いたところでも邪魔しない。 */
+  pointer-events: none;
+  font-family: var(--cover-sans);
+  color: var(--cover-ink);
+}
+
+.ptm-cover__panel {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 34rem;
+  padding: var(--cover-pad) var(--cover-pad) var(--cover-space-4);
+  opacity: var(--cover-alpha, 1);
+  pointer-events: auto;
+  background: var(--cover-paper);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  border-top: 3px solid var(--cover-accent);
+  border-radius: var(--cover-radius);
+  box-shadow: var(--cover-shadow);
+  /* 日本語の折り返しを自然にする（対応ブラウザのみ）。 */
+  word-break: auto-phrase;
+  overflow-wrap: anywhere;
+}
+
+/* 上へ抜けて見えなくなった表紙は、ポインタも受けない。 */
+.ptm-cover--gone .ptm-cover__panel {
+  pointer-events: none;
+}
+
+/* パネルの中にフォーカスがある間は（キーボードで戻ったときなど）、薄くしたパネルも不透明で出す。 */
+.ptm-cover__panel:focus-within {
+  opacity: 1;
+}
+
+.ptm-cover--gone .ptm-cover__panel:focus-within {
+  pointer-events: auto;
+}
+
+.ptm-cover__title {
+  margin: 0;
+  font-size: var(--cover-title-size);
+  font-weight: 700;
+  line-height: 1.25;
+  letter-spacing: 0.04em;
+}
+
+.ptm-cover__subtitle {
+  margin: var(--cover-space-2) 0 0;
+  font-size: var(--cover-subtitle-size);
+  font-weight: 700;
+  line-height: 1.6;
+  letter-spacing: 0.02em;
+}
+
+.ptm-cover__lead {
+  margin: var(--cover-space-3) 0 0;
+  padding-top: var(--cover-space-3);
+  border-top: 1px solid var(--cover-rule);
+  font-size: var(--cover-lead-size);
+  line-height: var(--cover-lead-leading);
+  letter-spacing: 0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+.ptm-cover__num {
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.ptm-cover__meta {
+  display: grid;
+  gap: var(--cover-space-1);
+  margin: var(--cover-space-3) 0 0;
+  font-size: var(--cover-meta-size);
+  line-height: 1.6;
+  color: var(--cover-ink-soft);
+  font-variant-numeric: tabular-nums;
+}
+
+.ptm-cover__meta-row {
+  display: grid;
+  grid-template-columns: 3.5em 1fr;
+  column-gap: var(--cover-space-2);
+}
+
+.ptm-cover__meta dt {
+  font-weight: 700;
+}
+
+.ptm-cover__meta dd {
+  margin: 0;
+}
+
+/* スクロールを促す合図。押すと場面1の始まり（#story の上端）へ移る。 */
+.ptm-cover__cue {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--cover-space-2);
+  min-height: 44px;
+  margin-top: var(--cover-space-2);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--cover-ink);
+  text-decoration: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.ptm-cover__cue:hover {
+  text-decoration: underline;
+  text-underline-offset: 0.25em;
+}
+
+.ptm-cover__cue:focus-visible {
+  outline: 2px solid var(--cover-accent);
+  outline-offset: 2px;
+  border-radius: var(--cover-radius);
+}
+
+/* 下向きの矢印。 */
+.ptm-cover__cue-mark {
+  flex: none;
+  fill: none;
+  stroke: var(--cover-accent);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.ptm-cover__nowrap {
+  white-space: nowrap;
+}
+
+/* 縦向きで高さの低い画面（幅 320〜375px のスマートフォンなど）: 文字と余白を詰め、表紙が1画面に収まるようにする。 */
+@media (max-width: 767px) and (max-height: 700px) {
+  .ptm-cover {
+    --cover-top-reserve: 48px;
+    --cover-pad: var(--cover-space-4);
+    --cover-title-size: 1.75rem;
+    --cover-subtitle-size: 0.9375rem;
+    --cover-lead-size: 0.8125rem;
+    --cover-lead-leading: 1.65;
+    --cover-meta-size: 0.6875rem;
+  }
+
+  .ptm-cover__panel {
+    padding-bottom: var(--cover-space-2);
+  }
+
+  .ptm-cover__subtitle {
+    line-height: 1.5;
+  }
+
+  .ptm-cover__lead {
+    margin-top: var(--cover-space-2);
+    padding-top: var(--cover-space-2);
+  }
+
+  .ptm-cover__meta {
+    margin-top: var(--cover-space-2);
+    gap: 0;
+  }
+
+  .ptm-cover__cue {
+    min-height: 40px;
+    margin-top: 0;
+  }
+}
+
+/* 狭い画面（幅 360px 未満）。 */
+@media (max-width: 359px) {
+  .ptm-cover {
+    --cover-gutter: var(--cover-space-2);
+    --cover-pad: var(--cover-space-4);
+    --cover-title-size: 1.625rem;
+    --cover-subtitle-size: 0.875rem;
+    --cover-lead-size: 0.8125rem;
+  }
+}
+
+/* 幅が広い画面（本文カードは左の列）。表紙も左の列の位置に置き、右側は 3D の街に空ける。 */
+@media (min-width: 768px) {
+  .ptm-cover {
+    --cover-gutter: clamp(16px, 3vw, 40px);
+    --cover-pad: var(--cover-space-8);
+    --cover-title-size: 3rem;
+    --cover-subtitle-size: 1.125rem;
+    --cover-lead-size: 0.9375rem;
+    --cover-lead-leading: 1.85;
+    --cover-meta-size: 0.8125rem;
+    --cover-bottom-reserve: calc(var(--ptm-attribution-height, 44px) + max(6px, env(safe-area-inset-bottom, 0px)) + var(--cover-space-10));
+  }
+
+  .ptm-cover__panel {
+    width: clamp(400px, 40vw, 34rem);
+    padding-bottom: var(--cover-space-5);
+  }
+
+  .ptm-cover__subtitle {
+    margin-top: var(--cover-space-3);
+  }
+
+  .ptm-cover__lead {
+    margin-top: var(--cover-space-4);
+    padding-top: var(--cover-space-4);
+  }
+
+  .ptm-cover__meta {
+    margin-top: var(--cover-space-4);
+  }
+}
+
+/* 高さが低い横向きの画面（スマートフォンの横向き）: 左に寄せた細めのパネルにし、文字と余白を詰めて1画面に収める。 */
+@media (orientation: landscape) and (max-height: 560px) {
+  .ptm-cover {
+    --cover-top-reserve: var(--cover-space-3);
+    --cover-pad: var(--cover-space-4);
+    --cover-title-size: 1.625rem;
+    --cover-subtitle-size: 0.875rem;
+    --cover-lead-size: 0.8125rem;
+    --cover-lead-leading: 1.6;
+    --cover-meta-size: 0.6875rem;
+    --cover-bottom-reserve: calc(var(--ptm-attribution-height, 44px) + max(6px, env(safe-area-inset-bottom, 0px)) + var(--cover-space-2));
+  }
+
+  .ptm-cover__panel {
+    width: min(30rem, 60vw);
+    padding-bottom: var(--cover-space-1);
+  }
+
+  .ptm-cover__subtitle {
+    margin-top: var(--cover-space-1);
+  }
+
+  .ptm-cover__lead,
+  .ptm-cover__meta {
+    margin-top: var(--cover-space-2);
+  }
+
+  .ptm-cover__lead {
+    padding-top: var(--cover-space-2);
+  }
+
+  .ptm-cover__meta {
+    gap: 0;
+  }
+
+  .ptm-cover__cue {
+    min-height: 32px;
+    margin-top: 0;
+  }
+}
+
+/* 動きを減らす設定・ぼかしを使えない環境では、背景の透け方を減らして文字を読みやすくする。 */
+@media (prefers-reduced-motion: reduce) {
+  .ptm-cover {
+    --cover-paper: rgba(250, 248, 243, 0.98);
+  }
+
+  .ptm-cover__panel {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .ptm-cover {
+    --cover-paper: rgba(250, 248, 243, 0.98);
+  }
+}
