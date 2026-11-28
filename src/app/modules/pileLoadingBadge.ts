@@ -1,4 +1,5 @@
 /** 山の計算が場面に間に合わなかったときの小さな表示（画面の上の中央）。 */
+import '../../styles/tokens.css';
 const CSS = `
 .ptm-pile-loading {
   position: fixed;
@@ -6,12 +7,16 @@ const CSS = `
   left: 50%;
   z-index: 10;
   transform: translateX(-50%);
-  padding: 6px 12px;
-  font: 13px/1.4 system-ui, -apple-system, 'Hiragino Sans', 'Noto Sans JP', sans-serif;
-  color: #1d1d1b;
-  background: rgba(255, 255, 255, 0.9);
-  border-radius: 999px;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+  padding: var(--ptm-space-2) var(--ptm-space-4);
+  font-family: var(--ptm-font-sans);
+  font-size: var(--ptm-text-sm);
+  line-height: var(--ptm-leading-snug);
+  letter-spacing: var(--ptm-tracking-body);
+  font-variant-numeric: tabular-nums;
+  color: var(--ptm-ink-1);
+  background: var(--ptm-surface);
+  border-radius: var(--ptm-radius-pill);
+  box-shadow: var(--ptm-shadow-1);
   transition: opacity 0.3s ease;
   pointer-events: none;
 }

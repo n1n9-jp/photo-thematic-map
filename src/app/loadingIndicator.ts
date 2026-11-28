@@ -1,29 +1,33 @@
 /** 画面の右上に出す、街並みの読み込み中の小さな表示。 */
+import '../styles/tokens.css';
 const CSS = `
 .ptm-loading {
   position: fixed;
-  top: max(10px, env(safe-area-inset-top));
-  right: max(10px, env(safe-area-inset-right));
+  top: max(12px, env(safe-area-inset-top));
+  right: max(12px, env(safe-area-inset-right));
   z-index: 10;
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 10px;
-  font: 12px/1.4 system-ui, -apple-system, 'Hiragino Sans', 'Noto Sans JP', sans-serif;
-  color: #1d1d1b;
-  background: rgba(255, 255, 255, 0.85);
-  border-radius: 999px;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+  gap: var(--ptm-space-2);
+  padding: var(--ptm-space-2) var(--ptm-space-3);
+  font-family: var(--ptm-font-sans);
+  font-size: var(--ptm-text-xs);
+  line-height: 1;
+  letter-spacing: var(--ptm-tracking-body);
+  color: var(--ptm-ink-2);
+  background: var(--ptm-surface);
+  border-radius: var(--ptm-radius-pill);
+  box-shadow: var(--ptm-shadow-1);
   transition: opacity 0.3s ease;
   pointer-events: none;
 }
 .ptm-loading[data-state='idle'] { opacity: 0; }
 .ptm-loading__bar {
   position: relative;
-  width: 36px;
+  width: 32px;
   height: 4px;
   overflow: hidden;
-  background: rgba(29, 29, 27, 0.15);
+  background: var(--ptm-rule);
   border-radius: 2px;
 }
 .ptm-loading__bar::after {
@@ -31,7 +35,7 @@ const CSS = `
   position: absolute;
   inset: 0;
   width: 40%;
-  background: #b8321f;
+  background: var(--ptm-accent);
   border-radius: 2px;
   animation: ptm-loading-slide 1.1s ease-in-out infinite;
 }

@@ -63,6 +63,26 @@ function el<K extends keyof HTMLElementTagNameMap>(
   return node;
 }
 
+/**
+ * 場面の番号（「02 / 08」）と、物語の中の位置を示す目盛り（場面の数だけ並ぶ区切り。通り過ぎた場面・現在の場面・まだの場面）。
+ * 文字は「02 / 08」のまま（目盛りは支援技術から隠す）。
+ */
+function indexNode(i: number, total: number): HTMLElement {
+  const node = el('p', 'story-card__index');
+  const pad = (k: number): string => String(k).padStart(2, '0');
+  const label = el('span', 'story-card__index-label');
+  label.append(el('span', 'story-card__index-current', pad(i + 1)), el('span', 'story-card__index-total', ` / ${pad(total)}`));
+  const track = el('span', 'story-progress');
+  track.setAttribute('aria-hidden', 'true');
+  for (let k = 0; k < total; k++) {
+    const seg = el('span', 'story-progress__step');
+    seg.dataset.state = k < i ? 'done' : k === i ? 'current' : 'todo';
+    track.append(seg);
+  }
+  node.append(label, track);
+  return node;
+}
+
 interface StatSlot {
   node: HTMLElement;
   value: number;
@@ -111,7 +131,7 @@ export function renderStoryCards(
 
     // 最初のカード: 場面の番号・見出し・大きな数値
     const intro = el('div', 'story-card story-card--intro');
-    intro.append(el('p', 'story-card__index', `${String(i + 1).padStart(2, '0')} / ${String(stages.length).padStart(2, '0')}`));
+    intro.append(indexNode(i, stages.length));
     const heading = el('h2', 'story-card__heading', stage.text.heading);
     heading.id = headingId;
     intro.append(heading);
@@ -120,11 +140,14 @@ export function renderStoryCards(
     if (stat) {
       const box = el('p', 'story-stat');
       const digits = stat.fractionDigits ?? 0;
+      // 数字の枠: 最終値の幅を見えない文字で確保し、数え上げの途中の値を右に揃えて重ねる（桁が変わっても幅が揺れない）。
+      const figure = el('span', 'story-stat__figure');
+      figure.setAttribute('aria-hidden', 'true');
       const value = el('span', 'story-stat__value', formatCount(0, digits));
-      value.setAttribute('aria-hidden', 'true');
+      figure.append(el('span', 'story-stat__sizer', formatCount(stat.value, digits)), value);
       // 支援技術には、数え上げ途中の値ではなく最終値だけを読ませる。
       const finalText = el('span', 'story-visually-hidden', `${formatCount(stat.value, digits)}${stat.unit ?? ''}`);
-      box.append(value, finalText);
+      box.append(figure, finalText);
       if (stat.unit) {
         const unit = el('span', 'story-stat__unit', stat.unit);
         unit.setAttribute('aria-hidden', 'true');

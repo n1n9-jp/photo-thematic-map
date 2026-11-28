@@ -19,6 +19,7 @@
  * ラベルと凡例は DOM で重ねる（`mountOverlay`）。ラベルは台数の多い上位の駅に付け、
  * 画面上で重ならない位置を `layoutLabels` が決める（画面外の駅は数えず、画面内の上位から選ぶ）。
  */
+import '../styles/tokens.css';
 import {
   BufferGeometry,
   Color,
@@ -478,57 +479,66 @@ export class StationMarkers {
 // ---------------------------------------------------------------------------
 
 const STYLE_ID = 'station-markers-style';
-const FONT = '"Hiragino Sans","Noto Sans JP","Yu Gothic","Meiryo","WenQuanYi Zen Hei",sans-serif';
-
+/*
+ * ラベルは地図の上の小さな札なので墨の面、凡例は本文カードと同じ紙の面にする（色・書体・余白は src/styles/tokens.css）。
+ * 凡例の幅（292px・横長 430px・小さく 218px）は配置の計算（placeLegend）と揃えてある。
+ */
 const CSS = `
-.sm-overlay{position:absolute;inset:0;overflow:hidden;pointer-events:none;font-family:${FONT};color:#fff}
+.sm-overlay{position:absolute;inset:0;overflow:hidden;pointer-events:none;font-family:var(--ptm-font-sans);color:var(--ptm-ink-1);
+  letter-spacing:var(--ptm-tracking-body)}
 .sm-labels{position:absolute;inset:0}
 .sm-lines{position:absolute;left:0;top:0;width:100%;height:100%;overflow:visible}
-.sm-lines line{stroke:rgba(255,255,255,.9);stroke-width:1}
-.sm-lines circle{fill:#fff;stroke:rgba(0,0,0,.6);stroke-width:1}
-.sm-label{position:absolute;left:0;top:0;padding:2px 6px 3px;border-radius:4px;white-space:nowrap;
-  background:rgba(12,16,22,.86);border:1px solid rgba(255,255,255,.5);line-height:1.25;text-align:left}
-.sm-label-name{display:block;font-size:12px;font-weight:700}
-.sm-label-count{display:block;font-size:12px;font-variant-numeric:tabular-nums;color:#ffd75e}
-.sm-legend{position:absolute;left:10px;bottom:10px;width:292px;box-sizing:border-box;padding:9px 11px 8px;border-radius:6px;
-  background:rgba(12,16,22,.86);border:1px solid rgba(255,255,255,.3);font-size:12px;line-height:1.45}
-.sm-legend-title{font-size:13px;font-weight:700;margin-bottom:5px}
-.sm-legend-key{display:flex;flex-direction:column;align-items:flex-start;gap:3px}
+.sm-lines line{stroke:rgba(251,250,248,.92);stroke-width:1}
+.sm-lines circle{fill:var(--ptm-paper-1);stroke:var(--ptm-inverse-solid);stroke-width:1}
+.sm-label{position:absolute;left:0;top:0;padding:3px 8px 4px;border-radius:var(--ptm-radius-sm);white-space:nowrap;
+  color:var(--ptm-on-inverse-1);background:var(--ptm-inverse);box-shadow:var(--ptm-shadow-inverse);line-height:1.3;text-align:left}
+.sm-label-name{display:block;font-size:var(--ptm-text-xs);font-weight:var(--ptm-weight-bold)}
+.sm-label-count{display:block;font-size:var(--ptm-text-xs);font-variant-numeric:tabular-nums;color:var(--ptm-on-inverse-2)}
+.sm-legend{position:absolute;left:10px;bottom:10px;width:292px;box-sizing:border-box;padding:var(--ptm-space-3);
+  border-radius:var(--ptm-radius-md);background:var(--ptm-surface);box-shadow:var(--ptm-shadow-2);
+  -webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);
+  font-size:var(--ptm-text-xs);line-height:var(--ptm-leading-snug);color:var(--ptm-ink-2)}
+.sm-legend-title{font-size:var(--ptm-text-sm);font-weight:var(--ptm-weight-bold);color:var(--ptm-ink-1);margin-bottom:var(--ptm-space-2)}
+.sm-legend-key{display:flex;flex-direction:column;align-items:flex-start;gap:var(--ptm-space-1)}
 .sm-legend-key svg{flex:none;display:block}
-.sm-legend-scale{font-size:12px;font-weight:700;color:#ffd75e}
-.sm-legend-steps{display:flex;flex-wrap:wrap;gap:3px 9px;margin:7px 0 0;padding:0;list-style:none;font-size:11px}
-.sm-legend-steps li{display:flex;align-items:center;gap:4px;white-space:nowrap}
-.sm-legend-steps i{display:inline-block;width:11px;height:11px;border-radius:2px;border:1px solid rgba(255,255,255,.55)}
+.sm-legend-scale{font-size:var(--ptm-text-xs);font-weight:var(--ptm-weight-bold);color:var(--ptm-ink-1)}
+.sm-legend-steps{display:flex;flex-wrap:wrap;gap:var(--ptm-space-1) var(--ptm-space-3);margin:var(--ptm-space-2) 0 0;padding:0;list-style:none;
+  font-size:var(--ptm-text-2xs);font-variant-numeric:tabular-nums}
+.sm-legend-steps li{display:flex;align-items:center;gap:var(--ptm-space-1);white-space:nowrap}
+.sm-legend-steps i{display:inline-block;width:12px;height:12px;border-radius:2px;box-shadow:inset 0 0 0 1px rgba(23,25,28,.24)}
 .sm-legend-steps[hidden]{display:none}
-.sm-legend-vacancy{flex-direction:column;gap:3px;font-size:12px}
+.sm-legend-vacancy{flex-direction:column;gap:var(--ptm-space-1);font-size:var(--ptm-text-xs)}
 .sm-legend-vacancy[hidden]{display:none}
-.sm-legend-total{margin-top:7px;font-size:13px;font-weight:700;font-variant-numeric:tabular-nums}
-.sm-legend-note{margin-top:2px;font-size:10.5px;color:#d6dbe2}
+.sm-legend-total{margin-top:var(--ptm-space-2);padding-top:var(--ptm-space-2);border-top:var(--ptm-hairline) solid var(--ptm-rule);
+  font-size:var(--ptm-text-sm);font-weight:var(--ptm-weight-bold);font-variant-numeric:tabular-nums;color:var(--ptm-ink-1)}
+.sm-legend-note{margin-top:2px;font-size:var(--ptm-text-2xs);color:var(--ptm-ink-3)}
 @media (max-width:480px){
-  .sm-label{padding:1px 4px 2px}
-  .sm-label-name,.sm-label-count{font-size:11px}
-  .sm-legend{left:6px;right:6px;bottom:6px;width:auto;padding:7px 9px 6px;font-size:11px}
-  .sm-legend-title{font-size:12px;margin-bottom:3px}
-  .sm-legend-scale{font-size:11px}
-  .sm-legend-steps{margin-top:5px;font-size:10.5px;gap:2px 7px}
-  .sm-legend-total{margin-top:5px;font-size:12px}
-  .sm-legend-note{font-size:10px}
+  .sm-label{padding:2px 6px 3px}
+  .sm-label-name,.sm-label-count{font-size:var(--ptm-text-2xs)}
+  .sm-legend{left:6px;right:6px;bottom:6px;width:auto;padding:var(--ptm-space-2) var(--ptm-space-3);font-size:var(--ptm-text-2xs)}
+  .sm-legend-title{font-size:var(--ptm-text-xs);margin-bottom:var(--ptm-space-1)}
+  .sm-legend-scale{font-size:var(--ptm-text-2xs)}
+  .sm-legend-steps{margin-top:var(--ptm-space-1);font-size:var(--ptm-text-3xs);gap:2px var(--ptm-space-2)}
+  .sm-legend-total{margin-top:var(--ptm-space-1);padding-top:var(--ptm-space-1);font-size:var(--ptm-text-xs)}
+  .sm-legend-note{font-size:var(--ptm-text-3xs)}
 }
-.sm-legend.sm-legend--wide{display:grid;grid-template-columns:auto 1fr;column-gap:16px;row-gap:3px;align-items:center;padding:8px 12px 7px}
+/* 横長の凡例は、地図の上側の余白に収まるよう高さを抑える（柱を隠さない）。 */
+.sm-legend.sm-legend--wide{display:grid;grid-template-columns:auto 1fr;column-gap:var(--ptm-space-4);row-gap:2px;align-items:center;
+  padding:var(--ptm-space-2) var(--ptm-space-3)}
 .sm-legend--wide .sm-legend-title{grid-column:1/-1;margin-bottom:0}
 .sm-legend--wide .sm-legend-key{grid-column:1;grid-row:2/4}
 .sm-legend--wide .sm-legend-steps{grid-column:2;grid-row:2;margin:0}
-.sm-legend--wide .sm-legend-total{grid-column:2;grid-row:3;margin:0}
-.sm-legend--wide .sm-legend-note{grid-column:1/-1;margin-top:1px}
-.sm-legend.sm-legend--compact{width:218px;padding:6px 8px 5px;font-size:10.5px;line-height:1.35}
-.sm-legend--compact .sm-legend-title{font-size:11.5px;margin-bottom:2px}
+.sm-legend--wide .sm-legend-total{grid-column:2;grid-row:3;margin:0;padding-top:0;border-top:0}
+.sm-legend--wide .sm-legend-note{grid-column:1/-1;margin-top:0;font-size:var(--ptm-text-3xs)}
+.sm-legend.sm-legend--compact{width:218px;padding:6px var(--ptm-space-2);font-size:var(--ptm-text-3xs);line-height:1.35}
+.sm-legend--compact .sm-legend-title{font-size:var(--ptm-text-2xs);margin-bottom:2px}
 .sm-legend--compact .sm-legend-key svg{display:none}
-.sm-legend--compact .sm-legend-scale{font-size:10.5px}
-.sm-legend--compact .sm-legend-steps{margin-top:3px;font-size:10px;gap:1px 6px}
-.sm-legend--compact .sm-legend-steps i{width:9px;height:9px}
-.sm-legend--compact .sm-legend-vacancy{font-size:10px;gap:2px}
-.sm-legend--compact .sm-legend-total{margin-top:3px;font-size:11px}
-.sm-legend--compact .sm-legend-note{font-size:9px}
+.sm-legend--compact .sm-legend-scale{font-size:var(--ptm-text-3xs)}
+.sm-legend--compact .sm-legend-steps{margin-top:var(--ptm-space-1);font-size:var(--ptm-text-3xs);gap:1px 6px}
+.sm-legend--compact .sm-legend-steps i{width:8px;height:8px}
+.sm-legend--compact .sm-legend-vacancy{font-size:var(--ptm-text-3xs);gap:2px}
+.sm-legend--compact .sm-legend-total{margin-top:var(--ptm-space-1);padding-top:2px;font-size:var(--ptm-text-2xs)}
+.sm-legend--compact .sm-legend-note{font-size:var(--ptm-text-3xs)}
 `;
 
 /** 凡例を横に長い形にする、範囲の幅(px)の下限と、そのときの凡例の幅。 */
@@ -567,10 +577,10 @@ function sampleGlyphs(shape: MarkerShape, mode: ColorMode): SVGSVGElement {
   const svg = svgEl('svg', { width, height: maxH + 17, viewBox: `0 0 ${width} ${maxH + 17}` });
   SAMPLE_COUNTS.forEach((n, i) => {
     const cx = colW * i + colW / 2;
-    const color = mode === 'count' ? hex(COLOR_STEPS[colorStepIndex(n)]!.color) : '#cfd6de';
+    const color = mode === 'count' ? hex(COLOR_STEPS[colorStepIndex(n)]!.color) : '#c9cdd2';
     const s = sizes[i]!;
     const h = Math.max(1, s.height * scale);
-    const attrs = { fill: color, stroke: 'rgba(255,255,255,.7)', 'stroke-width': 0.8 };
+    const attrs = { fill: color, stroke: 'rgba(23,25,28,.35)', 'stroke-width': 0.8 };
     if (shape === 'column') {
       const w = 11;
       svg.appendChild(svgEl('rect', { x: cx - w / 2, y: base - h, width: w, height: h, ...attrs }));
@@ -578,11 +588,11 @@ function sampleGlyphs(shape: MarkerShape, mode: ColorMode): SVGSVGElement {
       const hw = s.radius * scale;
       svg.appendChild(svgEl('polygon', { points: `${cx - hw},${base} ${cx + hw},${base} ${cx},${base - h}`, ...attrs }));
     }
-    const text = svgEl('text', { x: cx, y: base + 12, 'text-anchor': 'middle', 'font-size': 11, fill: '#fff' });
+    const text = svgEl('text', { x: cx, y: base + 12, 'text-anchor': 'middle', 'font-size': 11, fill: 'currentColor' });
     text.textContent = `${n}台`;
     svg.appendChild(text);
   });
-  svg.appendChild(svgEl('line', { x1: 2, y1: base, x2: width - 2, y2: base, stroke: 'rgba(255,255,255,.5)', 'stroke-width': 1 }));
+  svg.appendChild(svgEl('line', { x1: 2, y1: base, x2: width - 2, y2: base, stroke: 'rgba(23,25,28,.24)', 'stroke-width': 1 }));
   return svg;
 }
 

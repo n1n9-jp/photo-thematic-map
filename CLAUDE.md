@@ -33,6 +33,7 @@ E2E は `/opt/pw-browsers/chromium` を使う。preview サーバーのポート
 - `src/sim/` 堆積計算（描画に依存しない純粋ロジック）
 - `src/story/` スクロール連動
 - `src/config.ts` 共有定数（座標原点など）
+- `src/styles/tokens.css` デザイントークン（色・書体・文字サイズ・余白・角丸・罫線・影）。本文カード・ボタン・出典表示・読み込みの表示・凡例とラベル・「データと方法」は、値を直接書かずにここの `--ptm-*` を参照する。数字と欧文の書体は同梱の Inter（`@fontsource-variable/inter`、OFL-1.1）
 - `scripts/` データ取得スクリプト（Node 実行。成果物は `public/` 等へ出力）。`scripts/bake/` は PLATEAU のタイルの取得・復号（`tiles.ts`・`cache.ts`）と、街の高さ格子（`index.ts`）・建物の事前変換（`buildings.ts`）
 - `tests/unit/` vitest、`tests/e2e/` Playwright
 - `public/` 静的アセット

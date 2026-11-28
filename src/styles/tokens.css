@@ -1,0 +1,119 @@
+/*
+ * デザイントークン。本編の文字の載る UI（本文カード・ボタン・出典表示・読み込みの表示・凡例とラベル・「データと方法」）は、
+ * 色・書体・文字サイズ・余白・角丸・罫線・影をここから参照する。値を直接書かない。
+ *
+ * 色は 墨（ink）・紙（paper）・アクセント（赤）の3系統と、その濃淡だけ。
+ * 文字の階層は、サイズ（--ptm-text-*）・太さ（--ptm-weight-*）・色（--ptm-ink-1〜3）の3つで付ける。
+ * 余白は 4px の倍数（--ptm-space-*）。
+ */
+
+/*
+ * 数字と欧文の書体: Inter（SIL Open Font License 1.1、npm の @fontsource-variable/inter を同梱）。
+ * 基本ラテン文字とラテン1補助だけに当て、和文と全角の約物は端末のゴシック体に任せる。
+ */
+@font-face {
+  font-family: 'PTM Inter';
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('@fontsource-variable/inter/files/inter-latin-wght-normal.woff2') format('woff2-variations'),
+    url('@fontsource-variable/inter/files/inter-latin-wght-normal.woff2') format('woff2');
+  unicode-range: U+0020-007E, U+00A0-00FF, U+2009, U+2212;
+}
+
+:root {
+  /* --- 色: 墨 --- */
+  --ptm-ink-1: #17191c; /* 見出し・本文・数値（紙の上で 17:1） */
+  --ptm-ink-2: #43474d; /* 補足の本文・単位（紙の上で 9:1） */
+  --ptm-ink-3: #62676e; /* 注記・ラベル（紙の上で 5.5:1。面が黒い背景に透けても 4.8:1） */
+  --ptm-ink-4: #9a9ea4; /* 無効・まだの段階（文字には使わない） */
+
+  /* --- 色: 紙 --- */
+  --ptm-paper-1: #fbfaf8; /* 面 */
+  --ptm-paper-2: #f2f0ec; /* 一段沈んだ面・hover */
+  --ptm-paper-3: #e6e3dd; /* active */
+  /* 3D の上に浮かぶ面。背景の航空写真や白い建物が透けても、本文が AA を保つ不透明度。 */
+  --ptm-surface: rgba(251, 250, 248, 0.94);
+  --ptm-surface-solid: #fbfaf8;
+
+  /* --- 色: 墨の面（地図の上の小さなラベル・主ボタン） --- */
+  --ptm-inverse: rgba(23, 25, 28, 0.9);
+  --ptm-inverse-solid: #17191c;
+  --ptm-inverse-hover: #2c2f34;
+  --ptm-inverse-active: #000;
+  --ptm-on-inverse-1: #fbfaf8;
+  --ptm-on-inverse-2: rgba(251, 250, 248, 0.76);
+  --ptm-on-inverse-rule: rgba(251, 250, 248, 0.28);
+
+  /* --- 色: アクセント（1色と濃淡） --- */
+  --ptm-accent: #b8321f; /* 現在の場面・押されている状態・読み込みの進み */
+  --ptm-accent-strong: #922513; /* hover・フォーカスの輪（紙の上で 8:1） */
+  --ptm-accent-soft: rgba(184, 50, 31, 0.12);
+
+  /* --- 罫線 --- */
+  --ptm-rule: rgba(23, 25, 28, 0.12);
+  --ptm-rule-strong: rgba(23, 25, 28, 0.24);
+  --ptm-hairline: 1px;
+
+  /* --- 書体 --- */
+  --ptm-font-ja: 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Noto Sans JP', 'Noto Sans CJK JP', 'BIZ UDPGothic',
+    'Yu Gothic UI', 'Yu Gothic', 'Meiryo', 'IPAPGothic', 'IPAexGothic', sans-serif;
+  --ptm-font-sans: 'PTM Inter', var(--ptm-font-ja);
+
+  /* --- 文字サイズの段階（16px = 1rem） --- */
+  --ptm-text-3xs: 0.625rem; /* 10px 小さくした凡例だけ */
+  --ptm-text-2xs: 0.6875rem; /* 11px */
+  --ptm-text-xs: 0.75rem; /* 12px 注記・出典 */
+  --ptm-text-sm: 0.8125rem; /* 13px ラベル・ボタン */
+  --ptm-text-base: 0.9375rem; /* 15px 本文（狭い画面） */
+  --ptm-text-md: 1rem; /* 16px 本文 */
+  --ptm-text-lg: 1.125rem; /* 18px 単位・小見出し */
+  --ptm-text-xl: 1.25rem; /* 20px 見出し（狭い画面） */
+  --ptm-text-2xl: 1.5rem; /* 24px 見出し */
+  --ptm-text-3xl: 1.875rem; /* 30px 節の見出し */
+  --ptm-text-4xl: 2.5rem; /* 40px 数値（狭い画面） */
+  --ptm-text-5xl: 3.25rem; /* 52px 数値 */
+
+  --ptm-weight-regular: 400;
+  --ptm-weight-medium: 500;
+  --ptm-weight-bold: 700;
+
+  --ptm-leading-tight: 1.15; /* 数値 */
+  --ptm-leading-snug: 1.45; /* 見出し・注記 */
+  --ptm-leading-body: 1.8; /* 和文の本文 */
+
+  --ptm-tracking-tight: -0.02em; /* 大きな数字 */
+  --ptm-tracking-body: 0.02em;
+  --ptm-tracking-label: 0.06em; /* 小さな欧数字の見出し */
+
+  /* --- 余白（4px の倍数） --- */
+  --ptm-space-1: 4px;
+  --ptm-space-2: 8px;
+  --ptm-space-3: 12px;
+  --ptm-space-4: 16px;
+  --ptm-space-5: 20px;
+  --ptm-space-6: 24px;
+  --ptm-space-8: 32px;
+  --ptm-space-10: 40px;
+  --ptm-space-12: 48px;
+  --ptm-space-16: 64px;
+  --ptm-space-20: 80px;
+
+  /* --- 角丸 --- */
+  --ptm-radius-sm: 4px; /* ラベル・小さな部品 */
+  --ptm-radius-md: 8px; /* カード・凡例・出典 */
+  --ptm-radius-pill: 999px; /* ボタン・状態の表示 */
+
+  /* --- 影（輪郭の細い線 + 近い影 + 遠い影） --- */
+  --ptm-shadow-1: 0 0 0 1px rgba(23, 25, 28, 0.08), 0 1px 2px rgba(23, 25, 28, 0.08), 0 2px 8px rgba(23, 25, 28, 0.08);
+  --ptm-shadow-2: 0 0 0 1px rgba(23, 25, 28, 0.08), 0 1px 2px rgba(23, 25, 28, 0.08), 0 8px 24px -4px rgba(23, 25, 28, 0.2);
+  /* 墨の面に: 暗い背景との境を明るい細線で取る。 */
+  --ptm-shadow-inverse: 0 0 0 1px rgba(251, 250, 248, 0.22), 0 1px 2px rgba(0, 0, 0, 0.2), 0 6px 16px -4px rgba(0, 0, 0, 0.35);
+
+  /* --- 操作 --- */
+  --ptm-target: 44px; /* 押せる範囲の最小 */
+  /* フォーカスの輪: 紙の色の内側の輪とアクセントの外側の輪。明るい背景にも暗い背景にも見える。 */
+  --ptm-focus-ring: 0 0 0 2px var(--ptm-paper-1), 0 0 0 4px var(--ptm-accent-strong);
+  --ptm-duration: 160ms;
+  --ptm-ease: cubic-bezier(0.2, 0, 0, 1);
+}

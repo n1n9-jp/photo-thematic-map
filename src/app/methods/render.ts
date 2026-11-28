@@ -1,4 +1,5 @@
 /** 「データと方法」の節（`MethodsModel`）を DOM にする。見出しは h2（index.html にある）→ h3（項目）→ h4（項目の中の小見出し）。 */
+import '../../styles/tokens.css';
 import './methods.css';
 import { buildMethodsModel, METHODS_HEADING_ID, METHODS_SECTION_ID, type Block, type Inline, type MethodsModel } from './content';
 
