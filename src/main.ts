@@ -33,10 +33,24 @@ const depth: DepthMode | undefined =
 const errorParam = Number(new URLSearchParams(location.search).get('error'));
 const buildingErrorTarget = Number.isFinite(errorParam) && errorParam > 0 ? errorParam : undefined;
 
+// URL のページ内リンク（例: #data-and-methods）で開いたときは、本文を組んでレイアウトを計算し直した後に、その要素へ移る。
+// 読み込みの間に読者が自分でスクロールし始めたら、移らない。
+const hashTarget = location.hash.length > 1 ? decodeURIComponent(location.hash.slice(1)) : '';
+let userScrolled = false;
+const markUserScroll = (): void => {
+  userScrolled = true;
+};
+const userScrollEvents = ['wheel', 'touchmove', 'keydown', 'pointerdown'] as const;
+for (const type of userScrollEvents) window.addEventListener(type, markUserScroll, { passive: true, once: true });
+
 const app = await createApp({ container, storyRoot, modules: SCENE_MODULES, depth, buildingErrorTarget, pauseWhenCovered: methods });
 window.__MAIN__ = app.debug;
 // 確認用（コンソールから街並みのタイルなどを調べる）
 (window as unknown as { __PTM_APP__: unknown }).__PTM_APP__ = app;
+
+for (const type of userScrollEvents) window.removeEventListener(type, markUserScroll);
+const hashElement = hashTarget ? document.getElementById(hashTarget) : null;
+if (hashElement && !userScrolled) hashElement.scrollIntoView({ behavior: 'instant', block: 'start' });
 
 await app.firstFrame;
 requestAnimationFrame(() => {

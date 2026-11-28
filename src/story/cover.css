@@ -77,6 +77,15 @@
   pointer-events: none;
 }
 
+/* パネルの中にフォーカスがある間は（キーボードで戻ったときなど）、薄くしたパネルも不透明で出す。 */
+.ptm-cover__panel:focus-within {
+  opacity: 1;
+}
+
+.ptm-cover--gone .ptm-cover__panel:focus-within {
+  pointer-events: auto;
+}
+
 .ptm-cover__title {
   margin: 0;
   font-size: var(--cover-title-size);

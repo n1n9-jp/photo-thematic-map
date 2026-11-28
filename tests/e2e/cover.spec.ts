@@ -144,3 +144,75 @@ for (const size of SIZES) {
     });
   });
 }
+
+test.describe('表紙と、レイアウトの計算し直し・フォーカス・ページ内リンク', () => {
+  const waitReady = (page: Page): Promise<unknown> =>
+    page.waitForFunction(() => window.__APP_READY__ === true, undefined, { timeout: 150_000 });
+  const firstStart = (page: Page): Promise<number> => page.evaluate(() => window.__MAIN__!.scrollYFor(0, 0));
+  const scrollY = (page: Page): Promise<number> => page.evaluate(() => window.scrollY);
+
+  test('リサイズ・回転で、場面1の始まりにいる読者は場面1の始まりに、表紙の途中にいる読者は表紙の同じ割合に戻る', async ({ page }) => {
+    const errors = collectErrors(page);
+    await page.setViewportSize({ width: 844, height: 390 });
+    await page.goto('/');
+    await waitReady(page);
+
+    // 「スクロールして読む」で場面1の始まりへ移り、縦向きへ変える。
+    await page.locator('.ptm-cover__cue').click();
+    await expect.poll(async () => Math.abs((await scrollY(page)) - (await firstStart(page)))).toBeLessThanOrEqual(1);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expect.poll(() => firstStart(page)).toBeGreaterThan(800);
+    await expect.poll(async () => Math.abs((await scrollY(page)) - (await firstStart(page))), { timeout: 10_000 }).toBeLessThanOrEqual(1);
+    await page.waitForTimeout(500);
+    expect(Math.abs((await scrollY(page)) - (await firstStart(page)))).toBeLessThanOrEqual(1);
+    expect(await page.evaluate(() => window.__MAIN__!.getState())).toMatchObject({ stage: 0, progress: 0 });
+
+    // 表紙の途中（半分）で横向きへ変えると、表紙の半分の位置に戻る。
+    await page.evaluate((y) => window.scrollTo({ top: y, left: 0, behavior: 'instant' }), Math.round((await firstStart(page)) * 0.5));
+    await nextFrames(page);
+    await page.setViewportSize({ width: 844, height: 390 });
+    await expect.poll(() => firstStart(page)).toBeLessThan(400);
+    await page.waitForTimeout(800);
+    const ratio = (await scrollY(page)) / (await firstStart(page));
+    expect(ratio).toBeGreaterThan(0.45);
+    expect(ratio).toBeLessThan(0.55);
+    expect(errors).toEqual([]);
+  });
+
+  test('薄くして消した表紙のパネルも、中にフォーカスがある間は不透明で出る（縦向きのスマートフォン）', async ({ page }) => {
+    const errors = collectErrors(page);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto('/');
+    await waitReady(page);
+    const opacity = (): Promise<number> =>
+      page.evaluate(() => Number(getComputedStyle(document.querySelector('.ptm-cover__panel')!).opacity));
+    // 読み込みの表示と横に重なる配置なので、パネルの上端が届く前に消える位置へ移る。
+    const panelTop = (await rectOf(page, '.ptm-cover__panel'))!.top;
+    await page.evaluate((y) => window.scrollTo({ top: y, left: 0, behavior: 'instant' }), Math.round(panelTop));
+    await nextFrames(page);
+    expect(await opacity()).toBeLessThanOrEqual(0.05);
+    await page.evaluate(() => document.querySelector<HTMLElement>('.ptm-cover__cue')!.focus({ preventScroll: true }));
+    await expect.poll(opacity).toBe(1);
+    await page.evaluate(() => document.querySelector<HTMLElement>('.ptm-cover__cue')!.blur());
+    await expect.poll(opacity).toBeLessThanOrEqual(0.05);
+    expect(errors).toEqual([]);
+  });
+
+  for (const size of [
+    { width: 1280, height: 720 },
+    { width: 390, height: 844 },
+  ]) {
+    test(`#data-and-methods 付きの URL で開くと「データと方法」の節に着く（${size.width}×${size.height}）`, async ({ page }) => {
+      const errors = collectErrors(page);
+      await page.setViewportSize(size);
+      await page.goto('/#data-and-methods');
+      await waitReady(page);
+      // フォントの読み込み後などの計算し直しの後も、節の先頭にいる。
+      await page.waitForTimeout(1500);
+      const top = await page.evaluate(() => document.getElementById('data-and-methods')!.getBoundingClientRect().top);
+      expect(Math.abs(top)).toBeLessThanOrEqual(2);
+      await expect(page.locator('#data-and-methods h2')).toBeInViewport();
+      expect(errors).toEqual([]);
+    });
+  }
+});

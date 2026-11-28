@@ -72,8 +72,13 @@ export function createStoryScroll(
   let frozen = false;
   /** 計算し直しの前に読んでいた位置。 */
   let saved: StoryState | null = null;
-  /** 計算し直しの前のスクロール位置(px)。最初の段階が始まる前（表紙）を読んでいたときに使う。 */
+  /**
+   * 計算し直しの前のスクロール位置(px)と、そのときの最初の段階の始まり・最後の段階の終わり(px)。
+   * 最初の段階の前（表紙）や最後の段階の後（「データと方法」の節）は進捗では表せないので、この値から戻す位置を決める。
+   */
   let savedScrollY = 0;
+  let savedFirstStart = 0;
+  let savedLastEnd = 0;
   let disposed = false;
 
   sections.forEach((el, i) => {
@@ -177,6 +182,22 @@ export function createStoryScroll(
     frozen = true;
     saved = at;
     savedScrollY = window.scrollY;
+    savedFirstStart = triggers[0]?.start ?? 0;
+    savedLastEnd = triggers[last]?.end ?? 0;
+  }
+
+  /** 計算し直しの後に戻すスクロール位置(px)。 */
+  function restoreScrollY(target: StoryState): number {
+    const firstStart = scrollYFor(0, 0);
+    if (savedFirstStart > 0 && savedScrollY < savedFirstStart - 1) {
+      // 最初の段階の前（表紙）にいた: 表紙の中での割合を保つ。
+      return Math.min((savedScrollY / savedFirstStart) * firstStart, firstStart);
+    }
+    if (savedScrollY > savedLastEnd + 1) {
+      // 最後の段階の後（「データと方法」の節）にいた: 最後の段階の終わりからの距離を保つ。
+      return scrollYFor(last, 1) + (savedScrollY - savedLastEnd);
+    }
+    return scrollYFor(target.stage, target.progress);
   }
 
   /** 計算し直しの後、記録しておいた位置へスクロールを戻す。 */
@@ -186,9 +207,7 @@ export function createStoryScroll(
     saved = null;
     frozen = false;
     if (target) {
-      // 最初の段階が始まる前（表紙）は進捗では表せないので、元のスクロール位置を、最初の段階の始まりを超えない範囲で保つ。
-      const beforeStart = target.stage === 0 && target.progress <= 0;
-      const y = Math.round(beforeStart ? Math.min(savedScrollY, scrollYFor(0, 0)) : scrollYFor(target.stage, target.progress));
+      const y = Math.round(restoreScrollY(target));
       if (Math.abs(window.scrollY - y) >= 1) {
         window.scrollTo({ top: y, left: 0, behavior: 'instant' });
         ScrollTrigger.update();
