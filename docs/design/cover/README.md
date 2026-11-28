@@ -11,7 +11,7 @@
 
 ## スクリーンショット
 
-`tests/e2e/cover.spec.ts` が `screenshots/cover/` に書き出したものを写した（SwiftShader の描画。航空写真は読み込みの途中のことがある）。
+`tests/e2e/cover.spec.ts` が `screenshots/cover/` に書き出したものを写した（SwiftShader の描画。撮影したのは地面に航空写真を貼っていたころで、いまの地面は起伏の付いた単色の面）。
 
 | 画面 | 表紙 | 移る途中（表紙の高さの 25%・50%） |
 | --- | --- | --- |

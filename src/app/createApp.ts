@@ -355,7 +355,7 @@ export async function createApp(options: CreateAppOptions): Promise<App> {
   };
   const buildingObjects = (): Object3D[] =>
     scene.children.filter((o) => o.name === 'plateau-baked-buildings' || o.name.startsWith('plateau-buildings'));
-  /** 航空写真の下に敷く単色の地面（測るときに遮るものとして描かない。`visibility.ts` の `exclude`）。 */
+  /** 起伏の付いた地面の下に敷く単色の地面（測るときに遮るものとして描かない。`visibility.ts` の `exclude`）。 */
   const notOccluders = (): Object3D[] => scene.children.filter((o) => o.name === 'plateau-base-ground');
   const canvasSize = (): { width: number; height: number } => ({ width: canvasEl.clientWidth, height: canvasEl.clientHeight });
 

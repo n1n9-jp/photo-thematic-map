@@ -18,7 +18,7 @@ Vite + TypeScript(strict) / three@0.187.0 / 3d-tiles-renderer@0.5.4 / vitest / e
 | `npm test` | vitest（`tests/unit/`） |
 | `npm run test:e2e` | 建物の事前変換（`data:buildings`）→ ビルド → preview 起動 → Playwright（`tests/e2e/`）。スクリーンショットは `screenshots/`（Playwright の `outputDir` である `test-results/` は実行開始時に消去されるため別にしている） |
 | `npm run data:plateau` | PLATEAU データカタログから23区の建物 3D Tiles の URL を `public/data/plateau/tilesets.json` に書き出す |
-| `npm run data:landmask` | 国土地理院の標高タイル（無効値＝海）から、海陸マスク `public/data/basemap/landmask.png` を作る（範囲は `src/geo/landmask.ts`。航空写真の下に敷く海の色の形に使う） |
+| `npm run data:landmask` | 国土地理院の標高タイル（無効値＝海）から、海陸マスク `public/data/basemap/landmask.png` を作る（範囲は `src/geo/landmask.ts`。地面の下に敷く海の色の形に使う） |
 | `npm run data:buildings` | 建物の事前変換。台本のカメラが巡る3か所の PLATEAU の建物・橋梁を、本編の座標の軽いチャンクにして `public/data/buildings/`（Git の管理外）に書き出す。入力（変換のコード・設定・台本のカメラ）が変わっていなければ何もしない。`-- --force` で作り直す。初回は PLATEAU からタイル（約5GB、数分）を取り `node_modules/.cache/ptm-bake/` にキャッシュする。`scripts/deploy/gh-pages.sh` と `test:e2e` が先に実行する |
 | `npm run data:bicycles` | 放置自転車の統計から `public/data/bicycles/*.json` を作る（原本の取得方法は `data/raw/bicycles/SOURCES.md`） |
 
@@ -27,7 +27,7 @@ E2E は `/opt/pw-browsers/chromium` を使う。preview サーバーのポート
 ## ディレクトリ構成
 
 - `src/scene/` 描画（renderer・シーン・カメラ・PLATEAU 表示）
-  - `src/scene/plateau/` PLATEAU の街並み。`stage.ts`（舞台一式）、`bakedBuildings.ts`（変換済みの建物。本編の既定）、`buildings.ts`（建物 3D Tiles を直接読む。確認ページ demos/plateau と本編の `?buildings=live`）、`ground.ts`（航空写真の地面。読み込み量を抑える工夫は下記「航空写真の読み込み量」）、`orthoSource.ts`（航空写真の出典。既定 PLATEAU-Ortho、`?ortho=gsi` で国土地理院の写真に切り替える比較用）、`elevation.ts`（標高）、`catalog.ts`（tileset 一覧）、`attribution.ts`（出典表示）、`tileFetch.ts`（タイル取得の再試行と失敗の集計）、`budget.ts`（端末に合わせたメモリの上限）、`baseGround.ts`（航空写真の下に敷く単色の地面と海。航空写真のない範囲を空の色で抜かさない）
+  - `src/scene/plateau/` PLATEAU の街並み。`stage.ts`（舞台一式）、`bakedBuildings.ts`（変換済みの建物。本編の既定）、`buildings.ts`（建物 3D Tiles を直接読む。確認ページ demos/plateau と本編の `?buildings=live`）、`ground.ts`（地面。国土地理院の標高タイルで起伏を付けた単色の面。航空写真は使わない。下記「地面」）、`elevation.ts`（標高）、`catalog.ts`（tileset 一覧）、`attribution.ts`（出典表示）、`tileFetch.ts`（タイル取得の再試行と失敗の集計）、`budget.ts`（端末に合わせたメモリの上限）、`baseGround.ts`（起伏の付いた地面の下に敷く平らな地面と海、地面の陸と海の色。起伏の付いた地面のない範囲を空の色で抜かさない）
 - `src/data/` 生成データの形式と読み込み（`grids.ts` 街の高さ格子、`buildings.ts` 変換済みの建物のチャンク）
 - `src/geo/` 座標変換（`enu.ts`）
 - `src/sim/` 堆積計算（描画に依存しない純粋ロジック）
@@ -48,16 +48,14 @@ E2E は `/opt/pw-browsers/chromium` を使う。preview サーバーのポート
 - `vite.config.ts` が `demos/*.html` を自動でビルド対象に含めるので、設定の変更は不要。
 - 機能の本体は `src/scene/` `src/sim/` `src/story/` に再利用できるモジュールとして置き、確認ページからはそれを呼ぶだけにする。
 
-## 航空写真の読み込み量
+## 地面
 
-地面の航空写真（`src/scene/plateau/ground.ts`）は、モバイル回線での転送量を抑えるため、次の順で粗いタイルで済ませる。計測は `tests/e2e/ground-load.spec.ts`（場面ごと・ズーム別・表示に使われているか別。PC 幅とスマートフォン幅。結果は `screenshots/ground-load/*.json`）。対策の前後の表と画面は `docs/ground-load/`。
+地面に航空写真は使わない（PLATEAU-Ortho も国土地理院の写真も読まない）。`tests/e2e/ground.spec.ts` が、本編の8場面を巡っても航空写真のタイルを要求しないことを確かめ、各場面を PC 幅とスマートフォン幅で `screenshots/ground/` に撮る。変更の前後の画面は `docs/design/ground/`。
 
-- 浅い角度で見るタイルは、必要な細かさを √sinθ 倍に下げる（`grazingMinFactor`。地上の目線の場面で遠くの地面を細かく読まない）。
-- 霧が掛かる距離では、霧の濃さに応じて粗くする（`fogMinContrast`）。
-- 四分木の途中の段は、子をさらに細かくしたいときは読まずに飛ばす（読み込み済みの祖先の画像の 8×8 区画から、3 段下までの子孫の有無を判断する）。飛ばすのは、その範囲と周りの区画のすべての画素が不透明なときだけ（撮影範囲の縁のアルファは中間値を取るので、端では 1 段ずつ読んで確かめる）。
-- 子の取得に失敗した（failed）範囲は、子へ進まずに祖先の画像を表示する。飛ばした段の子が失敗したら、その段の画像を読む。
-- カメラが動いている間（と止まって 3 フレーム）は、新しく読むタイルだけを粗くする（`movingTexelFactor`。場面のあいだの移動で通り過ぎる場所を細かく読まない）。表示の選び方は変えないので、読み込み済みのタイル（と地面の高さ）は移動中も同じ。この間は `needsUpdate` が true なので、呼び出し側は `update()` を呼び続ける。
-- 細かさの基準（`texelScale`）は端末別（`budget.ts` の `groundTexelScale`。パソコン 1.5・スマートフォン 2）。
+- `src/scene/plateau/ground.ts` が、標高タイルの四分木（ズーム10〜18。標高は 5m メッシュまでなので、これより細かくしても形と陰影はほぼ変わらない）でカメラからの距離に応じた細かさのメッシュを作る。タイルの画面上の大きさが 256px × `detailScale`（`budget.ts` の `groundDetailScale`。パソコン 1.5・スマートフォン 2）を超えたら子に分ける。
+- 標高タイルを取得するのはズーム15まで（ズーム14まで 10m メッシュ、ズーム15 で 5m メッシュ）。より細かいタイルは祖先の標高を使う。
+- 色は `baseGround.ts` の `BASE_LAND_COLOR`（陸）と `BASE_SEA_COLOR`（海）。各タイルに、陸の色に標高の傾きから求めた控えめな陰影（`RELIEF_STRENGTH`・`RELIEF_EXAGGERATION`。光はシーンの太陽と同じ西南西の上から）を掛けた小さな画像を貼る。標高の無効値（海）は透明にし、下の海の面が見える。陰影の傾きは同じ標高タイルの画素どうしで求める（5m と 10m の境に線を出さない）。
+- 標高タイルを取得できなかった（回線の失敗など）タイルは、祖先の標高（無ければ 0m）で不透明な地面を作って表示し、`retryFailedTiles()` で作り直す。存在しない標高タイル（404）は海とみなす。
 
 ## 静的アセットのパスと favicon
 

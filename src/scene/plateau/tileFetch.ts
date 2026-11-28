@@ -55,7 +55,7 @@ function sleep(ms: number, signal?: AbortSignal): Promise<void> {
   });
 }
 
-/** 1 つの配信元（航空写真・標高・建物など）への要求の出し方。 */
+/** 1 つの配信元（標高・建物など）への要求の出し方。 */
 export class TileFetchPolicy {
   /** 取得不能になったタイルの件数。 */
   failedCount = 0;
@@ -71,7 +71,7 @@ export class TileFetchPolicy {
   private probing = false;
 
   constructor(
-    /** 失敗をまとめて報告するときの名前（例: 航空写真）。 */
+    /** 失敗をまとめて報告するときの名前（例: 標高）。 */
     readonly label: string,
     options: TileFetchPolicyOptions = {},
     private readonly fetchImpl: typeof fetch = (input, init) => fetch(input, init),

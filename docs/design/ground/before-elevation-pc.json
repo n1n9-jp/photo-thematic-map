@@ -1,0 +1,50 @@
+[
+  {
+    "scene": 1,
+    "id": "akihabara-one",
+    "elevationRequests": 19,
+    "elevationBytes": 1266539
+  },
+  {
+    "scene": 2,
+    "id": "akihabara-462",
+    "elevationRequests": 1,
+    "elevationBytes": 51820
+  },
+  {
+    "scene": 3,
+    "id": "tokyo-13394",
+    "elevationRequests": 18,
+    "elevationBytes": 1591608
+  },
+  {
+    "scene": 4,
+    "id": "parking-vacancy",
+    "elevationRequests": 1,
+    "elevationBytes": 85213
+  },
+  {
+    "scene": 5,
+    "id": "removed-fy2024",
+    "elevationRequests": 15,
+    "elevationBytes": 631970
+  },
+  {
+    "scene": 6,
+    "id": "removed-15years",
+    "elevationRequests": 15,
+    "elevationBytes": 899097
+  },
+  {
+    "scene": 7,
+    "id": "after-removal",
+    "elevationRequests": 0,
+    "elevationBytes": 0
+  },
+  {
+    "scene": 8,
+    "id": "since-1990",
+    "elevationRequests": 0,
+    "elevationBytes": 0
+  }
+]

@@ -136,7 +136,7 @@ describe('国土地理院 標高タイル', () => {
   });
 });
 
-describe('航空写真の子タイルの有無', () => {
+describe('地面の子タイルの有無（陸の範囲）', () => {
   it('不透明な画素がある象限だけ true', () => {
     const w = 4;
     const px = new Uint8ClampedArray(w * w * 4);

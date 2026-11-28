@@ -151,7 +151,7 @@ export const LAST_THRESHOLD_YEAR = 2011;
 export const REPORT_YEARS = { firstHeisei: 23, lastReiwa: 7 } as const;
 
 /** データの年度。 */
-export const DATA_YEARS = { plateauBuildings: 2025, plateauOrtho: 2024, stations: 2024 } as const;
+export const DATA_YEARS = { plateauBuildings: 2025, stations: 2024 } as const;
 
 /**
  * 建物の事前変換（scripts/bake/buildings.ts）が読んだ PLATEAU の区。`public/data/buildings/manifest.json` の

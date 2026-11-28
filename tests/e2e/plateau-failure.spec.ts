@@ -7,7 +7,6 @@ test.setTimeout(180_000);
 const OBSERVE_MS = 12_000;
 
 const CASES = [
-  { name: '航空写真', pattern: /(api|tile)\.plateauview\.mlit\.go\.jp\/tiles\//, statKey: 'groundFailed', maxRequests: 40 },
   { name: '標高', pattern: /cyberjapandata\.gsi\.go\.jp\/xyz\//, statKey: 'elevationFailed', maxRequests: 40 },
   { name: '建物 b3dm', pattern: /\.b3dm(\?|$)/, statKey: 'buildingsFailed', maxRequests: 60 },
 ] as const;
@@ -40,6 +39,8 @@ for (const c of CASES) {
     expect(requests - atReady).toBeLessThanOrEqual(6);
     // 失敗した件数を外から読める
     expect(stats[c.statKey]).toBeGreaterThan(0);
+    // 標高を取得できなくても、地面（0m の不透明な面）は表示される
+    if (c.statKey === 'elevationFailed') expect(stats.groundTiles).toBeGreaterThan(0);
     // コンソールエラーは、ブラウザが失敗した要求ごとに出すもの以外は出さない
     expect(errors.filter((e) => !e.includes('net::ERR_FAILED'))).toEqual([]);
     expect(errors.length).toBeLessThanOrEqual(requests);

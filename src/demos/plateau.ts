@@ -1,5 +1,5 @@
 /**
- * 確認ページ: PLATEAU の建物 3D Tiles と航空写真の地面。
+ * 確認ページ: PLATEAU の建物 3D Tiles と、標高の起伏を付けた地面。
  * 初期視点は東京駅の上空から丸の内のビル群を斜めに見下ろす。`?lat=..&lon=..` で視点の中心を変えられる。
  *
  * 計測・検証用に window へ次を公開する。
@@ -124,7 +124,7 @@ interface LayerLike {
 function stats(s: PlateauStage): Record<string, number | boolean> {
   const layers = s.city.buildingLayers as unknown as LayerLike[];
   const tiles = layers.flatMap((l) => l.tiles ?? []);
-  const ground = s.ground as unknown as { tileCount: number; isLoading: boolean; failedTileCount?: number };
+  const ground = s.ground as unknown as { tileCount: number; isLoading: boolean };
   const elevation = s.ground.elevation as unknown as { failedTileCount?: number; size?: number };
   const info = s.renderer.info;
   return {
@@ -135,7 +135,6 @@ function stats(s: PlateauStage): Record<string, number | boolean> {
     buildingTilesInCache: tiles.reduce((sum, t) => sum + t.stats.inCache, 0),
     buildingTilesVisible: tiles.reduce((sum, t) => sum + t.visibleTiles.size, 0),
     demTiles: elevation.size ?? -1,
-    groundFailed: ground.failedTileCount ?? -1,
     elevationFailed: elevation.failedTileCount ?? -1,
     buildingsFailed: layers.reduce((sum, l) => sum + (l.failedTileCount ?? 0), 0),
   };
