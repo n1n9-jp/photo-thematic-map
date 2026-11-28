@@ -81,10 +81,20 @@ export interface PlaceLayoutOptions {
   gap?: number;
   /** 地名どうしの最小の隙間(px)。既定 12（隣り合う2つの地名が、ひと続きの名前に読めないように）。 */
   labelGap?: number;
+  /**
+   * 消えかけている地名の文字と印の矩形。消えきるまで、ほかの地名を重ねない（同じ地名は、元の場所に戻ってよい）。
+   */
+  fading?: readonly (Rect & { id: string })[];
 }
 
-/** 'point' の地名の、地点の印の半径(px)と、印から文字までの距離(px)。 */
-export const POINT_MARK_RADIUS = 3;
+/**
+ * 'point' の地名の印。描画は直径 `--ptm-place-mark-size`（7px）に縁取り `--ptm-place-halo-width`（1.5px）で、見た目の直径は約 10px。
+ * 当たり（ほかの地名・障害物と重ねない範囲）はこの見た目の半径 5px。印から文字までの距離は 6px（当たりの半径 + 1px）。
+ * CSS の寸法と合わせてある（配置の計算と結び付いた寸法）。
+ */
+export const POINT_MARK_RADIUS = 5;
+/** 印の描画の直径(px)（`--ptm-place-mark-size`）。印の要素を地点の中心に置くのに使う。 */
+const POINT_MARK_SIZE = 7;
 const POINT_OFFSET = 6;
 /** 'point' の地名を、地点の真上へ引き出し線で離して置くときの、印から文字の下端までの距離(px)。 */
 export const LEADER_LENGTHS = [24, 44] as const;
@@ -139,8 +149,9 @@ export function isLeaderCandidate(kind: PlaceKind, index: number): boolean {
 
 /**
  * 地名を、範囲 `bounds` の中で、互いに・`obstacles` と重ならないように置く。`requests` の先頭ほど優先。
- * 'point' の地名の印も、ほかの地名が重ならない障害物にする。印そのものが障害物（主役・本文カード）に掛かる地点は使わない。
- * 引き出し線も、障害物とほかの地名に重ねない。置けない地名は返さない。
+ * 'point' の地名は、置いた地点の印もほかの地名を重ねない障害物にする（置かれなかった地名の印は障害物にしない）。
+ * 印そのものが障害物（主役・本文カード）やほかの地名に掛かる地点は使わない。引き出し線も、障害物とほかの地名に重ねない。
+ * 消えかけている地名（`fading`）にも重ねない。置けない地名は返さない。
  */
 export function layoutPlaceLabels(
   requests: readonly PlaceLabelRequest[],
@@ -151,13 +162,13 @@ export function layoutPlaceLabels(
   const margin = options.margin ?? 4;
   const gap = options.gap ?? 4;
   const labelGap = options.labelGap ?? 12;
-  const marks: Rect[] = requests
-    .filter((r) => r.kind === 'point')
-    .map((r) => ({ x: r.ax - POINT_MARK_RADIUS, y: r.ay - POINT_MARK_RADIUS, w: POINT_MARK_RADIUS * 2, h: POINT_MARK_RADIUS * 2 }));
+  const fading = options.fading ?? [];
   const placed: PlacedPlaceLabel[] = [];
-  /** 置いた地名の引き出し線。 */
+  /** 置いた地名の印と引き出し線。 */
+  const marks: Rect[] = [];
   const lines: Rect[] = [];
   for (const req of requests) {
+    const others = fading.filter((f) => f.id !== req.id);
     const anchors = [{ ax: req.ax, ay: req.ay }, ...(req.alternatives ?? [])];
     const order: number[] = [];
     anchors.forEach((a, k) => placeCandidates({ ...req, ...a }).forEach((_, i) => order.push(k * CANDIDATES_PER_ANCHOR + i)));
@@ -168,9 +179,19 @@ export function layoutPlaceLabels(
     for (const c of order) {
       const k = Math.floor(c / CANDIDATES_PER_ANCHOR);
       const a = anchors[k]!;
-      if (req.kind === 'point') {
-        const mark: Rect = { x: a.ax - POINT_MARK_RADIUS, y: a.ay - POINT_MARK_RADIUS, w: POINT_MARK_RADIUS * 2, h: POINT_MARK_RADIUS * 2 };
-        if (obstacles.some((o) => overlaps(mark, o, 0))) continue;
+      const mark: Rect | null =
+        req.kind === 'point'
+          ? { x: a.ax - POINT_MARK_RADIUS, y: a.ay - POINT_MARK_RADIUS, w: POINT_MARK_RADIUS * 2, h: POINT_MARK_RADIUS * 2 }
+          : null;
+      if (
+        mark &&
+        (obstacles.some((o) => overlaps(mark, o, 0)) ||
+          others.some((o) => overlaps(mark, o, 0)) ||
+          placed.some((p) => overlaps(mark, p, 1)) ||
+          marks.some((m) => overlaps(mark, m, 1)) ||
+          lines.some((l) => overlaps(mark, l, 1)))
+      ) {
+        continue;
       }
       const inner = c % CANDIDATES_PER_ANCHOR;
       const [x, y] = placeCandidates({ ...req, ...a })[inner]!;
@@ -179,21 +200,48 @@ export function layoutPlaceLabels(
       }
       const rect: Rect = { x, y, w: req.w, h: req.h };
       if (placed.some((p) => overlaps(rect, p, labelGap))) continue;
+      if (others.some((o) => overlaps(rect, o, labelGap))) continue;
       if (obstacles.some((o) => overlaps(rect, o, gap))) continue;
       if (marks.some((m) => overlaps(rect, m, 1))) continue;
       if (lines.some((l) => overlaps(rect, l, 1))) continue;
       const leader = isLeaderCandidate(req.kind, inner);
+      let line: Rect | null = null;
       if (leader) {
         // 引き出し線（印の上端から文字の下端まで）
-        const line: Rect = { x: a.ax - 1, y: y + req.h, w: 2, h: a.ay - POINT_MARK_RADIUS - (y + req.h) };
-        if (obstacles.some((o) => overlaps(line, o, 1)) || placed.some((p) => overlaps(line, p, 1))) continue;
-        lines.push(line);
+        line = { x: a.ax - 1, y: y + req.h, w: 2, h: a.ay - POINT_MARK_RADIUS - (y + req.h) };
+        if (obstacles.some((o) => overlaps(line!, o, 1)) || others.some((o) => overlaps(line!, o, 1)) || placed.some((p) => overlaps(line!, p, 1))) {
+          continue;
+        }
       }
+      if (mark) marks.push(mark);
+      if (line) lines.push(line);
       placed.push({ ...req, ax: a.ax, ay: a.ay, x, y, candidate: c, anchor: k, leader });
       break;
     }
   }
   return placed;
+}
+
+/**
+ * 前のフレームから値が変わったかを、確保なしで調べる（カメラの行列・スクロール位置・画面の大きさなど）。
+ * 変わらないフレームでは、DOM の読み取りと地名の置き直しを省く。
+ */
+export class ChangeTracker {
+  private prev = new Float64Array(0);
+
+  /** values を覚え、前回と違えば true（初回は true）。 */
+  changed(values: ArrayLike<number>): boolean {
+    let diff = this.prev.length !== values.length;
+    if (diff) this.prev = new Float64Array(values.length);
+    for (let i = 0; i < values.length; i++) {
+      const v = values[i]!;
+      if (this.prev[i] !== v) {
+        this.prev[i] = v;
+        diff = true;
+      }
+    }
+    return diff;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -364,7 +412,7 @@ const STYLE_ID = 'place-labels-style';
  */
 const CSS = `
 .pl-overlay{position:absolute;inset:0;overflow:hidden;pointer-events:none;font-family:var(--ptm-font-sans);line-height:var(--ptm-leading-none)}
-.pl-label{position:absolute;left:0;top:0;padding:2px 1px;white-space:nowrap;color:var(--ptm-place-ink);
+.pl-label{position:absolute;left:0;top:0;padding:var(--ptm-place-label-pad);white-space:nowrap;color:var(--ptm-place-ink);
   font-weight:var(--ptm-weight-medium);letter-spacing:var(--ptm-tracking-place);text-shadow:var(--ptm-place-halo-shadow);
   opacity:0;transition:opacity var(--ptm-place-fade) var(--ptm-ease);will-change:transform,opacity}
 .pl-label.is-shown{opacity:1}
@@ -372,14 +420,16 @@ const CSS = `
 .pl-label--district{font-size:var(--ptm-text-base)}
 .pl-label--local{font-size:var(--ptm-text-sm)}
 .pl-label--water{color:var(--ptm-place-ink-water);letter-spacing:var(--ptm-tracking-place-wide)}
-.pl-label--road{color:var(--ptm-place-ink-water);font-weight:var(--ptm-weight-regular)}
+.pl-label--road{color:var(--ptm-place-ink-water)}
 .pl-label--point{font-weight:var(--ptm-weight-bold);letter-spacing:var(--ptm-tracking-body)}
-.pl-mark{position:absolute;left:0;top:0;box-sizing:border-box;width:7px;height:7px;border-radius:var(--ptm-radius-pill);
-  background:var(--ptm-place-ink);box-shadow:0 0 0 1.5px var(--ptm-place-halo);opacity:0;
+.pl-mark{position:absolute;left:0;top:0;box-sizing:border-box;width:var(--ptm-place-mark-size);height:var(--ptm-place-mark-size);
+  border-radius:var(--ptm-radius-pill);background:var(--ptm-place-ink);box-shadow:0 0 0 var(--ptm-place-halo-width) var(--ptm-place-halo);opacity:0;
   transition:opacity var(--ptm-place-fade) var(--ptm-ease)}
 .pl-mark.is-shown{opacity:1}
-.pl-leader{position:absolute;left:0;top:0;width:1px;background:var(--ptm-place-ink);box-shadow:0 0 0 1px var(--ptm-place-halo);
-  opacity:0;transform-origin:0 0;transition:opacity var(--ptm-place-fade) var(--ptm-ease)}
+/* 引き出し線: 高さを線の長さにし、縁取りは左右だけ（線の両端に紙の色の帯を出さない）。 */
+.pl-leader{position:absolute;left:0;top:0;width:var(--ptm-place-leader-width);height:0;background:var(--ptm-place-ink);
+  box-shadow:var(--ptm-place-halo-width) 0 0 var(--ptm-place-halo),calc(-1 * var(--ptm-place-halo-width)) 0 0 var(--ptm-place-halo);
+  opacity:0;transition:opacity var(--ptm-place-fade) var(--ptm-ease)}
 .pl-leader.is-shown{opacity:1}
 @media (max-width:480px){
   .pl-label--region{font-size:var(--ptm-text-base)}
@@ -422,9 +472,12 @@ interface LabelState {
   candidate: { anchor: number; inner: number } | undefined;
   w: number;
   h: number;
+  /** いまの文字と印の矩形（消えかけているあいだ、ほかの地名を重ねない）。 */
+  rect: Rect | null;
+  markRect: Rect | null;
+  /** 消えきる時刻（`performance.now()` の ms）。出ている・消えきった地名は 0。 */
+  fadeEnd: number;
 }
-
-const rectKey = (r: Rect): string => `${Math.round(r.x)},${Math.round(r.y)},${Math.round(r.w)},${Math.round(r.h)}`;
 
 export class PlaceLabels {
   private readonly root = document.createElement('div');
@@ -433,10 +486,13 @@ export class PlaceLabels {
   private order: string[] = [];
   private readonly groundHeight: (lat: number, lon: number) => number;
   private readonly maxLabels: number;
-  private lastKey = '';
   private readonly v = new Vector3();
   private shownList: ShownPlaceLabel[] = [];
+  private keepOutList: Rect[] = [];
   private measuredWidth = 0;
+  private dirtyFlag = true;
+  /** 出入りの不透明度の切り替えの時間(ms)（`--ptm-place-fade`。動きを減らす設定では 0）。 */
+  private readonly fadeMs: number;
 
   constructor(container: HTMLElement, options: PlaceLabelsOptions = {}) {
     ensureStyle();
@@ -445,6 +501,21 @@ export class PlaceLabels {
     this.root.className = 'pl-overlay';
     this.root.setAttribute('aria-hidden', 'true');
     container.appendChild(this.root);
+    const reduced = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const token = Number.parseFloat(getComputedStyle(this.root).getPropertyValue('--ptm-place-fade'));
+    this.fadeMs = reduced ? 0 : Number.isFinite(token) ? token : 320;
+  }
+
+  /** 地名の候補が替わり、置き直しが要るか。 */
+  get dirty(): boolean {
+    return this.dirtyFlag;
+  }
+
+  /** 消えかけている地名があるか（あるあいだは、カメラが止まっていても置き直す）。 */
+  get animating(): boolean {
+    const now = performance.now();
+    for (const s of this.states.values()) if (s.fadeEnd > now) return true;
+    return false;
   }
 
   /** 出す地名の候補を替える（先頭ほど優先）。空なら、出ている地名をすべて消す。 */
@@ -462,7 +533,7 @@ export class PlaceLabels {
         this.states.set(p.id, this.createState(p));
       }
     }
-    this.lastKey = '';
+    this.dirtyFlag = true;
   }
 
   /** いま出ている地名（確認用）。 */
@@ -470,12 +541,15 @@ export class PlaceLabels {
     return this.shownList;
   }
 
-  /** 全体の不透明度（0〜1）。 */
-  setOpacity(value: number): void {
-    this.root.style.opacity = String(Math.min(1, Math.max(0, value)));
+  /** 前回の置き直しで使った、主役を画面に投影した矩形（確認用）。 */
+  keepOut(): readonly Rect[] {
+    return this.keepOutList;
   }
 
-  /** フレームごとに呼ぶ。カメラと入力が変わったときだけ置き直す。 */
+  /**
+   * 地名を置き直す。呼び出し側は、カメラ・画面・障害物・主役が変わったとき（`ChangeTracker`）と、
+   * `dirty`・`animating` のあいだだけ呼ぶ。
+   */
   update(camera: PerspectiveCamera, frame: PlaceLabelsFrame): void {
     const width = this.root.clientWidth;
     const height = this.root.clientHeight;
@@ -485,26 +559,19 @@ export class PlaceLabels {
       this.measuredWidth = width;
       for (const s of this.states.values()) s.w = s.h = 0;
     }
+    this.dirtyFlag = false;
     camera.updateMatrixWorld();
-    const obstacles = [...(frame.obstacles ?? [])];
+    const obstacles = frame.obstacles ?? [];
     const keepOut = frame.keepOut ? keepOutRects(frame.keepOut, camera, width, height) : [];
-    // 主役の形は数百の矩形になるので、和で代表させる（柱が伸びる・山が現れるときに置き直す）
-    let keepOutSum = 0;
-    for (const r of keepOut) keepOutSum += r.x + 3 * r.y + 5 * r.w + 7 * r.h;
-    const key = [
-      width,
-      height,
-      camera.projectionMatrix.elements.join(','),
-      camera.matrixWorld.elements.join(','),
-      rectKey(frame.bounds),
-      obstacles.map(rectKey).join(';'),
-      this.order.join('|'),
-      Math.round(frame.heightAboveGround),
-      keepOut.length,
-      Math.round(keepOutSum),
-    ].join('#');
-    if (key === this.lastKey) return;
-    this.lastKey = key;
+    this.keepOutList = keepOut;
+    const now = performance.now();
+    // 消えかけている地名の文字と印
+    const fading: (Rect & { id: string })[] = [];
+    for (const [id, st] of this.states) {
+      if (st.fadeEnd <= now || !st.rect) continue;
+      fading.push({ id, ...st.rect });
+      if (st.markRect) fading.push({ id, ...st.markRect });
+    }
 
     const distance = camera.position.distanceTo(this.v.set(frame.target.x, frame.target.y, frame.target.z));
     const project = (anchor: Vector3): { ax: number; ay: number } | null => {
@@ -557,7 +624,7 @@ export class PlaceLabels {
       const sc = this.states.get(c.id)!.shown ? 0 : 1;
       return sa - sc || rank.get(a.id)! - rank.get(c.id)!;
     });
-    const placed = layoutPlaceLabels(ordered, frame.bounds, [...obstacles, ...keepOut]).slice(0, limit);
+    const placed = layoutPlaceLabels(ordered, frame.bounds, [...obstacles, ...keepOut], { fading }).slice(0, limit);
     const placedById = new Map(placed.map((p) => [p.id, p]));
 
     this.shownList = [];
@@ -569,12 +636,12 @@ export class PlaceLabels {
         s.anchorIndex = anchorMap.get(id)![p.anchor]!;
         s.leader = p.leader;
         s.candidate = { anchor: s.anchorIndex, inner: p.candidate % CANDIDATES_PER_ANCHOR };
-        this.setShown(s, true);
+        this.setShown(s, true, now);
         this.position(s, p.ax, p.ay);
         this.shownList.push({ id, name: s.entry.name, kind: s.entry.kind, tier: s.entry.tier, x: p.x, y: p.y, w: p.w, h: p.h, ax: p.ax, ay: p.ay });
         continue;
       }
-      this.setShown(s, false);
+      this.setShown(s, false, now);
       s.candidate = undefined;
       // 消えるあいだも、置いていた地点に付いて動かす
       const q = project(s.anchors[s.anchorIndex] ?? s.anchors[0]!);
@@ -588,19 +655,28 @@ export class PlaceLabels {
   }
 
   private position(s: LabelState, ax: number, ay: number): void {
-    s.el.style.transform = `translate(${(ax + s.dx).toFixed(1)}px,${(ay + s.dy).toFixed(1)}px)`;
-    if (s.mark) s.mark.style.transform = `translate(${(ax - 3.5).toFixed(1)}px,${(ay - 3.5).toFixed(1)}px)`;
+    const x = ax + s.dx;
+    const y = ay + s.dy;
+    s.el.style.transform = `translate(${x.toFixed(1)}px,${y.toFixed(1)}px)`;
+    s.rect = { x, y, w: s.w, h: s.h };
+    if (s.mark) {
+      const half = POINT_MARK_SIZE / 2;
+      s.mark.style.transform = `translate(${(ax - half).toFixed(1)}px,${(ay - half).toFixed(1)}px)`;
+      s.markRect = { x: ax - POINT_MARK_RADIUS, y: ay - POINT_MARK_RADIUS, w: POINT_MARK_RADIUS * 2, h: POINT_MARK_RADIUS * 2 };
+    }
     if (s.line && s.leader) {
-      // 文字の下端から印の上端まで（高さ 1px の要素を縦に伸ばす）
-      const top = ay + s.dy + s.h;
+      // 文字の下端から印の上端まで。高さそのものを線の長さにする（縁取りも線の長さどおりになる）
+      const top = y + s.h;
       const length = Math.max(0, ay - POINT_MARK_RADIUS - top);
-      s.line.style.transform = `translate(${(ax - 0.5).toFixed(1)}px,${top.toFixed(1)}px) scaleY(${length.toFixed(1)})`;
+      s.line.style.transform = `translate(${(ax - 0.5).toFixed(1)}px,${top.toFixed(1)}px)`;
+      s.line.style.height = `${length.toFixed(1)}px`;
     }
   }
 
-  private setShown(s: LabelState, shown: boolean): void {
+  private setShown(s: LabelState, shown: boolean, now: number): void {
     s.line?.classList.toggle('is-shown', shown && s.leader);
     if (s.shown === shown) return;
+    s.fadeEnd = shown ? 0 : now + this.fadeMs;
     s.shown = shown;
     s.el.classList.toggle('is-shown', shown);
     s.mark?.classList.toggle('is-shown', shown);
@@ -627,12 +703,11 @@ export class PlaceLabels {
       mark.className = 'pl-mark';
       line = document.createElement('span');
       line.className = 'pl-leader';
-      line.style.height = '1px';
       this.root.append(line, mark);
     }
     this.root.appendChild(el);
     const anchors: Vector3[] = [];
     this.setAnchors(anchors, p);
-    return { entry: p, el, mark, line, leader: false, anchors, anchorIndex: 0, shown: false, dx: 0, dy: 0, candidate: undefined, w: el.offsetWidth, h: el.offsetHeight };
+    return { entry: p, el, mark, line, leader: false, anchors, anchorIndex: 0, shown: false, dx: 0, dy: 0, candidate: undefined, w: el.offsetWidth, h: el.offsetHeight, rect: null, markRect: null, fadeEnd: 0 };
   }
 }

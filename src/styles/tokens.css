@@ -132,13 +132,18 @@
   /* 札を付けない墨の文字に、紙の色の縁取り。明るい地面・暗い地面・白い建物のどの上でも読める。 */
   --ptm-place-ink: var(--ptm-ink-1);
   --ptm-place-ink-water: var(--ptm-ink-2); /* 川・湾・道路 */
-  --ptm-place-halo: rgba(251, 250, 248, 0.92);
+  --ptm-place-halo: color-mix(in srgb, var(--ptm-paper-1) 92%, transparent); /* 縁取り（紙の色） */
   --ptm-place-halo-shadow: 1px 0 0 var(--ptm-place-halo), -1px 0 0 var(--ptm-place-halo), 0 1px 0 var(--ptm-place-halo),
     0 -1px 0 var(--ptm-place-halo), 1px 1px 0 var(--ptm-place-halo), -1px -1px 0 var(--ptm-place-halo),
     1px -1px 0 var(--ptm-place-halo), -1px 1px 0 var(--ptm-place-halo), 0 0 4px var(--ptm-place-halo);
   --ptm-tracking-place: 0.12em; /* 地区の名前 */
   --ptm-tracking-place-wide: 0.3em; /* 川・湾の名前 */
   --ptm-place-fade: 320ms; /* 地名の出入り */
+  /* 次の寸法は src/scene/placeLabels.ts の配置の計算（印の当たり・印から文字までの距離）と合わせてある。 */
+  --ptm-place-label-pad: 2px 1px; /* 文字の縁取り（1px）が要素の外にはみ出さない余白 */
+  --ptm-place-mark-size: 7px; /* 駅・建物の地点の印の直径（POINT_MARK_SIZE） */
+  --ptm-place-halo-width: 1.5px; /* 印と引き出し線の縁取りの幅（印の見た目の直径は約 10px = POINT_MARK_RADIUS × 2） */
+  --ptm-place-leader-width: 1px; /* 引き出し線の太さ */
 }
 
 /* 透明度を下げる設定: 面を不透明に近づけ、背景の透け方をなくす。 */
@@ -146,6 +151,8 @@
   :root {
     --ptm-surface: var(--ptm-surface-opaque);
     --ptm-inverse: var(--ptm-inverse-solid);
+    /* 地名の縁取りは不透明の紙の色にする（下の地面や建物が透けない） */
+    --ptm-place-halo: var(--ptm-paper-1);
   }
 }
 

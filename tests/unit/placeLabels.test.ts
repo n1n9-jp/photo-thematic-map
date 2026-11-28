@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   POINT_MARK_RADIUS,
   CANDIDATES_PER_ANCHOR,
+  ChangeTracker,
   CONE_STEPS,
   LEADER_LENGTHS,
   isLeaderCandidate,
@@ -106,18 +107,37 @@ describe('地名の配置（layoutPlaceLabels）', () => {
     }
   });
 
-  it('ほかの地名の印に重ねない', () => {
-    const placed = layoutPlaceLabels([req('area', 400, 300, 'area', 80, 16), req('pt', 400, 300, 'point', 40, 14)], BOUNDS);
+  it('置いた地名の印には、ほかの地名を重ねない（当たりは縁取りを含む直径 10px）', () => {
+    // 地名どうしの隙間を 0 にして、印だけで決まる位置を見る
+    const placed = layoutPlaceLabels([req('pt', 400, 300, 'point', 40, 14), req('area', 400, 300, 'area', 80, 16)], BOUNDS, [], { labelGap: 0 });
+    expect(placed.map((p) => p.id)).toEqual(['pt', 'area']);
+    expect(POINT_MARK_RADIUS * 2).toBe(10);
     const mark: Rect = { x: 400 - POINT_MARK_RADIUS, y: 300 - POINT_MARK_RADIUS, w: POINT_MARK_RADIUS * 2, h: POINT_MARK_RADIUS * 2 };
     for (const p of placed) expect(overlap(p, mark)).toBe(false);
+  });
+
+  it('置かれなかった地名の印は障害物にせず、印がほかの地名に掛かる地点は使わない', () => {
+    // 先に置いた広がりの名前が地点を覆うので、駅の名前はこの地点には置けない（印が文字に掛かる）
+    const placed = layoutPlaceLabels([req('area', 400, 300, 'area', 80, 16), req('pt', 400, 300, 'point', 40, 14)], BOUNDS);
+    expect(placed.map((p) => p.id)).toEqual(['area']);
+    // 広がりの名前は、置かれなかった駅の印に関係なく、地点の中心に置く
+    expect(placed[0]!.candidate).toBe(0);
+  });
+
+  it('消えかけている地名には、ほかの地名を重ねない（同じ地名は元の場所に戻れる）', () => {
+    const ghost = { id: 'old', x: 370, y: 292, w: 60, h: 16 };
+    const [moved] = layoutPlaceLabels([req('new', 400, 300)], BOUNDS, [], { fading: [ghost], labelGap: 0 });
+    expect(overlap(moved!, ghost)).toBe(false);
+    const [back] = layoutPlaceLabels([req('old', 400, 300)], BOUNDS, [], { fading: [ghost], labelGap: 0 });
+    expect(back!.candidate).toBe(0);
   });
 
   it('駅・建物の名前は、周りが埋まっていれば真上へ離して引き出し線を引く。線も障害物に重ねない', () => {
     // 印の左右と下を塞ぐ（印の真上の細い道と、24px より上は空いている）
     const around: Rect[] = [
-      { x: 330, y: 280, w: 66, h: 40 },
-      { x: 404, y: 280, w: 66, h: 40 },
-      { x: 330, y: 304, w: 140, h: 20 },
+      { x: 330, y: 280, w: 64, h: 40 },
+      { x: 406, y: 280, w: 64, h: 40 },
+      { x: 330, y: 306, w: 140, h: 20 },
     ];
     const [p] = layoutPlaceLabels([req('s', 400, 300, 'point', 60, 16)], BOUNDS, around);
     expect(p!.leader).toBe(true);
@@ -205,6 +225,18 @@ describe('場面ごとの地名（content/placeNames.ts）', () => {
         expect(Math.hypot(dx, dy), `${s.id} ${p.name}`).toBeLessThan(2000);
       }
     }
+  });
+});
+
+describe('変化の判定（ChangeTracker）', () => {
+  it('同じ値が続くあいだは false、どれかが変わると true', () => {
+    const t = new ChangeTracker();
+    const v = new Float64Array([1, 2, 3]);
+    expect(t.changed(v)).toBe(true);
+    expect(t.changed(v)).toBe(false);
+    v[1] = 2.5;
+    expect(t.changed(v)).toBe(true);
+    expect(t.changed(v)).toBe(false);
   });
 });
 
