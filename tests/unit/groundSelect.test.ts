@@ -256,7 +256,10 @@ describe('PlateauGround（標高の起伏を付けた単色の地面）', () => 
       camera.updateMatrixWorld();
       g.update();
       await tick();
+      // 動いている間は needsUpdate（止まったら細かいタイルを読む）。最初のフレームは比べる前のフレームがない
+      if (i > 0) expect(g.needsUpdate).toBe(true);
     }
+    expect(resolved).toBe(false);
     await settle(g);
     await tick();
     expect(g.needsUpdate).toBe(false);

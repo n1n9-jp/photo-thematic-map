@@ -3,7 +3,8 @@
  *
  * - 座標は CLAUDE.md の規約どおり latLonToLocal で置く（Y=標高）。
  * - 四分木でカメラからの距離に応じたズームを選ぶ（タイルの画面上の大きさが基準を超えたら子に分ける）。
- *   子タイルが全部そろうまでは親タイルを表示する。
+ *   子タイルが全部そろうまでは親タイルを表示する。標高タイル（とくに 5m メッシュ）の転送量を抑えるため、浅い角度で見る
+ *   タイル・霧の掛かるタイルは基準を緩め、カメラが動いている間は新しく読むタイルだけを粗くする。
  * - 各タイルには、標高から作る小さな画像（TEX×TEX 画素）を貼る。色は陸の色（`BASE_LAND_COLOR`）に、
  *   標高の傾きから求めた控えめな陰影（光の向きはシーンの太陽に近い西南西の上）を掛けたもの。
  *   標高の無効値（海）は透明にし、下に敷いた海の面（`baseGround.ts`）が見えるようにする。
@@ -23,6 +24,7 @@ import {
   BufferGeometry,
   DataTexture,
   DoubleSide,
+  Fog,
   Frustum,
   Group,
   LinearFilter,
@@ -30,6 +32,7 @@ import {
   Matrix4,
   Mesh,
   MeshBasicMaterial,
+  Quaternion,
   RGBAFormat,
   SRGBColorSpace,
   UnsignedByteType,
@@ -65,6 +68,21 @@ export interface PlateauGroundOptions {
    * 既定は端末に合わせて plateauMemoryBudget() から選ぶ（パソコン 1.5・スマートフォン 2）。
    */
   detailScale?: number;
+  /**
+   * カメラが動いている間（と止まってから数フレーム）は、detailScale をこの倍率にして粗いタイルだけを新しく読む。
+   * 場面のあいだの移動で通り過ぎる場所の標高タイル（5m メッシュ）を読まずに済む。1 で無効。既定 4。
+   */
+  movingDetailFactor?: number;
+  /**
+   * 霧（シーンの Fog）が掛かる距離では、霧の濃さに応じて粗いタイルで済ませる（色の差が 1−濃さ に薄まるので、
+   * 必要な細かさをその割合で下げる）。下げる割合の下限。0 で無効。既定 0.25。
+   */
+  fogMinContrast?: number;
+  /**
+   * 地面を浅い角度で見るタイルは、奥行きの方向に縮んで見えるので粗いタイルで済ませる。視線と地面の角度を θ として、
+   * 必要な細かさを √sinθ 倍に下げる。下げる倍率の下限。1 で無効。既定 0.25。
+   */
+  grazingMinFactor?: number;
   /** 同時に読み込むタイル数。既定 12。 */
   concurrency?: number;
   /** 保持するタイル数の上限。既定は端末に合わせて plateauMemoryBudget() から選ぶ（パソコン 240・スマートフォン 120）。 */
@@ -113,6 +131,10 @@ const TEX = 128;
 /** 子に分ける基準の画面上の大きさ(px)。detailScale を掛ける。 */
 const TILE_PX = 256;
 const SETTLE_FRAMES = 10;
+/** カメラがこのフレーム数止まっていれば、細かいタイルを読み始める。 */
+const STILL_FRAMES = 3;
+/** 1 フレームの回転がこれ(rad)を超えたら「動いている」とみなす。 */
+const MOVING_ANGLE_RAD = 0.0005;
 /** 使っていない木の枝を刈り込む間隔（フレーム）。 */
 const PRUNE_INTERVAL = 120;
 const DEM_SIZE = 256;
@@ -151,6 +173,16 @@ export class PlateauGround {
   private readonly minZoom: number;
   private readonly maxZoom: number;
   private readonly detailScale: number;
+  private readonly movingDetailFactor: number;
+  private readonly fogMinContrast: number;
+  private readonly grazingMinFactor: number;
+  /** 新しく読むタイルを選ぶときの detailScale（カメラが動いている間は粗い）。表示の選び方には使わない。 */
+  private requestScale = 1.5;
+  private fog: Fog | null = null;
+  private readonly prevPos = new Vector3(Number.NaN, 0, 0);
+  private readonly prevQuat = new Quaternion();
+  /** カメラが止まってからのフレーム数。 */
+  private stillFrames = STILL_FRAMES;
   private readonly concurrency: number;
   private readonly maxTiles: number;
   private readonly roots = new Map<string, GroundNode>();
@@ -175,6 +207,10 @@ export class PlateauGround {
     this.maxZoom = options.maxZoom ?? 18;
     const budget = plateauMemoryBudget();
     this.detailScale = options.detailScale ?? budget.groundDetailScale;
+    this.movingDetailFactor = Math.max(1, options.movingDetailFactor ?? 4);
+    this.fogMinContrast = Math.min(Math.max(options.fogMinContrast ?? 0.25, 0), 1);
+    this.grazingMinFactor = Math.min(Math.max(options.grazingMinFactor ?? 0.25, 0.01), 1);
+    this.requestScale = this.detailScale;
     this.concurrency = options.concurrency ?? 12;
     this.maxTiles = options.maxTiles ?? budget.groundMaxTiles;
     this.elevation = new GsiElevationSource({
@@ -198,6 +234,8 @@ export class PlateauGround {
     this.camPos.setFromMatrixPosition(cam.matrixWorld);
     this.projScreen.multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse);
     this.frustum.setFromProjectionMatrix(this.projScreen);
+    this.trackMotion(cam);
+    this.fog = findFog(this.group);
 
     const visible = new Set<GroundNode>();
     const wanted: GroundNode[] = [];
@@ -218,7 +256,7 @@ export class PlateauGround {
     if (this.frame % PRUNE_INTERVAL === 0) this.prune(new Set(roots));
 
     if (!this.isReady) {
-      const busy = wanted.length > 0 || this.loadingCount > 0;
+      const busy = wanted.length > 0 || this.loadingCount > 0 || this.cameraSettling;
       this.settledFrames = busy ? 0 : this.settledFrames + 1;
       if (this.settledFrames >= SETTLE_FRAMES) {
         this.isReady = true;
@@ -232,9 +270,31 @@ export class PlateauGround {
     return this.loadingCount > 0;
   }
 
-  /** 読み込み中なので update() を呼び続けてほしいなら true（描画を必要なフレームだけ行う呼び出し側が使う）。 */
+  /**
+   * 読み込み中か、カメラが動いている（止まったら細かいタイルを読む）ので update() を呼び続けてほしいなら true。
+   * 描画を必要なフレームだけ行う呼び出し側は、これが true の間は update() を呼ぶ。
+   */
   get needsUpdate(): boolean {
-    return this.loadingCount > 0;
+    return this.loadingCount > 0 || this.cameraSettling;
+  }
+
+  /** カメラが動いている、または止まってまだ数フレーム。 */
+  private get cameraSettling(): boolean {
+    return this.movingDetailFactor > 1 && this.stillFrames < STILL_FRAMES;
+  }
+
+  /** カメラの動きを前のフレームと比べ、新しく読むタイルの細かさ（requestScale）を決める。 */
+  private trackMotion(cam: PerspectiveCamera): void {
+    const q = cam.getWorldQuaternion(new Quaternion());
+    if (!Number.isNaN(this.prevPos.x)) {
+      // 高いところほど大きく動いても見え方は変わらないので、許す移動量を高さに比例させる
+      const tol = Math.max(0.02, Math.abs(this.camPos.y) * 0.001);
+      const moved = this.camPos.distanceTo(this.prevPos) > tol || q.angleTo(this.prevQuat) > MOVING_ANGLE_RAD;
+      this.stillFrames = moved ? 0 : this.stillFrames + 1;
+    }
+    this.prevPos.copy(this.camPos);
+    this.prevQuat.copy(q);
+    this.requestScale = this.cameraSettling ? this.detailScale * this.movingDetailFactor : this.detailScale;
   }
 
   /** 読み込み済みタイル数。 */
@@ -360,17 +420,38 @@ export class PlateauGround {
     return dx * dx + dz * dz <= r * r;
   }
 
-  /** node より細かいタイルにしたいか（タイルの画面上の大きさが基準を超える）。 */
-  private wantsSplit(node: GroundNode): boolean {
+  /**
+   * node より細かいタイルにしたいか（タイルの画面上の大きさが基準を超える）。scale は detailScale（表示の選び方）か
+   * requestScale（新しく読むタイルの選び方）。浅い角度で見るタイルと霧の掛かるタイルは基準を緩める。
+   * 表示はカメラが動いていても止まっていても同じ基準で選ぶので、読み込み済みのタイル（と地面の高さ）は移動中も変わらない。
+   */
+  private wantsSplit(node: GroundNode, scale: number = this.detailScale): boolean {
     if (node.z >= this.maxZoom) return false;
     this.renderer.getSize(this.size);
     const f = this.size.y / 2 / Math.tan(((this.camera.fov / 2) * Math.PI) / 180);
     const d = Math.max(this.distanceTo(node), 1);
-    return (node.sizeM * f) / d > TILE_PX * this.detailScale;
+    return (node.sizeM * f * this.grazingFactor(node, d)) / d > TILE_PX * scale * this.fogRelief(d);
+  }
+
+  /** 視線と地面の角度による、必要な細かさの倍率（0〜1）。カメラよりタイルが高いときは 1。 */
+  private grazingFactor(node: GroundNode, d: number): number {
+    if (this.grazingMinFactor >= 1) return 1;
+    const h = this.camPos.y - (node.box.min.y + node.box.max.y) / 2;
+    if (h <= 0 || h >= d) return 1;
+    return Math.max(Math.sqrt(h / d), this.grazingMinFactor);
+  }
+
+  /** 距離 d(m) での霧による許容の倍率（1 以上）。霧が濃いほど粗いタイルで済ませる。 */
+  private fogRelief(d: number): number {
+    const fog = this.fog;
+    if (!fog || this.fogMinContrast <= 0 || fog.far <= fog.near) return 1;
+    const t = Math.min(Math.max((d - fog.near) / (fog.far - fog.near), 0), 1);
+    return 1 / Math.max(1 - t, this.fogMinContrast);
   }
 
   /**
    * 表示するタイルと読み込むタイルを選ぶ。読み込み済みのタイルは、細かくしたいときに子（が全部そろうまでは自分）を表示する。
+   * カメラが動いている間は、表示の選び方は変えず、新しく読むタイルだけを粗くする（requestScale）。
    */
   private select(node: GroundNode, visible: Set<GroundNode>, wanted: GroundNode[]): void {
     if (!this.inView(node)) return;
@@ -386,9 +467,10 @@ export class PlateauGround {
         for (const k of kids) this.select(k, visible, wanted);
         return;
       }
+      const request = !this.cameraSettling || this.wantsSplit(node, this.requestScale);
       for (const k of kids) {
         k.lastUsed = this.frame;
-        if (k.state === 'idle') wanted.push(k);
+        if (request && k.state === 'idle') wanted.push(k);
       }
     }
     visible.add(node);
@@ -618,6 +700,15 @@ export class PlateauGround {
       if (!keep(root) && !currentRoots.has(root)) this.roots.delete(key);
     }
   }
+}
+
+/** 祖先のシーンの霧（線形の Fog）。 */
+function findFog(obj: Group): Fog | null {
+  for (let o = obj.parent; o; o = o.parent) {
+    const fog = (o as { fog?: unknown }).fog;
+    if (fog instanceof Fog) return fog;
+  }
+  return null;
 }
 
 /** 地面のタイルのズームに対して取得する標高タイルのズーム。 */
